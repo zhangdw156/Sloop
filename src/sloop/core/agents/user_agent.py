@@ -38,6 +38,7 @@ class SimpleUserAgent(UserAgent):
             str: 生成的用户请求。
         """
         # TODO: 实现用户请求生成逻辑
+        # 确保将问题包装在 Prompt 中请求 Mock API，而不是直接透传
         prompt = GENERATE_REQUEST_PROMPT.format(problem=problem, user_profile=user_profile)
         response = self.client.chat.completions.create(
             model="gpt-4o",
@@ -46,6 +47,7 @@ class SimpleUserAgent(UserAgent):
             max_tokens=256,
             timeout=10.0,
         )
+        # 返回模型生成的内容，而不是直接返回问题
         return response.choices[0].message.content
 
     def generate_user_message(self, problem: str, context: Dict[str, Any]) -> str:
