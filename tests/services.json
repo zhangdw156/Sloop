@@ -1,0 +1,17 @@
+[
+  {
+    "name": "mock_service_1",
+    "description": "A mocked service for testing.",
+    "parameters": {
+      "param1": "string",
+      "param2": "int"
+    }
+  },
+  {
+    "name": "mock_service_2",
+    "description": "Another mocked service for testing.",
+    "parameters": {
+      "query": "string"
+    }
+  }
+]

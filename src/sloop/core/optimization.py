@@ -7,8 +7,8 @@ import json
 from typing import List, Dict, Any
 from openai import OpenAI
 from tqdm import tqdm
-from .config import SloopConfig
-from .generation import DataGenerator
+from sloop.core.config import SloopConfig
+from sloop.core.generation import DataGenerator
 
 
 class DataOptimizer:

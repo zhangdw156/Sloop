@@ -4,9 +4,11 @@ Sloop CLI 主入口
 
 import typer
 from sloop.core.config import SloopConfig
-from sloop.core.generation import DataGenerator
 from sloop.core.probing import CapabilityProber
 from sloop.core.optimization import DataOptimizer
+from sloop.core.generation.api_structure import APIStructure
+from sloop.core.agents.factory import create_sloop_system
+import json
 
 
 app = typer.Typer(help="Sloop: 一个基于强弱模型闭环的数据优化工具。")
@@ -20,6 +22,9 @@ def gen(
     output_file: str = typer.Option(
         "dataset.json", "--output", "-o", help="输出数据集文件路径"
     ),
+    agent_config: str = typer.Option(
+        None, "--agent-config", "-c", help="Agent 配置文件的路径 (YAML)"
+    ),
 ):
     """
     使用强模型生成高质量的服务调用对话数据集。
@@ -31,8 +36,25 @@ def gen(
         )
         raise typer.Exit(code=1)
 
-    generator = DataGenerator(config)
-    generator.generate_dataset(services_file, output_file)
+    # 1. 使用工厂创建 Sloop 系统
+    sloop_system = create_sloop_system(config, agent_config)
+
+    # 3. 读取服务定义
+    with open(services_file, 'r', encoding='utf-8') as f:
+        services_data = json.load(f)
+    apis = [APIStructure(**service) for service in services_data]
+
+    # 4. 生成数据集
+    dataset = []
+    # 假设我们生成一个对话作为示例
+    conversation = sloop_system.generate_conversation("帮我预定一个餐厅", apis)
+    dataset.append(conversation)
+
+    # 5. 保存数据集
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(dataset, f, ensure_ascii=False, indent=2)
+
+    typer.echo(f"已从 {services_file} 生成数据并保存至 {output_file}。")
 
 
 @app.command()

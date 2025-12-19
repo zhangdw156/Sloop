@@ -7,7 +7,7 @@ import json
 from typing import List, Dict, Any
 from openai import OpenAI
 from tqdm import tqdm
-from .config import SloopConfig
+from sloop.core.config import SloopConfig
 
 
 class CapabilityProber:
@@ -62,8 +62,7 @@ class CapabilityProber:
         
         try:
             response = self.client.chat.completions.create(
-                model="gpt-3.5-turbo",  # 假设弱模型为 gpt-3.5-turbo，实际应由配置决定
-                model="gpt-3.5-turbo",  # 假设弱模型为 gpt-3.5-turbo，实际应由配置决定
+                model="gpt-3.5-turbo", # 假设弱模型为 gpt-3.5-turbo，实际应由配置决定
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_message}
@@ -83,13 +82,12 @@ class CapabilityProber:
             #  如果模型调用失败，视为处理不了的案例
             print(f"探测对话时出错: {e}")
             is_correct = False
-            model_output = str(e) # 确保 model_output 在 except 块中被定义
+            model_output = str(e)  # 确保 model_output 在 except 块中被定义
         
         return {
             "conversation_id": conversation_data.get("id", "unknown"),
             "service": conversation_data["service"],
-            "is_boundary": not is_correct, # 如果不正确，则为边界案例
-            "model_output": model_output,  # 现在 model_output 总是被定义
+            "is_boundary": not is_correct,  # 如果不正确，则为边界案例
             "model_output": model_output,  # 现在 model_output 总是被定义
             "expected": expected_tool_call
         }
@@ -108,9 +106,7 @@ class CapabilityProber:
         """
         #  简单的字符串包含检查，实际应解析 JSON 并比较结构
         #  这只是一个占位符，实际实现需要更健壮的逻辑
-        #  返回是否包含服务名称
-        return expected["name"] in model_output
-        #  返回是否包含服务名称
+        # 返回是否包含服务名称
         return expected["name"] in model_output
 
     def run_probe(self, dataset_file: str, output_file: str) -> None:
