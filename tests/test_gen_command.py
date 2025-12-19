@@ -2,52 +2,15 @@
 测试 sloop 的 `gen` 命令。
 """
 
-import asyncio
-import contextlib
 import json
 import os
-import random
 
-import pytest
 from typer.testing import CliRunner
 
 from sloop.cli.main import app
-from tests.mock_api import MockOpenAIAPI
 
 
-@pytest.fixture(scope="module")
-async def mock_api_server():
-    """启动一个模块级别的 mock API 服务器 fixture。"""
-    # 选择一个随机端口
-    port = random.randint(8000, 9000)
-
-    # 设置测试环境变量，指向本地运行的 mock 服务
-    os.environ["SLOOP_STRONG_API_KEY"] = "test_key"
-    os.environ["SLOOP_STRONG_BASE_URL"] = f"http://127.0.0.1:{port}"
-    # 为了通过 SloopConfig 的验证，弱模型的环境变量也需要设置，同样指向 mock 服务或一个占位符
-    os.environ["SLOOP_WEAK_API_KEY"] = "test_weak_key"
-    os.environ["SLOOP_WEAK_BASE_URL"] = f"http://127.0.0.1:{port}"
-
-    # 创建 mock API 服务器实例
-    server = MockOpenAIAPI(port=port)
-    # 在后台启动服务器
-    server_task = asyncio.create_task(server.start())
-
-    # 等待服务器启动（这里可以添加更健壮的健康检查）
-    await asyncio.sleep(0.1)
-
-    # 生成器在测试后执行清理
-    yield server
-
-    # 停止服务器
-    await server.stop()
-    # 等待服务器任务完成
-    server_task.cancel()
-    with contextlib.suppress(asyncio.CancelledError):
-        await server_task
-
-
-async def test_gen_command_with_mock_server():
+def test_gen_command_with_mock_server(mock_api_server):
     """
     测试 `gen` 命令在使用本地 mock API 服务器时是否能成功执行。
     """
@@ -60,7 +23,11 @@ async def test_gen_command_with_mock_server():
     if os.path.exists(test_output_file):
         os.remove(test_output_file)
 
-    # 调用 `gen` 命令
+    # 从 fixture 获取服务器信息
+    port = mock_api_server.port
+    base_url = f"http://127.0.0.1:{port}/v1"  # 确保包含 /v1 路径
+
+    # 调用 `gen` 命令，并显式传递环境变量
     result = runner.invoke(
         app,
         [
@@ -72,6 +39,12 @@ async def test_gen_command_with_mock_server():
             "--agent-config",
             "configs/default_agents.yaml",
         ],
+        env={
+            "SLOOP_STRONG_API_KEY": "test_key",
+            "SLOOP_STRONG_BASE_URL": base_url,
+            "SLOOP_WEAK_API_KEY": "test_weak_key",
+            "SLOOP_WEAK_BASE_URL": base_url,
+        },
     )
 
     # 检查命令是否成功执行

@@ -195,7 +195,8 @@ class DataOptimizer:
 
         # 3. 执行 EDDE: 基于边界案例生成新样本
         # 首先需要加载服务定义
-        service_definitions = self.generator.load_services(services_file)
+        with open(services_file, "r", encoding="utf-8") as f:
+            service_definitions = json.load(f)
         expanded_dataset = self.perform_edde(boundary_cases, service_definitions)
 
         # 4. 合并数据集

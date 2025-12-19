@@ -37,14 +37,11 @@ class SimpleAssistantAgent(AssistantAgent):
             f"你是一个助手，请根据以下对话历史和用户的新消息进行回复。"
             f"对话历史: {conversation_history}\n用户: {user_message}"
         )
-        prompt = (
-            f"你是一个助手，请根据以下对话历史和用户的新消息进行回复。"
-            f"对话历史: {conversation_history}\n用户: {user_message}"
-        )
         response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=512,
+            timeout=10.0,
         )
         return response.choices[0].message.content

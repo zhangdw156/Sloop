@@ -42,7 +42,7 @@ class SimplePlanner(Planner):
             "steps": [
                 {
                     "action": "call_api",
-                    "api": apis[0]["name"] if apis else "unknown_api",
+                    "api": apis[0].name if apis else "unknown_api",
                 }
             ],
         }
