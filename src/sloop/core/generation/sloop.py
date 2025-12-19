@@ -54,47 +54,66 @@ class Sloop:
         plan = self.planner.plan_dialogue(problem, apis)
 
         # 4. 执行多轮对话
+        # 对话顺序: User -> Assistant (生成 Label) -> Tool (System/Observation) -> Assistant (总结)
         conversation_history = [{"role": "user", "content": user_request}]
-        current_problem = problem
 
-        for step in plan.get("steps", []):
-            # 根据规划，调用相应的代理
-            if step["action"] == "call_api":
-                # 服务调用
-                # 这里简化处理，直接使用规划中的工具调用
-                # 由于 SimplePlanner 没有提供 tool_call，我们用一个模拟的
-                tool_call = {
-                    "name": step["api"],
-                    "parameters": {"param1": "mock_value", "param2": 123},
-                }
-                service_result = self.service_agent.execute_call(tool_call)
-                conversation_history.append({
-                    "role": "system",
-                    "content": f"服务调用结果: {service_result}",
-                })
-                # 更新问题，可能需要根据服务结果调整
-                current_problem = f"{current_problem} (服务调用后更新)"
-            else:
-                # 默认情况或未来扩展，例如 "assistant" 回复
-                # 助手回复
-                # 构建对话历史字符串
-                history_str = "\n".join([
-                    f"{msg['role']}: {msg['content']}" for msg in conversation_history
-                ])
-                assistant_response = self.assistant_agent.respond(
-                    user_request, history_str
-                )
-                conversation_history.append({
-                    "role": "assistant",
-                    "content": assistant_response,
-                })
-                # 更新用户请求为上一轮的回复
-                user_request = assistant_response
+        # 第一轮: 助手生成标签和思考过程
+        # 构建对话历史字符串
+        history_str = "\n".join([
+            f"{msg['role']}: {msg['content']}" for msg in conversation_history
+        ])
+        first_assistant_response = self.assistant_agent.respond(
+            user_request, history_str
+        )
+        conversation_history.append({
+            "role": "assistant",
+            "content": first_assistant_response,
+        })
+
+        # 从第一轮助手回复中提取标签和工具调用
+        thought_process = ""
+        tool_call = {}
+        # 使用正则表达式提取 `<tool_call>` 标签内容作为思考过程
+        import re
+        thought_match = re.search(r'<tool_call>(.*?)<tool_call>', first_assistant_response)
+        if thought_match:
+            thought_process = thought_match.group(1)
+
+        # 使用正则表达式提取 `<tool_call>` 标签内容并解析为 JSON 作为工具调用
+        tool_match = re.search(r'<tool_call>(.*?)<tool_call>', first_assistant_response)
+        if tool_match:
+            import json
+            try:
+                tool_call = json.loads(tool_match.group(1))
+            except json.JSONDecodeError:
+                # 如果解析失败，保留原始字符串或设置默认值
+                tool_call = {"name": "解析失败", "arguments": {}}
+
+        # 第二轮: 服务调用
+        # 使用提取到的 tool_call
+        service_result = self.service_agent.execute_call(tool_call)
+        conversation_history.append({
+            "role": "tool",  # 将角色从 `system` 更改为 `tool`
+            "content": f"服务调用结果: {service_result}",
+        })
+
+        # 第三轮: 助手生成最终总结
+        # 更新对话历史字符串
+        history_str = "\n".join([
+            f"{msg['role']}: {msg['content']}" for msg in conversation_history
+        ])
+        final_assistant_response = self.assistant_agent.respond(
+            user_request, history_str
+        )
+        conversation_history.append({
+            "role": "assistant",
+            "content": final_assistant_response,
+        })
 
         # 5. 构造最终的标签
         final_label = {
-            "tool_call": plan.get("final_tool_call", {}),
-            "thought_process": plan.get("thought_process", ""),
+            "tool_call": tool_call,
+            "thought_process": thought_process,
         }
 
         return {
