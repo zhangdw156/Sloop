@@ -54,56 +54,56 @@ class Sloop:
         plan = self.planner.plan_dialogue(problem, apis)
 
         # 4. 执行多轮对话
-        # 对话顺序: User -> Assistant (生成 Label) -> Tool (System/Observation) -> Assistant (总结)
+        # 修正对话顺序: User -> Assistant (生成思考和工具调用) -> Tool (返回执行结果) -> Assistant (生成最终总结)
         conversation_history = [{"role": "user", "content": user_request}]
 
-        # 第一轮: 助手生成标签和思考过程
-        # 构建对话历史字符串
-        history_str = "\n".join([
-            f"{msg['role']}: {msg['content']}" for msg in conversation_history
-        ])
+        # 第一轮: 助手根据用户请求生成包含思考和工具调用的响应
         first_assistant_response = self.assistant_agent.respond(
-            user_request, history_str
+            user_request, conversation_history
         )
         conversation_history.append({
             "role": "assistant",
             "content": first_assistant_response,
         })
 
-        # 从第一轮助手回复中提取标签和工具调用
+        # 从第一轮助手的回复中提取标签信息
         thought_process = ""
         tool_call = {}
         # 使用正则表达式提取 `<tool_call>` 标签内容作为思考过程
         import re
-        thought_match = re.search(r'<tool_call>(.*?)<tool_call>', first_assistant_response)
-        if thought_match:
-            thought_process = thought_match.group(1)
+        # 修正：使用更精确的正则表达式，确保匹配第一个 `<tool_call>...<tool_call>` 块作为思考过程
+        thought_pattern = r'<tool_call>(.*?)<tool_call>'
+        thought_matches = re.findall(thought_pattern, first_assistant_response, re.DOTALL)
+        if thought_matches:
+            # 取第一个匹配项作为思考过程
+            thought_process = thought_matches[0].strip()
 
         # 使用正则表达式提取 `<tool_call>` 标签内容并解析为 JSON 作为工具调用
-        tool_match = re.search(r'<tool_call>(.*?)<tool_call>', first_assistant_response)
-        if tool_match:
-            import json
+        # 修正：使用更精确的正则表达式，确保匹配第二个 `<tool_call>...<tool_call>` 块作为工具调用
+        tool_pattern = r'<tool_call>(.*?)</tool_call>'
+        tool_matches = re.findall(tool_pattern, first_assistant_response, re.DOTALL)
+        if len(tool_matches) > 1:
+            # 取第二个匹配项作为工具调用
+            tool_json_str = tool_matches[1].strip()
             try:
-                tool_call = json.loads(tool_match.group(1))
-            except json.JSONDecodeError:
-                # 如果解析失败，保留原始字符串或设置默认值
+                tool_call = json.loads(tool_json_str)
+            except json.JSONDecodeError as e:
+                print(f"JSON 解析失败: {e}, 字符串: {tool_json_str}")
                 tool_call = {"name": "解析失败", "arguments": {}}
+        else:
+            print(f"未在助手回复中找到足够的 `<tool_call>...</tool_call>` 模式。找到 {len(tool_matches)} 个。")
+            tool_call = {"name": "解析失败", "arguments": {}}
 
-        # 第二轮: 服务调用
-        # 使用提取到的 tool_call
+        # 第二轮: 服务代理执行工具调用
         service_result = self.service_agent.execute_call(tool_call)
         conversation_history.append({
-            "role": "tool",  # 将角色从 `system` 更改为 `tool`
-            "content": f"服务调用结果: {service_result}",
+            "role": "tool", # 已正确使用 "tool" 角色
+            "content": service_result, # 修正：直接使用 service_result，无需额外前缀
         })
 
-        # 第三轮: 助手生成最终总结
-        # 更新对话历史字符串
-        history_str = "\n".join([
-            f"{msg['role']}: {msg['content']}" for msg in conversation_history
-        ])
+        # 第三轮: 助手根据工具返回结果生成最终的自然语言总结
         final_assistant_response = self.assistant_agent.respond(
-            user_request, history_str
+            user_request, conversation_history
         )
         conversation_history.append({
             "role": "assistant",
