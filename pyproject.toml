@@ -1,35 +1,52 @@
-[project]
-name = "sloop"
-version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-authors = [
-    { name = "zhandgw", email = "zhangdw.cs@gmail.com" }
-]
-requires-python = ">=3.12"
-dependencies = [
-    "fastapi>=0.125.0",
-    "openai>=2.14.0",
-    "pydantic>=2.12.5",
-    "python-dotenv>=1.2.1",
-    "tqdm>=4.67.1",
-    "typer>=0.20.0",
-    "uvicorn>=0.38.0",
-]
-
-[project.scripts]
-sloop = "sloop.cli.main:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[dependency-groups]
-dev = [
-    "pytest>=9.0.2",
-    "pytest-asyncio>=1.3.0",
-    "pytest-mock>=3.15.1",
+[project]
+name = "sloop"
+version = "0.1.0"
+dependencies = [
+    "fastapi>=0.125.0",
+    "openai>=1.55.0",
+    "pydantic>=2.12.5",
+    "python-dotenv>=1.0.1",
+    "tqdm>=4.67.1",
+    "typer>=0.15.1",
+    "uvicorn>=0.32.0",
 ]
 
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio",
+    "pytest-mock",
+    "annotated-doc",
+]
+
+[project.scripts]
+sloop = "sloop.cli.main:app"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.0.0",
+ "pytest-asyncio",
+ "pytest-mock",
+ "annotated-doc",
+ "pre-commit>=4.5.1",
+ "ruff>=0.14.10",
+]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "ARG", "SIM", "PT", "PL"]
+ignore = ["E501"]
+
+[tool.ruff]
+per-file-ignores = { "__init__.py" = ["F401", "F403"], "tests/*" = ["E402"] }
+
+[tool.ruff.format]
+# 启用 'preview' 模式以使用实验性功能
+preview = true
+# Ruff 默认的换行符是 '\n' (LF)
+line-ending = "auto"
+# 缩进使用 4 个空格
+indent-style = "space"

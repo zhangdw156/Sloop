@@ -2,14 +2,15 @@
 Sloop CLI 主入口
 """
 
-import typer
-from sloop.core.config import SloopConfig
-from sloop.core.probing import CapabilityProber
-from sloop.core.optimization import DataOptimizer
-from sloop.core.generation.service_api import API
-from sloop.core.agents.factory import create_sloop_system
 import json
 
+import typer
+
+from sloop.core.agents.factory import create_sloop_system
+from sloop.core.config import SloopConfig
+from sloop.core.generation.service_api import API
+from sloop.core.optimization import DataOptimizer
+from sloop.core.probing import CapabilityProber
 
 app = typer.Typer(help="Sloop: 一个基于强弱模型闭环的数据优化工具。")
 
@@ -40,7 +41,7 @@ def gen(
     sloop_system = create_sloop_system(config, agent_config)
 
     # 3. 读取服务定义
-    with open(services_file, 'r', encoding='utf-8') as f:
+    with open(services_file, "r", encoding="utf-8") as f:
         services_data = json.load(f)
     apis = [API(**service) for service in services_data]
 
@@ -51,7 +52,7 @@ def gen(
     dataset.append(conversation)
 
     # 5. 保存数据集
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(dataset, f, ensure_ascii=False, indent=2)
 
     typer.echo(f"已从 {services_file} 生成数据并保存至 {output_file}。")

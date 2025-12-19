@@ -1,11 +1,16 @@
 """
 测试 sloop 的 `gen` 命令。
 """
+
+import asyncio
+import contextlib
 import json
 import os
-import asyncio
+import random
+
 import pytest
 from typer.testing import CliRunner
+
 from sloop.cli.main import app
 from tests.mock_api import MockOpenAIAPI
 
@@ -14,9 +19,8 @@ from tests.mock_api import MockOpenAIAPI
 async def mock_api_server():
     """启动一个模块级别的 mock API 服务器 fixture。"""
     # 选择一个随机端口
-    import random
     port = random.randint(8000, 9000)
-    
+
     # 设置测试环境变量，指向本地运行的 mock 服务
     os.environ["SLOOP_STRONG_API_KEY"] = "test_key"
     os.environ["SLOOP_STRONG_BASE_URL"] = f"http://127.0.0.1:{port}"
@@ -28,24 +32,22 @@ async def mock_api_server():
     server = MockOpenAIAPI(port=port)
     # 在后台启动服务器
     server_task = asyncio.create_task(server.start())
-    
+
     # 等待服务器启动（这里可以添加更健壮的健康检查）
     await asyncio.sleep(0.1)
-    
+
     # 生成器在测试后执行清理
     yield server
-    
+
     # 停止服务器
     await server.stop()
     # 等待服务器任务完成
     server_task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await server_task
-    except asyncio.CancelledError:
-        pass
 
 
-async def test_gen_command_with_mock_server(mock_api_server):
+async def test_gen_command_with_mock_server():
     """
     测试 `gen` 命令在使用本地 mock API 服务器时是否能成功执行。
     """
@@ -81,9 +83,9 @@ async def test_gen_command_with_mock_server(mock_api_server):
     assert os.path.exists(test_output_file), "输出文件未被创建"
 
     # 读取并验证输出文件内容
-    with open(test_output_file, 'r', encoding='utf-8') as f:
+    with open(test_output_file, "r", encoding="utf-8") as f:
         data = json.load(f)
-    
+
     # 验证数据结构
     assert isinstance(data, list), "输出数据应为列表"
     assert len(data) > 0, "输出数据不应为空"

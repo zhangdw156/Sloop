@@ -3,8 +3,6 @@ Sloop 核心功能模块。
 """
 
 import typer
-from typing import Optional
-
 
 app = typer.Typer(help="Sloop: 一个用于生成和优化工具调用数据集的 CLI 工具。")
 
@@ -18,9 +16,9 @@ def gen(
         "output", "--output", "-o", help="生成数据的输出目录。"
     ),
     count: int = typer.Option(1, "--count", "-c", help="生成对话组的数量。"),
-    description: Optional[str] = typer.Option(
-        None, "--description", "-d", help="用于辅助生成数据的文本描述。"
-    ),
+    # description: Optional[str] = typer.Option(
+    #     None, "--description", "-d", help="用于辅助生成数据的文本描述。"
+    # ),
 ):
     """
     利用强模型 API 生成高质量的服务调用对话数据集。
@@ -49,7 +47,9 @@ def probe(
     利用弱模型 API 执行 Greedy Capability Probing (GCP)。
     """
     # TODO: 实现探测逻辑
-    typer.echo(f"已使用数据集 {dataset_file} 进行探测，边界案例已保存至 {output_file}。")
+    typer.echo(
+        f"已使用数据集 {dataset_file} 进行探测，边界案例已保存至 {output_file}。"
+    )
 
 
 @app.command()
