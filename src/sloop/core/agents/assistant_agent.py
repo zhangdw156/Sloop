@@ -5,6 +5,7 @@
 from openai import OpenAI
 
 from sloop.core.agents.agent import AssistantAgent
+from sloop.core.prompts.assistant_agent import GENERATE_RESPONSE_PROMPT
 
 
 class SimpleAssistantAgent(AssistantAgent):
@@ -33,10 +34,7 @@ class SimpleAssistantAgent(AssistantAgent):
             str: 助手的回复。
         """
         # TODO: 实现助手回复生成逻辑
-        prompt = (
-            f"你是一个助手，请根据以下对话历史和用户的新消息进行回复。"
-            f"对话历史: {conversation_history}\n用户: {user_message}"
-        )
+        prompt = GENERATE_RESPONSE_PROMPT.format(conversation_history=conversation_history, user_message=user_message)
         response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],

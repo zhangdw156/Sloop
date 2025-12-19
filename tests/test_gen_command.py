@@ -66,4 +66,4 @@ def test_gen_command_with_mock_server(mock_api_server):
     assert "label" in data[0], "对话数据中应包含 'label' 字段"
 
     # 清理测试文件
-    os.remove(test_output_file)
+    # os.remove(test_output_file)

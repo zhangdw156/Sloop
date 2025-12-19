@@ -1,0 +1,19 @@
+[
+  {
+    "problem": "帮我预定一个餐厅",
+    "conversation": [
+      {
+        "role": "user",
+        "content": "aiqEQIBqfunXzUh8fH5i6mstQF8f6iPTjDtkVdYtrXb9p1qjwE"
+      },
+      {
+        "role": "system",
+        "content": "服务调用结果: {'result': 'success', 'data': {'message': '服务调用成功'}}"
+      }
+    ],
+    "label": {
+      "tool_call": {},
+      "thought_process": ""
+    }
+  }
+]

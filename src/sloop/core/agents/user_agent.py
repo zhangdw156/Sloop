@@ -7,6 +7,7 @@ from typing import Any, Dict
 from openai import OpenAI
 
 from sloop.core.agents.agent import UserAgent, UserProfileAgent
+from sloop.core.prompts.user_agent import GENERATE_REQUEST_PROMPT, GENERATE_USER_MESSAGE_PROMPT
 
 
 class SimpleUserAgent(UserAgent):
@@ -37,10 +38,7 @@ class SimpleUserAgent(UserAgent):
             str: 生成的用户请求。
         """
         # TODO: 实现用户请求生成逻辑
-        prompt = (
-            f"基于以下问题和用户画像，生成一个用户的初始请求: "
-            f"问题: {problem}, 用户画像: {user_profile}"
-        )
+        prompt = GENERATE_REQUEST_PROMPT.format(problem=problem, user_profile=user_profile)
         response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
@@ -62,10 +60,7 @@ class SimpleUserAgent(UserAgent):
             str: 生成的用户消息。
         """
         # TODO: 实现用户消息生成逻辑
-        prompt = (
-            f"基于以下问题和上下文，生成一个用户的初始请求: "
-            f"问题: {problem}, 上下文: {context}"
-        )  # noqa: E501
+        prompt = GENERATE_USER_MESSAGE_PROMPT.format(problem=problem, context=context)
         response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
