@@ -8,7 +8,7 @@ from typing import List, Dict, Any
 from openai import OpenAI
 from tqdm import tqdm
 from sloop.core.config import SloopConfig
-from sloop.core.generation import DataGenerator
+# 移除了对 Sloop 的未使用导入
 
 
 class DataOptimizer:
@@ -28,7 +28,8 @@ class DataOptimizer:
             api_key=config.strong.api_key,
             base_url=config.strong.base_url
         )
-        self.generator = DataGenerator(config) # 复用生成器来生成新样本
+        # 修复：移除未使用的 generator 属性
+        pass
 
     def load_data(self, dataset_file: str, boundary_file: str) -> tuple:
         """
@@ -64,14 +65,13 @@ class DataOptimizer:
         for data in tqdm(dataset, desc="校验标签"):
             try:
                 # 构造提示，让强模型判断标签是否正确并修正
-                prompt = f"""
-请判断以下对话中助手的工具调用标签是否正确。如果正确，请返回原标签；如果不正确，请返回修正后的正确标签。
-对话内容:
-{data['conversation']}
-原始标签:
-{json.dumps(data['label'], ensure_ascii=False, indent=2)}
-请仅返回修正后的 JSON 标签。
-"""
+                prompt = (
+                    "请判断以下对话中助手的工具调用标签是否正确。如果正确，请返回原标签；\n"
+                    "如果不正确，请返回修正后的正确标签。\n"
+                    f"对话内容:\n{data['conversation']}\n"
+                    f"原始标签:\n{json.dumps(data['label'], ensure_ascii=False, indent=2)}\n"
+                    "请仅返回修正后的 JSON 标签。"
+                )
                 response = self.client.chat.completions.create(
                     model="gpt-4o", # 强模型
                     messages=[
@@ -119,15 +119,15 @@ class DataOptimizer:
                     continue
                 
                 # 构造提示，让强模型基于边界案例生成新的挑战性样本
-                prompt = f"""
-你是一个专业的数据增强专家。请根据给定的边界案例（弱模型处理不了的案例）和服务定义，生成一个相似但更具挑战性的新对话样本。
-新样本应保持服务调用的核心意图，但在用户请求的表述、上下文或参数复杂度上增加难度，以帮助弱模型更好地学习。
-边界案例:
-{json.dumps(case, ensure_ascii=False, indent=2)}
-服务定义:
-{json.dumps(service, ensure_ascii=False, indent=2)}
-请生成一个用户与助手的对话，包含用户请求、助手的思考过程和最终的工具调用。
-"""
+                prompt = (
+                    "你是一个专业的数据增强专家。请根据给定的边界案例（弱模型处理不了的案例）\n"
+                    "和服务定义，生成一个相似但更具挑战性的新对话样本。\n"
+                    "新样本应保持服务调用的核心意图，但在用户请求的表述、"
+                    "上下文或参数复杂度上增加难度，以帮助弱模型更好地学习。\n"
+                    f"边界案例:\n{json.dumps(case, ensure_ascii=False, indent=2)}\n"
+                    f"服务定义:\n{json.dumps(service, ensure_ascii=False, indent=2)}\n"
+                    "请生成一个用户与助手的对话，包含用户请求、助手的思考过程和最终的工具调用。"
+                )
                 response = self.client.chat.completions.create(
                     model="gpt-4o", # 强模型
                     messages=[

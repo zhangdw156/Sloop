@@ -6,13 +6,11 @@ from typing import Dict, Any, List
 from sloop.core.config import SloopConfig
 from sloop.core.generation.api_structure import APIStructure
 from sloop.core.generation.sampler import APISampler
-from sloop.core.agents.agent import (
-    UserAgent,
-    AssistantAgent,
-    ServiceAgent,
-    Planner,
-    UserProfileAgent,
-)
+from sloop.core.agents.user_agent import UserAgent
+from sloop.core.agents.assistant_agent import AssistantAgent
+from sloop.core.agents.service_agent import ServiceAgent
+from sloop.core.agents.planner import Planner
+from sloop.core.agents.user_profile_agent import UserProfileAgent
 
 
 class Sloop:
@@ -71,7 +69,9 @@ class Sloop:
         plan = self.planner.plan_dialogue(problem, apis)
         
         # 4. 执行多轮对话
-        conversation_history = [{"role": "user", "content": user_request}]
+        conversation_history = [
+            {"role": "user", "content": user_request}
+        ]
         current_problem = problem
         
         for step in plan.get("steps", []):
@@ -79,19 +79,26 @@ class Sloop:
             if step["type"] == "assistant":
                 # 助手回复
                 # 构建对话历史字符串
-                history_str = "\n".join(
-                    [f"{msg['role']}: {msg['content']}" for msg in conversation_history]
-                )
+                history_str = "\n".join([
+                    f"{msg['role']}: {msg['content']}"
+                    for msg in conversation_history
+                ])
                 assistant_response = self.assistant_agent.respond(user_request, history_str)
-                conversation_history.append({"role": "assistant", "content": assistant_response})
+                conversation_history.append({
+                    "role": "assistant",
+                    "content": assistant_response
+                })
                 # 更新用户请求为上一轮的回复
                 user_request = assistant_response
-            elif step["type"] == "service":
+            elif step["type"] == "service":  # type: ignore
                 # 服务调用
                 # 这里简化处理，直接使用规划中的工具调用
                 tool_call = step["tool_call"]
                 service_result = self.service_agent.execute_call(tool_call)
-                conversation_history.append({"role": "system", "content": f"服务调用结果: {service_result}"})
+                conversation_history.append({
+                    "role": "system",
+                    "content": f"服务调用结果: {service_result}"
+                })
                 # 更新问题，可能需要根据服务结果调整
                 current_problem = f"{current_problem} (服务调用后更新)"
         

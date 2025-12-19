@@ -2,7 +2,7 @@
 提供一个具体的助手代理实现。
 """
 from openai import OpenAI
-from ..agent import AssistantAgent
+from sloop.core.agents.agent import AssistantAgent
 
 
 class SimpleAssistantAgent(AssistantAgent):

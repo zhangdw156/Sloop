@@ -5,7 +5,7 @@
 from typing import Dict, Any
 
 from openai import OpenAI
-from ..agent import Planner
+from sloop.core.agents.agent import Planner
 
 
 class SimplePlanner(Planner):

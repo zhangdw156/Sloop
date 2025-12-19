@@ -3,8 +3,9 @@ Agent 工厂模块，负责根据配置动态加载和创建 Agent 实例。
 """
 import importlib
 import yaml
-from typing import Dict
+from typing import Dict, Any
 from sloop.core.config import SloopConfig
+from openai import OpenAI
 
 
 def load_agent_config(config_path: str = None) -> Dict[str, str]:
@@ -37,7 +38,8 @@ def load_agent_config(config_path: str = None) -> Dict[str, str]:
 def create_agent(
     agent_type: str, 
     config: SloopConfig, 
-    agent_class_name: str
+    agent_class_name: str,
+    **extra_args
 ) -> object:
     """
     根据类型和类名创建一个 Agent 实例。
@@ -46,6 +48,7 @@ def create_agent(
         agent_type (str): Agent 的类型，用于确定导入路径。
         config (SloopConfig): Sloop 配置对象。
         agent_class_name (str): 要创建的 Agent 类的名称。
+        **extra_args: 传递给特定 Agent 构造函数的额外参数。
         
     Returns:
         object: 创建的 Agent 实例。
@@ -72,10 +75,25 @@ def create_agent(
     module = importlib.import_module(module_name)
     agent_class = getattr(module, agent_class_name)
     
-    # 根据类型创建实例（这里简化处理，实际可能需要更复杂的参数传递）
+    # 根据类型创建实例
     if agent_type == "api_sampler":
         return agent_class()
+    elif agent_type == "user_agent":
+        # SimpleUserAgent 需要 client 和 user_profile_agent
+        client = OpenAI(
+            api_key=config.strong.api_key,
+            base_url=config.strong.base_url
+        )
+        return agent_class(client, extra_args["user_profile_agent"])
+    elif agent_type in ["assistant_agent", "service_agent", "planner", "user_profile_agent"]:
+        # 其他 agent 需要 client
+        client = OpenAI(
+            api_key=config.strong.api_key,
+            base_url=config.strong.base_url
+        )
+        return agent_class(client)
     else:
+        # 对于未知类型，尝试使用 config
         return agent_class(config)
 
 
@@ -94,11 +112,19 @@ def create_sloop_system(config: SloopConfig, agent_config_path: str = None):
     agent_config = load_agent_config(agent_config_path)
     
     # 创建所有 Agent 实例
-    user_agent = create_agent("user_agent", config, agent_config["user_agent"])
-    assistant_agent = create_agent("assistant_agent", config, agent_config["assistant_agent"])
-    service_agent = create_agent("service_agent", config, agent_config["service_agent"])
+    user_profile_agent = create_agent(
+        "user_profile_agent", config, agent_config["user_profile_agent"]
+    )
+    user_agent = create_agent(
+        "user_agent", config, agent_config["user_agent"], user_profile_agent=user_profile_agent
+    )
+    assistant_agent = create_agent(
+        "assistant_agent", config, agent_config["assistant_agent"]
+    )
+    service_agent = create_agent(
+        "service_agent", config, agent_config["service_agent"]
+    )
     planner = create_agent("planner", config, agent_config["planner"])
-    user_profile_agent = create_agent("user_profile_agent", config, agent_config["user_profile_agent"])
     api_sampler = create_agent("api_sampler", config, agent_config["api_sampler"])
     
     # 从 generation 模块导入 Sloop 类

@@ -10,17 +10,22 @@ from sloop.cli.main import app
 from tests.mock_api import MockOpenAIAPI
 
 
-# 设置测试环境变量，指向本地运行的 mock 服务
-MOCK_API_PORT = 8080
-os.environ["SLOOP_STRONG_API_KEY"] = "test_key"
-os.environ["SLOOP_STRONG_BASE_URL"] = f"http://127.0.0.1:{MOCK_API_PORT}"
-
-
 @pytest.fixture(scope="module")
 async def mock_api_server():
     """启动一个模块级别的 mock API 服务器 fixture。"""
+    # 选择一个随机端口
+    import random
+    port = random.randint(8000, 9000)
+    
+    # 设置测试环境变量，指向本地运行的 mock 服务
+    os.environ["SLOOP_STRONG_API_KEY"] = "test_key"
+    os.environ["SLOOP_STRONG_BASE_URL"] = f"http://127.0.0.1:{port}"
+    # 为了通过 SloopConfig 的验证，弱模型的环境变量也需要设置，同样指向 mock 服务或一个占位符
+    os.environ["SLOOP_WEAK_API_KEY"] = "test_weak_key"
+    os.environ["SLOOP_WEAK_BASE_URL"] = f"http://127.0.0.1:{port}"
+
     # 创建 mock API 服务器实例
-    server = MockOpenAIAPI(port=MOCK_API_PORT)
+    server = MockOpenAIAPI(port=port)
     # 在后台启动服务器
     server_task = asyncio.create_task(server.start())
     
@@ -40,7 +45,7 @@ async def mock_api_server():
         pass
 
 
-def test_gen_command_with_mock_server(mock_api_server):
+async def test_gen_command_with_mock_server(mock_api_server):
     """
     测试 `gen` 命令在使用本地 mock API 服务器时是否能成功执行。
     """

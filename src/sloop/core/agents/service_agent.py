@@ -4,7 +4,7 @@
 from typing import Dict, Any
 
 from openai import OpenAI
-from ..agent import ServiceAgent
+from sloop.core.agents.agent import ServiceAgent
 
 class SimpleServiceAgent(ServiceAgent):
     """

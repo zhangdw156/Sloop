@@ -6,7 +6,7 @@ import typer
 from sloop.core.config import SloopConfig
 from sloop.core.probing import CapabilityProber
 from sloop.core.optimization import DataOptimizer
-from sloop.core.generation.api_structure import APIStructure
+from sloop.core.generation.service_api import API
 from sloop.core.agents.factory import create_sloop_system
 import json
 
@@ -42,7 +42,7 @@ def gen(
     # 3. 读取服务定义
     with open(services_file, 'r', encoding='utf-8') as f:
         services_data = json.load(f)
-    apis = [APIStructure(**service) for service in services_data]
+    apis = [API(**service) for service in services_data]
 
     # 4. 生成数据集
     dataset = []

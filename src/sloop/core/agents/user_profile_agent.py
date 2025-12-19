@@ -4,7 +4,7 @@
 from typing import Dict, Any
 
 from openai import OpenAI
-from ..agent import UserProfileAgent
+from sloop.core.agents.agent import UserProfileAgent
 
 
 class SimpleUserProfileAgent(UserProfileAgent):
