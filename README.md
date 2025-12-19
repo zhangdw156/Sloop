@@ -58,7 +58,7 @@ Sloop provides a CLI interface. **Currently, only the `gen` command is implement
 Create a `.env` file in the project root based on `.env.example`. You must set the following environment variables for the strong model:
 ```bash
 SLOOP_STRONG_API_KEY=your_strong_api_key
-SLOOP_STRONG_BASE_URL=https://api.your-strong-model-provider.com
+SLOOP_STRONG_BASE_URL=https://api.your-strong-model-provider.com/v1
 ```
 
 ### 2. Prepare Your Service Definitions
