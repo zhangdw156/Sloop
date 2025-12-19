@@ -4,19 +4,24 @@
     "conversation": [
       {
         "role": "user",
-        "content": "<tool_call>用户想预定餐厅，我需要调用 reserve_restaurant 工具。 found{\"name\": \"reserve_restaurant\", \"arguments\": {\"name\": \"美味阁\", \"time\": \"19:00\"}}<tool_call>"
+        "content": "<tool_call>用户想预定餐厅，我需要调用 reserve_restaurant 工具。<tool_call>{\"name\": \"reserve_restaurant\", \"arguments\": {\"name\": \"美味阁\", \"time\": \"19:00\"}}<tool_call>"
       },
       {
         "role": "assistant",
-        "content": "<tool_call>用户想预定餐厅，我需要调用 reserve_restaurant 工具。 found{\"name\": \"reserve_restaurant\", \"arguments\": {\"name\": \"美味阁\", \"time\": \"19:00\"}}<tool_call>"
+        "content": "<tool_call>用户想预定餐厅，我需要调用 reserve_restaurant 工具。<tool_call>{\"name\": \"reserve_restaurant\", \"arguments\": {\"name\": \"美味阁\", \"time\": \"19:00\"}}<tool_call>"
       },
       {
         "role": "tool",
-        "content": "服务调用结果: {'result': 'success', 'data': {'message': '服务调用成功'}}"
+        "content": {
+          "result": "success",
+          "data": {
+            "message": "服务调用成功"
+          }
+        }
       },
       {
         "role": "assistant",
-        "content": "<tool_call>用户想预定餐厅，我需要调用 reserve_restaurant 工具。 found{\"name\": \"reserve_restaurant\", \"arguments\": {\"name\": \"美味阁\", \"time\": \"19:00\"}}<tool_call>"
+        "content": "<tool_call>用户想预定餐厅，我需要调用 reserve_restaurant 工具。<tool_call>{\"name\": \"reserve_restaurant\", \"arguments\": {\"name\": \"美味阁\", \"time\": \"19:00\"}}<tool_call>"
       }
     ],
     "label": {
@@ -24,7 +29,7 @@
         "name": "解析失败",
         "arguments": {}
       },
-      "thought_process": "用户想预定餐厅，我需要调用 reserve_restaurant 工具。 found{\"name\": \"reserve_restaurant\", \"arguments\": {\"name\": \"美味阁\", \"time\": \"19:00\"}}"
+      "thought_process": "用户想预定餐厅，我需要调用 reserve_restaurant 工具。"
     }
   }
 ]
