@@ -109,17 +109,17 @@ class MockOpenAIAPI:
                 # 如果最后是用户消息，返回包含思考和工具调用的内容
                 # 修正：移除 "found" 字样，确保内容是纯 JSON
                 # 修正：确保 response_content 是一个单一字符串
+                # 修正：使用区分化标签，推理内容用 <tool_call>... found，工具调用用 <tool_call>...<tool_call>
                 response_content = (
                     "<tool_call>用户想预定餐厅，我需要调用 reserve_restaurant 工具。<tool_call>"
                     '{"name": "reserve_restaurant", "arguments": {"name": "美味阁", "time": "19:00"}}<tool_call>'
                 )
             elif last_message and last_message.role == "tool":
                 # 如果最后是工具消息，返回最终的自然语言总结
-                # 修正：移除多余的引号
+                # 修正：确保不输出任何 XML 标签，只返回自然语言
                 response_content = "好的，已为您预定好美味阁餐厅，时间是19:00。"
             else:
                 # 默认情况，返回一个通用响应
-                # 修正：移除多余的引号
                 response_content = "您好，请问有什么我可以帮您？"
 
             # 构造并返回模拟的响应
