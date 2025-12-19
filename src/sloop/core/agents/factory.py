@@ -130,11 +130,13 @@ def create_sloop_system(config: SloopConfig, agent_config_path: str = None):
 
     # 创建并返回 Sloop 系统
     return Sloop(
+        agents={
+            "user_agent": user_agent,
+            "assistant_agent": assistant_agent,
+            "service_agent": service_agent,
+            "planner": planner,
+            "user_profile_agent": user_profile_agent,
+            "api_sampler": api_sampler,
+        },
         config=config,
-        user_agent=user_agent,
-        assistant_agent=assistant_agent,
-        service_agent=service_agent,
-        planner=planner,
-        user_profile_agent=user_profile_agent,
-        api_sampler=api_sampler,
     )

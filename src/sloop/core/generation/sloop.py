@@ -44,7 +44,8 @@ class Sloop:
             Dict[str, Any]: 包含对话历史和最终标签的字典。
         """
         # 1. 生成用户画像
-        user_profile = self.user_profile_agent.generate_profile(problem)
+        context = {"problem": problem, "apis": list(apis)}
+        user_profile = self.user_profile_agent.generate_profile(context)
 
         # 2. 生成初始用户请求
         user_request = self.user_agent.generate_request(problem, user_profile)
@@ -58,7 +59,23 @@ class Sloop:
 
         for step in plan.get("steps", []):
             # 根据规划，调用相应的代理
-            if step["type"] == "assistant":
+            if step["action"] == "call_api":
+                # 服务调用
+                # 这里简化处理，直接使用规划中的工具调用
+                # 由于 SimplePlanner 没有提供 tool_call，我们用一个模拟的
+                tool_call = {
+                    "name": step["api"],
+                    "parameters": {"param1": "mock_value", "param2": 123},
+                }
+                service_result = self.service_agent.execute_call(tool_call)
+                conversation_history.append({
+                    "role": "system",
+                    "content": f"服务调用结果: {service_result}",
+                })
+                # 更新问题，可能需要根据服务结果调整
+                current_problem = f"{current_problem} (服务调用后更新)"
+            else:
+                # 默认情况或未来扩展，例如 "assistant" 回复
                 # 助手回复
                 # 构建对话历史字符串
                 history_str = "\n".join([
@@ -73,17 +90,6 @@ class Sloop:
                 })
                 # 更新用户请求为上一轮的回复
                 user_request = assistant_response
-            elif step["type"] == "service":  # type: ignore
-                # 服务调用
-                # 这里简化处理，直接使用规划中的工具调用
-                tool_call = step["tool_call"]
-                service_result = self.service_agent.execute_call(tool_call)
-                conversation_history.append({
-                    "role": "system",
-                    "content": f"服务调用结果: {service_result}",
-                })
-                # 更新问题，可能需要根据服务结果调整
-                current_problem = f"{current_problem} (服务调用后更新)"
 
         # 5. 构造最终的标签
         final_label = {

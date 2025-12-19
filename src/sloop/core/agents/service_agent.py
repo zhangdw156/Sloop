@@ -23,7 +23,7 @@ class SimpleServiceAgent(ServiceAgent):
         """
         self.client = client
 
-    def execute_call(self) -> Dict[str, Any]:
+    def execute_call(self, _tool_call: Dict[str, Any]) -> Dict[str, Any]:
         """
         执行服务调用。
 

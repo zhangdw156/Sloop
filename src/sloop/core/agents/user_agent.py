@@ -37,12 +37,16 @@ class SimpleUserAgent(UserAgent):
             str: 生成的用户请求。
         """
         # TODO: 实现用户请求生成逻辑
-        prompt = f"基于以下问题和用户画像，生成一个用户的初始请求: 问题: {problem}, 用户画像: {user_profile}"
+        prompt = (
+            f"基于以下问题和用户画像，生成一个用户的初始请求: "
+            f"问题: {problem}, 用户画像: {user_profile}"
+        )
         response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=256,
+            timeout=10.0,
         )
         return response.choices[0].message.content
 
@@ -58,7 +62,10 @@ class SimpleUserAgent(UserAgent):
             str: 生成的用户消息。
         """
         # TODO: 实现用户消息生成逻辑
-        prompt = f"基于以下问题和上下文，生成一个用户的初始请求: 问题: {problem}, 上下文: {context}"
+        prompt = (
+            f"基于以下问题和上下文，生成一个用户的初始请求: "
+            f"问题: {problem}, 上下文: {context}"
+        )  # noqa: E501
         response = self.client.chat.completions.create(
             model="gpt-4o",
             messages=[{"role": "user", "content": prompt}],
