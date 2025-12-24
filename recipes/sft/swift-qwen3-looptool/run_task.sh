@@ -92,7 +92,7 @@ echo "   => Global Batch Size: $((BATCH_SIZE * GPU_COUNT * GRAD_ACCUM)) (Target:
 
 # --- E. 系统与日志 ---
 : "${NUM_WORKERS:=8}"
-: "${GRAD_CHECKPOINTING:=false}"
+: "${GRAD_CHECKPOINTING:=true}"  # 拿时间换显存
 : "${REPORT_TO:=swanlab}"
 
 # =========================================================
