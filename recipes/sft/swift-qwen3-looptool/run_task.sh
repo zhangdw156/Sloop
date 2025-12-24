@@ -20,7 +20,7 @@ export FULL_JOB_NAME="${GROUP_NAME}-${RECIPE_NAME}-${JOB_TIMESTAMP}"
 # 2. 加载环境
 # =========================================================
 source "$PARENT_DIR/global_config.sh"
-source "$SWIFT_ENV_PATH/bin/activate"
+# source "$SWIFT_ENV_PATH/bin/activate"  # 使用modelfactory的任务提交时，使用系统的ms-swift
 OUTPUT_DIR="$CHECKPOINT_ROOT/$FULL_JOB_NAME"
 
 # 配置 SwanLab
