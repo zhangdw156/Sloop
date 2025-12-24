@@ -19,7 +19,15 @@ export FULL_JOB_NAME="${GROUP_NAME}-${RECIPE_NAME}-${JOB_TIMESTAMP}"
 # 2. 加载环境
 # =========================================================
 source "$PARENT_DIR/global_config.sh"
-# source "$SWIFT_ENV_PATH/bin/activate"  # 通过modelfactory的任务提交来执行时，使用环境里的ms-swift
+
+# 默认情况(空)则跳过，使用系统环境
+if [ -n "$USE_LOCAL_SWIFT" ]; then
+    echo "🔌 Activating Local Venv: $SWIFT_ENV_PATH"
+    source "$SWIFT_ENV_PATH/bin/activate"
+else
+    echo "⚡️ Using System Swift (Default)"
+fi
+
 OUTPUT_DIR="$CHECKPOINT_ROOT/$FULL_JOB_NAME"
 
 export SWANLAB_LOG_DIR="$OUTPUT_DIR/swanlab_logs"
