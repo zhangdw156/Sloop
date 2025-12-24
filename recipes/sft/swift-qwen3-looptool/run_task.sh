@@ -12,7 +12,9 @@ if [ -z "$RECIPE_NAME" ]; then
     exit 1
 fi
 
-export FULL_JOB_NAME="${GROUP_NAME}-${RECIPE_NAME}"
+# [推荐] 加上时间戳，防止多次实验覆盖
+export JOB_TIMESTAMP="$(date +%Y%m%d_%H%M)"
+export FULL_JOB_NAME="${GROUP_NAME}-${RECIPE_NAME}-${JOB_TIMESTAMP}"
 
 # =========================================================
 # 2. 加载环境
@@ -20,6 +22,10 @@ export FULL_JOB_NAME="${GROUP_NAME}-${RECIPE_NAME}"
 source "$PARENT_DIR/global_config.sh"
 source "$SWIFT_ENV_PATH/bin/activate"
 OUTPUT_DIR="$CHECKPOINT_ROOT/$FULL_JOB_NAME"
+
+# 配置 SwanLab
+export SWANLAB_LOG_DIR="$OUTPUT_DIR/swanlab_logs"
+mkdir -p "$SWANLAB_LOG_DIR"
 
 echo "======================================================="
 echo "🚀 Launching Sloop Experiment: $FULL_JOB_NAME"
@@ -38,11 +44,13 @@ echo "======================================================="
 : "${TRAIN_TYPE:=lora}"
 : "${EPOCHS:=4}"
 : "${LR:=1e-5}"
-: "${BATCH_SIZE:=2}"
-: "${EVAL_BATCH_SIZE:=2}"
-: "${GRAD_ACCUM:=8}"
+: "${BATCH_SIZE:=4}"
+: "${GRAD_ACCUM:=4}"
 : "${WARMUP_RATIO:=0.05}"
 : "${DTYPE:=bfloat16}"
+
+# [🚀 新增] 显式指定使用 Flash Attention 2，这是 Packing 的前置条件
+: "${ATTN_IMPL:=flash_attention_2}"
 
 # --- C. LoRA 专属配置 ---
 : "${LORA_RANK:=16}"
@@ -50,14 +58,13 @@ echo "======================================================="
 : "${TARGET_MODULES:=all-linear}"
 
 # --- D. 验证与保存 ---
-# 建议调大一点，每 50 步测一次有点太频繁了，会拖慢训练
 : "${EVAL_STEPS:=200}"  
 : "${SAVE_STEPS:=200}"
 : "${SAVE_LIMIT:=2}"
 : "${LOGGING_STEPS:=5}"
 
 # --- E. 系统与日志 ---
-: "${NUM_WORKERS:=4}"
+: "${NUM_WORKERS:=8}"
 : "${GRAD_CHECKPOINTING:=true}"
 : "${REPORT_TO:=swanlab}"
 
@@ -74,7 +81,7 @@ swift sft \
     --torch_dtype "$DTYPE" \
     --num_train_epochs "$EPOCHS" \
     --per_device_train_batch_size "$BATCH_SIZE" \
-    --per_device_eval_batch_size "$EVAL_BATCH_SIZE" \
+    --per_device_eval_batch_size "$BATCH_SIZE" \
     --gradient_accumulation_steps "$GRAD_ACCUM" \
     --learning_rate "$LR" \
     --lora_rank "$LORA_RANK" \
@@ -93,6 +100,8 @@ swift sft \
     --report_to "$REPORT_TO" \
     --swanlab_project "$PROJECT_NAME" \
     --swanlab_exp_name "$FULL_JOB_NAME" \
-    --gradient_checkpointing "$GRAD_CHECKPOINTING"
+    --gradient_checkpointing "$GRAD_CHECKPOINTING" \
+    --packing true \
+    --attn_impl "$ATTN_IMPL"  # <--- 加上这一行
 
 echo "✅ Experiment Finished: $FULL_JOB_NAME"
