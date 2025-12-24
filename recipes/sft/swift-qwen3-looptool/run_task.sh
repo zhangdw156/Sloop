@@ -34,9 +34,6 @@ echo "======================================================="
 : "${DATA_FILE:=/dfs/data/datasets/LoopTool-23k/LoopTool_grpo_training_data.json}"
 : "${MAX_LENGTH:=40960}"
 
-# [新增] 验证集比例: 默认 0.01 (1%)。如果是小数据建议改在 v1.sh 里设为 0.1
-: "${VAL_RATIO:=0.01}"
-
 # --- B. 训练基础超参 ---
 : "${TRAIN_TYPE:=lora}"
 : "${EPOCHS:=4}"
@@ -71,10 +68,9 @@ echo "======================================================="
 mkdir -p "$OUTPUT_DIR"
 
 swift sft \
-    --model_id_or_path "$BASE_MODEL" \
+    --model "$BASE_MODEL" \
     --train_type "$TRAIN_TYPE" \
     --dataset "$DATA_FILE" \
-    --dataset_test_ratio "$VAL_RATIO" \
     --torch_dtype "$DTYPE" \
     --num_train_epochs "$EPOCHS" \
     --per_device_train_batch_size "$BATCH_SIZE" \
