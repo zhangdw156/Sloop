@@ -38,7 +38,7 @@ echo "🚀 Launching Sloop Experiment: $FULL_JOB_NAME"
 echo "======================================================="
 
 # =========================================================
-# 3. 定义全量默认参数
+# 3. 定义全量默认参数 (自动计算 Accum)
 # =========================================================
 
 # --- A. 模型与数据 ---
@@ -48,13 +48,32 @@ echo "======================================================="
 
 # --- B. 训练基础超参 ---
 : "${TRAIN_TYPE:=lora}"
-: "${EPOCHS:=4}"
+: "${EPOCHS:=2}"
 : "${LR:=1e-5}"
 
-# [🚨 关键修改] 40k 长度下，必须把 BS 压到 1，否则 Logits 计算会 OOM
 : "${BATCH_SIZE:=1}"
-# [🚨 关键修改] 既然 BS 降了 4 倍，梯度累积就要乘 4 倍，保持 Global BS = 64
-: "${GRAD_ACCUM:=16}"
+
+# [🔥 核心逻辑] 自动探测 GPU 数量，并计算 GRAD_ACCUM
+# 目标：保持 Global Batch Size
+TARGET_GLOBAL_BATCH=64
+
+# 1. 获取 GPU 数量 (默认为 1 以防命令失败)
+GPU_COUNT=$(nvidia-smi -L | wc -l 2>/dev/null || echo 1)
+if [ "$GPU_COUNT" -eq 0 ]; then GPU_COUNT=1; fi
+
+# 2. 计算需要的梯度累积步数 (整数除法)
+# 公式: Batch / (BATCH_SIZE * N_Cards)
+CALC_ACCUM=$((TARGET_GLOBAL_BATCH / (BATCH_SIZE * GPU_COUNT)))
+
+# 3. 保底逻辑：如果算出来小于1，强制设为1
+if [ "$CALC_ACCUM" -lt 1 ]; then CALC_ACCUM=1; fi
+
+# 4. 赋值给环境变量
+: "${GRAD_ACCUM:=$CALC_ACCUM}"
+
+echo "🧮 Auto-Scaling Config:"
+echo "   GPUs: $GPU_COUNT | Local BS: $BATCH_SIZE | Accum: $GRAD_ACCUM"
+echo "   => Global Batch Size: $((BATCH_SIZE * GPU_COUNT * GRAD_ACCUM)) (Target: $TARGET_GLOBAL_BATCH)"
 
 : "${WARMUP_RATIO:=0.05}"
 : "${DTYPE:=bfloat16}"
@@ -73,7 +92,7 @@ echo "======================================================="
 
 # --- E. 系统与日志 ---
 : "${NUM_WORKERS:=8}"
-: "${GRAD_CHECKPOINTING:=true}"
+: "${GRAD_CHECKPOINTING:=false}"
 : "${REPORT_TO:=swanlab}"
 
 # =========================================================
