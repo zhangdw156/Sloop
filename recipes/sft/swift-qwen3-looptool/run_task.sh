@@ -12,7 +12,6 @@ if [ -z "$RECIPE_NAME" ]; then
     exit 1
 fi
 
-# [推荐] 加上时间戳，防止多次实验覆盖
 export JOB_TIMESTAMP="$(date +%Y%m%d_%H%M)"
 export FULL_JOB_NAME="${GROUP_NAME}-${RECIPE_NAME}-${JOB_TIMESTAMP}"
 
@@ -20,10 +19,9 @@ export FULL_JOB_NAME="${GROUP_NAME}-${RECIPE_NAME}-${JOB_TIMESTAMP}"
 # 2. 加载环境
 # =========================================================
 source "$PARENT_DIR/global_config.sh"
-# source "$SWIFT_ENV_PATH/bin/activate"  # 使用modelfactory的任务提交时，使用系统的ms-swift
+# source "$SWIFT_ENV_PATH/bin/activate"  # 通过modelfactory的任务提交来执行时，使用环境里的ms-swift
 OUTPUT_DIR="$CHECKPOINT_ROOT/$FULL_JOB_NAME"
 
-# 配置 SwanLab
 export SWANLAB_LOG_DIR="$OUTPUT_DIR/swanlab_logs"
 mkdir -p "$SWANLAB_LOG_DIR"
 
@@ -44,12 +42,14 @@ echo "======================================================="
 : "${TRAIN_TYPE:=lora}"
 : "${EPOCHS:=4}"
 : "${LR:=1e-5}"
-: "${BATCH_SIZE:=4}"
-: "${GRAD_ACCUM:=4}"
+
+# [🚨 关键修改] 40k 长度下，必须把 BS 压到 1，否则 Logits 计算会 OOM
+: "${BATCH_SIZE:=1}"
+# [🚨 关键修改] 既然 BS 降了 4 倍，梯度累积就要乘 4 倍，保持 Global BS = 64
+: "${GRAD_ACCUM:=16}"
+
 : "${WARMUP_RATIO:=0.05}"
 : "${DTYPE:=bfloat16}"
-
-# [🚀 新增] 显式指定使用 Flash Attention 2，这是 Packing 的前置条件
 : "${ATTN_IMPL:=flash_attention_2}"
 
 # --- C. LoRA 专属配置 ---
@@ -73,6 +73,8 @@ echo "======================================================="
 # =========================================================
 
 mkdir -p "$OUTPUT_DIR"
+
+# 注意：最后几行的反斜杠 \ 后面千万不要有空格！
 
 swift sft \
     --model "$BASE_MODEL" \
@@ -102,6 +104,6 @@ swift sft \
     --swanlab_exp_name "$FULL_JOB_NAME" \
     --gradient_checkpointing "$GRAD_CHECKPOINTING" \
     --packing true \
-    --attn_impl "$ATTN_IMPL"  # <--- 加上这一行
+    --attn_impl "$ATTN_IMPL"
 
 echo "✅ Experiment Finished: $FULL_JOB_NAME"
