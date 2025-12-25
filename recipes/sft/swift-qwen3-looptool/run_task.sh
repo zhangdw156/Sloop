@@ -51,7 +51,6 @@ echo "======================================================="
 : "${EPOCHS:=2}"
 : "${LR:=1e-5}"
 
-# [显存保命] 保持为 1
 : "${BATCH_SIZE:=1}"
 
 # --- 自动计算 Accum ---
@@ -85,12 +84,11 @@ echo "   => Global Batch Size: $((BATCH_SIZE * GPU_COUNT * GRAD_ACCUM))"
 
 # --- E. 系统与日志 ---
 : "${NUM_WORKERS:=8}"
-# [必须开启] 长文本下，重计算是必须的，否则 Deepspeed 也救不了 Activation OOM
 : "${GRAD_CHECKPOINTING:=true}" 
 : "${REPORT_TO:=swanlab}"
 
 # =========================================================
-# [🔥 新增] 自动生成 DeepSpeed Zero2 Offload 配置文件
+# [DeepSpeed] 自动生成 DeepSpeed Zero2 Offload 配置文件
 # =========================================================
 DS_CONFIG_PATH="$OUTPUT_DIR/ds_config.json"
 
@@ -125,8 +123,12 @@ EOF
 echo "📝 DeepSpeed Config generated at: $DS_CONFIG_PATH"
 
 # =========================================================
-# 4. 执行 Swift
+# 4. 执行 Swift (启动分布式 DDP 模式)
 # =========================================================
+
+# [🔥 关键] 设置进程数，触发 torchrun DDP 模式
+export NPROC_PER_NODE=$GPU_COUNT
+export MASTER_PORT=$(($RANDOM + 20000))
 
 swift sft \
     --model "$BASE_MODEL" \
@@ -157,7 +159,7 @@ swift sft \
     --gradient_checkpointing "$GRAD_CHECKPOINTING" \
     --packing true \
     --attn_impl "$ATTN_IMPL" \
-    --deepspeed "$DS_CONFIG_PATH" \
-    --device_map ""
+    --deepspeed "$DS_CONFIG_PATH" 
+    # [删除了 --device_map ""，DDP模式下不需要且会报错]
 
 echo "✅ Experiment Finished: $FULL_JOB_NAME"
