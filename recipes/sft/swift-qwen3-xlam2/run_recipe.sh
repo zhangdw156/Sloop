@@ -32,7 +32,7 @@ fi
 
 # --- A. 模型与数据 ---
 : "${BASE_MODEL:=/dfs/data/models/Qwen3-8B}"
-: "${DATA_FILE:=/dfs/data/datasets/APIGen-MT-5k/apigen-mt_5k.json}"
+: "${DATA_FILE:=/dfs/data/datasets/APIGen-MT-5k/apigen_swift_standard.json}"
 : "${MAX_LENGTH:=40960}"
 
 # --- B. 训练配置 ---
