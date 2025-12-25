@@ -79,6 +79,6 @@ swift sft \
     --packing true \
     --attn_impl "$ATTN_IMPL" \
     --deepspeed "$DS_CONFIG_PATH" \
-    --loss_scale "${LOSS_SCALE}"
+    --loss_scale ${LOSS_SCALE}
 
 echo "✅ Experiment Finished: $FULL_JOB_NAME"
