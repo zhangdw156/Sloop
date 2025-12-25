@@ -56,7 +56,9 @@ CALC_ACCUM=$((TARGET_GLOBAL_BATCH / (BATCH_SIZE * GPU_COUNT)))
 : "${WARMUP_RATIO:=0.05}"
 : "${DTYPE:=bfloat16}"
 : "${ATTN_IMPL:=flash_attention_2}"
-: "${EVAL_STEPS:=200}" : "${SAVE_STEPS:=200}" : "${SAVE_LIMIT:=2}"
+: "${EVAL_STEPS:=10}"  
+: "${SAVE_STEPS:=10}"
+: "${SAVE_LIMIT:=2}"
 : "${NUM_WORKERS:=8}" : "${GRAD_CHECKPOINTING:=true}" : "${REPORT_TO:=swanlab}"
 : "${LOGGING_STEPS:=5}"
 

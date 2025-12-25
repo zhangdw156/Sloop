@@ -77,8 +77,8 @@ echo "   => Global Batch Size: $((BATCH_SIZE * GPU_COUNT * GRAD_ACCUM))"
 : "${TARGET_MODULES:=all-linear}"
 
 # --- D. 验证与保存 ---
-: "${EVAL_STEPS:=200}"  
-: "${SAVE_STEPS:=200}"
+: "${EVAL_STEPS:=10}"  
+: "${SAVE_STEPS:=10}"
 : "${SAVE_LIMIT:=2}"
 : "${LOGGING_STEPS:=5}"
 
