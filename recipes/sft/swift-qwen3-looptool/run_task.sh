@@ -157,6 +157,7 @@ swift sft \
     --gradient_checkpointing "$GRAD_CHECKPOINTING" \
     --packing true \
     --attn_impl "$ATTN_IMPL" \
-    --deepspeed "$DS_CONFIG_PATH"  # <--- [🔥 新增] 挂载 DeepSpeed 配置
+    --deepspeed "$DS_CONFIG_PATH" \
+    --device_map ""
 
 echo "✅ Experiment Finished: $FULL_JOB_NAME"
