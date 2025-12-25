@@ -43,7 +43,7 @@ fi
 : "${LORA_RANK:=16}"
 : "${LORA_ALPHA:=32}"
 : "${TARGET_MODULES:=all-linear}"
-: "${LOSS_SCALE:=default+ignore_empty_think+qwen}"
+: "${LOSS_SCALE:=default+qwen}"
 
 # --- C. 自动计算 Accum (为了保持代码整洁，计算逻辑也可以放这里) ---
 TARGET_GLOBAL_BATCH=64
