@@ -7,9 +7,8 @@
 
 # 1. 路径推导与环境加载
 RECIPE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# 假设 run_task.sh 在 recipes/ 根目录下 (向上两级)
-# 如果目录层级不同，请调整这里的 ../.. 
-ROOT_RECIPES_DIR="$(cd "$RECIPE_DIR/../.." && pwd)"
+# 如果目录层级不同，请调整这里的 ..
+ROOT_RECIPES_DIR="$(cd "$RECIPE_DIR/.." && pwd)"
 
 # 自动生成 Job Name
 GROUP_NAME="$(basename "$RECIPE_DIR")"
@@ -59,6 +58,7 @@ CALC_ACCUM=$((TARGET_GLOBAL_BATCH / (BATCH_SIZE * GPU_COUNT)))
 : "${ATTN_IMPL:=flash_attention_2}"
 : "${EVAL_STEPS:=200}" : "${SAVE_STEPS:=200}" : "${SAVE_LIMIT:=2}"
 : "${NUM_WORKERS:=8}" : "${GRAD_CHECKPOINTING:=true}" : "${REPORT_TO:=swanlab}"
+: "${LOGGING_STEPS:=5}"
 
 echo "======================================================="
 echo "🥣 Recipe Configured: $FULL_JOB_NAME"
