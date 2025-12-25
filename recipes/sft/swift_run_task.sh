@@ -78,6 +78,7 @@ swift sft \
     --gradient_checkpointing "$GRAD_CHECKPOINTING" \
     --packing true \
     --attn_impl "$ATTN_IMPL" \
-    --deepspeed "$DS_CONFIG_PATH"
+    --deepspeed "$DS_CONFIG_PATH" \
+    --loss_scale "${LOSS_SCALE}"
 
 echo "✅ Experiment Finished: $FULL_JOB_NAME"
