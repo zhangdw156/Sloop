@@ -32,7 +32,7 @@ fi
 # --- A. 模型与数据 ---
 : "${BASE_MODEL:=/dfs/data/models/Qwen3-8B}"
 # 再次提醒：不加引号，空格分隔
-: "${DATA_FILE:=/dfs/data/datasets/APIGen-MT-5k/apigen-mt_5k.json /dfs/data/datasets/LoopTool-23k/LoopTool_grpo_training_data.json}"
+: "${DATA_FILE:=/dfs/data/datasets/APIGen-MT-5k/apigen_swift_standard.json /dfs/data/datasets/LoopTool-23k/LoopTool_grpo_training_data.json}"
 : "${MAX_LENGTH:=40960}"
 
 # --- B. 训练配置 ---
