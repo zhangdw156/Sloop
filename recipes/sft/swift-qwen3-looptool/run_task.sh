@@ -20,7 +20,6 @@ export FULL_JOB_NAME="${GROUP_NAME}-${RECIPE_NAME}-${JOB_TIMESTAMP}"
 # =========================================================
 source "$PARENT_DIR/global_config.sh"
 
-# 默认情况(空)则跳过，使用系统环境
 if [ -n "$USE_LOCAL_SWIFT" ]; then
     echo "🔌 Activating Local Venv: $SWIFT_ENV_PATH"
     source "$SWIFT_ENV_PATH/bin/activate"
@@ -29,6 +28,7 @@ else
 fi
 
 OUTPUT_DIR="$CHECKPOINT_ROOT/$FULL_JOB_NAME"
+mkdir -p "$OUTPUT_DIR"
 
 export SWANLAB_LOG_DIR="$OUTPUT_DIR/swanlab_logs"
 mkdir -p "$SWANLAB_LOG_DIR"
@@ -38,7 +38,7 @@ echo "🚀 Launching Sloop Experiment: $FULL_JOB_NAME"
 echo "======================================================="
 
 # =========================================================
-# 3. 定义全量默认参数 (自动计算 Accum)
+# 3. 定义全量默认参数
 # =========================================================
 
 # --- A. 模型与数据 ---
@@ -51,29 +51,22 @@ echo "======================================================="
 : "${EPOCHS:=2}"
 : "${LR:=1e-5}"
 
+# [显存保命] 保持为 1
 : "${BATCH_SIZE:=1}"
 
-# [🔥 核心逻辑] 自动探测 GPU 数量，并计算 GRAD_ACCUM
-# 目标：保持 Global Batch Size
+# --- 自动计算 Accum ---
 TARGET_GLOBAL_BATCH=64
-
-# 1. 获取 GPU 数量 (默认为 1 以防命令失败)
 GPU_COUNT=$(nvidia-smi -L | wc -l 2>/dev/null || echo 1)
 if [ "$GPU_COUNT" -eq 0 ]; then GPU_COUNT=1; fi
 
-# 2. 计算需要的梯度累积步数 (整数除法)
-# 公式: Batch / (BATCH_SIZE * N_Cards)
 CALC_ACCUM=$((TARGET_GLOBAL_BATCH / (BATCH_SIZE * GPU_COUNT)))
-
-# 3. 保底逻辑：如果算出来小于1，强制设为1
 if [ "$CALC_ACCUM" -lt 1 ]; then CALC_ACCUM=1; fi
 
-# 4. 赋值给环境变量
 : "${GRAD_ACCUM:=$CALC_ACCUM}"
 
 echo "🧮 Auto-Scaling Config:"
 echo "   GPUs: $GPU_COUNT | Local BS: $BATCH_SIZE | Accum: $GRAD_ACCUM"
-echo "   => Global Batch Size: $((BATCH_SIZE * GPU_COUNT * GRAD_ACCUM)) (Target: $TARGET_GLOBAL_BATCH)"
+echo "   => Global Batch Size: $((BATCH_SIZE * GPU_COUNT * GRAD_ACCUM))"
 
 : "${WARMUP_RATIO:=0.05}"
 : "${DTYPE:=bfloat16}"
@@ -92,16 +85,48 @@ echo "   => Global Batch Size: $((BATCH_SIZE * GPU_COUNT * GRAD_ACCUM)) (Target:
 
 # --- E. 系统与日志 ---
 : "${NUM_WORKERS:=8}"
-: "${GRAD_CHECKPOINTING:=true}"  # 拿时间换显存
+# [必须开启] 长文本下，重计算是必须的，否则 Deepspeed 也救不了 Activation OOM
+: "${GRAD_CHECKPOINTING:=true}" 
 : "${REPORT_TO:=swanlab}"
+
+# =========================================================
+# [🔥 新增] 自动生成 DeepSpeed Zero2 Offload 配置文件
+# =========================================================
+DS_CONFIG_PATH="$OUTPUT_DIR/ds_config.json"
+
+cat <<EOF > "$DS_CONFIG_PATH"
+{
+  "train_batch_size": "auto",
+  "train_micro_batch_size_per_gpu": "auto",
+  "gradient_accumulation_steps": "auto",
+  "gradient_clipping": "auto",
+  "zero_optimization": {
+    "stage": 2,
+    "offload_optimizer": {
+      "device": "cpu",
+      "pin_memory": true
+    },
+    "allgather_partitions": true,
+    "allgather_bucket_size": 200000000,
+    "reduce_scatter": true,
+    "reduce_bucket_size": 200000000,
+    "overlap_comm": true,
+    "contiguous_gradients": true
+  },
+  "bf16": {
+    "enabled": "auto"
+  },
+  "fp16": {
+    "enabled": "auto"
+  }
+}
+EOF
+
+echo "📝 DeepSpeed Config generated at: $DS_CONFIG_PATH"
 
 # =========================================================
 # 4. 执行 Swift
 # =========================================================
-
-mkdir -p "$OUTPUT_DIR"
-
-# 注意：最后几行的反斜杠 \ 后面千万不要有空格！
 
 swift sft \
     --model "$BASE_MODEL" \
@@ -131,6 +156,7 @@ swift sft \
     --swanlab_exp_name "$FULL_JOB_NAME" \
     --gradient_checkpointing "$GRAD_CHECKPOINTING" \
     --packing true \
-    --attn_impl "$ATTN_IMPL"
+    --attn_impl "$ATTN_IMPL" \
+    --deepspeed "$DS_CONFIG_PATH"  # <--- [🔥 新增] 挂载 DeepSpeed 配置
 
 echo "✅ Experiment Finished: $FULL_JOB_NAME"
