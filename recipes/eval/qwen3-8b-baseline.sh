@@ -8,22 +8,23 @@ export EVAL_CORE_DIR="/dfs/data/work/Sloop/evals/core"
 export VENV_PATH="/dfs/data/uv-venv/modelscope"
 
 # --- 模型配置 ---
-export EVAL_MODEL_NAME="qwen3-8b-baseline" 
-export EVAL_API_URL="http://10.254.8.156:8443/service-large-1045-1766723863116/llm/v1"
-export EVAL_API_KEY="f6g5Mfq4bxKSw28bDDaBS0gPFQqAac6864RcTQJh5zwShaqbvJsLW88TaSr6pArCcQsfGJ6VRscr8NcQHXV5rr8bLBPasrpNAGrKhQfJcD7F086K7w7THgPS5F0wrX6A"
+export EVAL_MODEL_NAME="qwen3-8b-baseline"
+export EVAL_API_URL="http://10.254.13.246:8443/service-large-1045-1766758890786/llm/v1"
+export EVAL_API_KEY="KJLBQJc7jnwl86jl67r687187mAQcsBvrr8gpArw0rmR74tqlzZHtS9sc76kqdvGJ8pkwS0wc64dSWPv0mVx87mVr7F74k4N6m7THFWqrzzmB5KnjD997p8CS7t064X7"
 
-# --- 评测范围配置 
+# --- 评测范围配置 ---
 export EVAL_SUBSET_LIST="multi_turn_base,multi_turn_miss_func,multi_turn_miss_param,multi_turn_long_context"
 # export EVAL_SUBSET_LIST=""  # 留空则跑全量
 
 # --- 参数配置 ---
-export EVAL_BATCH_SIZE="10"
-export EVAL_LIMIT="" 
-export EVAL_MAX_TOKENS="32000" # 可以控制生成长度了
+export EVAL_BATCH_SIZE="1"
+export EVAL_LIMIT="1"
+export EVAL_MAX_TOKENS="4096"
 
 # --- 输出路径 ---
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-export EVAL_OUTPUT_DIR="/dfs/data/work/Sloop/eval_results/${EVAL_MODEL_NAME}_${TIMESTAMP}"
+# TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+# export EVAL_OUTPUT_DIR="/dfs/data/work/Sloop/eval_results/${EVAL_MODEL_NAME}_${TIMESTAMP}"
+export EVAL_OUTPUT_DIR="/dfs/data/work/Sloop/eval_results/${EVAL_MODEL_NAME}"
 
 # --- 启动 ---
 if [ -f "$EVAL_CORE_DIR/run_inner.sh" ]; then
