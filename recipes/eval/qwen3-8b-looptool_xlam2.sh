@@ -25,12 +25,13 @@ export EVAL_SUBSET_LIST="multi_turn_base,multi_turn_miss_func,multi_turn_miss_pa
 export EVAL_BATCH_SIZE="10"
 # 设置为 "10" 进行快速测试，设置为 "" (空) 进行全量评测
 export EVAL_LIMIT="" 
-export EVAL_MAX_TOKENS="32000" # 控制生成长度
+export EVAL_MAX_TOKENS="4096" # 控制生成长度
 
 # --- 5. 输出路径 ---
 # 自动生成一个带时间戳的文件夹，避免覆盖
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-export EVAL_OUTPUT_DIR="/dfs/data/work/Sloop/eval_results/${EVAL_MODEL_NAME}_${TIMESTAMP}"
+# TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+# export EVAL_OUTPUT_DIR="/dfs/data/work/Sloop/eval_results/${EVAL_MODEL_NAME}_${TIMESTAMP}"
+export EVAL_OUTPUT_DIR="/dfs/data/work/Sloop/eval_results/${EVAL_MODEL_NAME}"
 
 # ==========================================
 # 启动驱动层 (Handover to Layer 2)
