@@ -30,11 +30,11 @@ sloop = "sloop.cli.main:app"
 [tool.uv]
 dev-dependencies = [
     "pytest>=7.0.0",
- "pytest-asyncio",
- "pytest-mock",
- "annotated-doc",
- "pre-commit>=4.5.1",
- "ruff>=0.14.10",
+    "pytest-asyncio",
+    "pytest-mock",
+    "annotated-doc",
+    "pre-commit>=4.5.1",
+    "ruff>=0.14.10",
 ]
 
 [tool.ruff.lint]
@@ -51,3 +51,9 @@ preview = true
 line-ending = "auto"
 # 缩进使用 4 个空格
 indent-style = "space"
+
+[dependency-groups]
+eval = [
+    "bfcl-eval==2025.10.27.1",
+    "evalscope>=1.4.0",
+]
