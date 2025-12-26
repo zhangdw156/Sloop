@@ -4,17 +4,25 @@ import sys
 from evalscope import TaskConfig, run_task
 
 def main():
-    # --- 读取环境变量 ---
+    # --- 1. 读取基础环境变量 ---
     model_name = os.getenv('EVAL_MODEL_NAME')
     api_url = os.getenv('EVAL_API_URL')
     api_key = os.getenv('EVAL_API_KEY', 'EMPTY')
     output_dir = os.getenv('EVAL_OUTPUT_DIR')
+    max_tokens = int(os.getenv('EVAL_MAX_TOKENS', '32000'))
     
-    # 获取 eval_limit，如果未设置或为 -1 则为 None (跑全量)
+    # Limit设置
     limit_env = os.getenv('EVAL_LIMIT')
     eval_limit = int(limit_env) if limit_env and int(limit_env) > 0 else None
 
-    print(f"🔧 Config: Model={model_name}, URL={api_url}, Limit={eval_limit}")
+    # --- [新增] 读取子集列表环境变量 ---
+    # 期望格式: "multi_turn_base,multi_turn_miss" (逗号分隔)
+    subset_env = os.getenv('EVAL_SUBSET_LIST', '')
+    # 如果环境变量存在且不为空，则分割成列表；否则为 None (跑全量)
+    target_subsets = [s.strip() for s in subset_env.split(',')] if subset_env.strip() else None
+
+    print(f"🔧 Config: Model={model_name}")
+    print(f"🎯 Target Subsets: {target_subsets if target_subsets else 'ALL'}")
 
     # --- 配置任务 ---
     task_cfg = TaskConfig(
@@ -26,6 +34,8 @@ def main():
         eval_batch_size=int(os.getenv('EVAL_BATCH_SIZE', '10')),
         dataset_args={
             'bfcl_v3': {
+                # [关键修改] 将子集列表传给 EvalScope
+                'subset_list': target_subsets, 
                 'extra_params': {
                     'underscore_to_dot': True,
                     'is_fc_model': True,
@@ -34,7 +44,7 @@ def main():
         },
         generation_config={
             'temperature': 0,
-            'max_tokens': 32000,
+            'max_tokens': max_tokens, 
             'parallel_tool_calls': True,
         },
         limit=eval_limit, 
@@ -42,10 +52,8 @@ def main():
 
     # --- 执行评测 ---
     try:
-        # run_task 内部会自动打印很多日志
         result = run_task(task_cfg=task_cfg)
         
-        # 也可以选择性地把 result 存成 json，虽然 EvalScope 通常自己也会存
         if output_dir:
             res_path = os.path.join(output_dir, "result_summary.json")
             with open(res_path, "w") as f:
