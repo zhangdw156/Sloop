@@ -8,4 +8,5 @@ swanlog/
 .*.sh
 eval_results/
 outputs/
+logs/
 

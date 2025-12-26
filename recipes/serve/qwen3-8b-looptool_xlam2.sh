@@ -1,4 +1,5 @@
 #!/bin/bash
+# -*- coding: utf-8 -*-
 
 # ==========================================
 # Layer 3: vLLM Recipe (LoRA Version)
@@ -9,13 +10,13 @@ export EVAL_CORE_DIR="/dfs/data/work/Sloop/serve/core"
 
 # --- 模型配置 ---
 # 使用 :- 语法，允许外部覆盖，同时保留默认值
-export SERVE_MODEL_NAME=${SERVE_MODEL_NAME:-"qwen3-8b-baseline"}
+export SERVE_MODEL_NAME=${SERVE_MODEL_NAME:-"qwen3-8b-looptool_xlam2"}
 export SERVE_MODEL_PATH=${SERVE_MODEL_PATH:-"/dfs/data/models/Qwen3-8B"}
 
 # --- LoRA配置 ---
-export SERVE_ENABLE_LORA=${SERVE_ENABLE_LORA:-"false"}
-# export SERVE_MAX_LORA_RANK=${SERVE_MAX_LORA_RANK:-"128"}
-# export SERVE_LORA_MODULES=${SERVE_LORA_MODULES:-"bfclv3=/dfs/data/work/Sloop/checkpoints/swift-qwen3-xlam2-v2-20251226_1203/v0-20251226-120344/checkpoint-22"}
+export SERVE_ENABLE_LORA=${SERVE_ENABLE_LORA:-"true"}
+export SERVE_MAX_LORA_RANK=${SERVE_MAX_LORA_RANK:-"128"}
+export SERVE_LORA_MODULES=${SERVE_LORA_MODULES:-"bfclv3=/dfs/data/work/Sloop/checkpoints/swift-qwen3-looptool_xlam2-v2-20251225_1913/v0-20251225-191401/checkpoint-106"}
 
 # --- 硬件与性能 ---
 export SERVE_PORT=${SERVE_PORT:-"8000"}

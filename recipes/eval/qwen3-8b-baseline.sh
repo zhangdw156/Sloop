@@ -18,8 +18,8 @@ export EVAL_SUBSET_LIST="multi_turn_base,multi_turn_miss_func,multi_turn_miss_pa
 # export EVAL_SUBSET_LIST=""  # 留空则跑全量
 
 # --- 参数配置 ---
-export EVAL_BATCH_SIZE="1"
-export EVAL_LIMIT="1"
+export EVAL_BATCH_SIZE="32"
+export EVAL_LIMIT=""
 export EVAL_MAX_TOKENS="4096"
 
 # --- 输出路径 ---
