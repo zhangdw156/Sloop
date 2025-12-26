@@ -9,8 +9,9 @@ export VENV_PATH="/dfs/data/uv-venv/modelscope"
 
 # --- 模型配置 ---
 export EVAL_MODEL_NAME="qwen3-8b-baseline"
-export EVAL_API_URL="http://10.254.13.246:8443/service-large-1045-1766758890786/llm/v1"
-export EVAL_API_KEY="KJLBQJc7jnwl86jl67r687187mAQcsBvrr8gpArw0rmR74tqlzZHtS9sc76kqdvGJ8pkwS0wc64dSWPv0mVx87mVr7F74k4N6m7THFWqrzzmB5KnjD997p8CS7t064X7"
+# export EVAL_API_URL="http://10.254.13.246:8443/service-large-1045-1766758890786/llm/v1"
+# export EVAL_API_KEY="KJLBQJc7jnwl86jl67r687187mAQcsBvrr8gpArw0rmR74tqlzZHtS9sc76kqdvGJ8pkwS0wc64dSWPv0mVx87mVr7F74k4N6m7THFWqrzzmB5KnjD997p8CS7t064X7"
+export EVAL_API_URL="http://127.0.0.1:8000/v1"
 
 # --- 评测范围配置 ---
 export EVAL_SUBSET_LIST="multi_turn_base,multi_turn_miss_func,multi_turn_miss_param,multi_turn_long_context"
