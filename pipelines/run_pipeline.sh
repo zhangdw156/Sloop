@@ -1,78 +1,106 @@
 #!/bin/bash
 
 # ================================================================
-# Layer 4: Automated Evaluation Pipeline
-# 功能: Serve -> Wait -> Eval -> Stop
-# 用法: bash run_pipeline.sh <serve_recipe> <eval_recipe>
+# Layer 4: Automated Evaluation Pipeline (Robust Version)
 # ================================================================
 
 SERVE_RECIPE=$1
 EVAL_RECIPE=$2
 
-# --- 0. 参数检查 ---
+# --- 0. 环境与参数检查 ---
+# (可选) 加载你的平台初始化脚本
+if [ -f "/dfs/data/sbin/setup.sh" ]; then
+    source /dfs/data/sbin/setup.sh
+fi
+
 if [ -z "$SERVE_RECIPE" ] || [ -z "$EVAL_RECIPE" ]; then
     echo "❌ Usage: bash pipelines/run_pipeline.sh <serve_recipe> <eval_recipe>"
-    echo "   Ex: bash pipelines/run_pipeline.sh recipes/serve/start_lora.sh recipes/eval/eval_lora.sh"
     exit 1
 fi
+
+# 启用 Errexit: 遇到任何命令报错立即退出
+set -e 
 
 # 记录开始时间
 START_TIME=$(date +%s)
 
-# --- 1. 定义清理函数 (Teardown) ---
-# 无论脚本如何退出，都会执行这个函数
+# --- 1. 定义清理函数 ---
 cleanup() {
+    # 捕获原始的退出码
+    EXIT_CODE=$?
+    
     echo ""
     echo "========================================================"
-    echo "🧹 Pipeline Teardown: Stopping Service..."
+    echo "🧹 Pipeline Teardown..."
     
-    # 这里的变量来自于下面的 source 操作
     if [ -n "$SERVE_MODEL_NAME" ] && [ -n "$SERVE_PORT" ]; then
         STOP_SCRIPT="/dfs/data/work/Sloop/serve/core/stop_service.sh"
         if [ -f "$STOP_SCRIPT" ]; then
+            # 临时关闭 set -e，防止停止脚本报错导致 cleanup 中断
+            set +e 
             bash "$STOP_SCRIPT" "$SERVE_MODEL_NAME" "$SERVE_PORT"
-        else
-            echo "⚠️ Warning: Stop script not found at $STOP_SCRIPT"
-            echo "   You may need to manually kill vLLM on port $SERVE_PORT"
+            set -e
         fi
-    else
-        echo "⚠️ Warning: Service info missing. Manual cleanup might be required."
     fi
     
     END_TIME=$(date +%s)
     DURATION=$((END_TIME - START_TIME))
-    echo "⏱️ Total Pipeline Duration: ${DURATION}s"
-    echo "✅ Pipeline Finished."
-    echo "========================================================"
+    echo "⏱️ Total Duration: ${DURATION}s"
+    
+    if [ $EXIT_CODE -ne 0 ]; then
+        echo "❌ Pipeline FAILED with exit code $EXIT_CODE"
+    else
+        echo "✅ Pipeline FINISHED successfully."
+    fi
+    
+    exit $EXIT_CODE
 }
 
-# 注册信号捕获: 遇到 EXIT(正常退出), INT(Ctrl+C), TERM(kill) 时执行 cleanup
+# 注册 trap
 trap cleanup EXIT INT TERM
 
-# --- 2. 启动服务 (Serve Phase) ---
+# --- 2. 启动服务 ---
 echo "========================================================"
 echo "🚀 Phase 1: Starting vLLM Service..."
 echo "📜 Recipe: $SERVE_RECIPE"
 echo "========================================================"
 
-# [关键] 强制设置为后台模式，覆盖 Recipe 里的设置
-# 这样 source Recipe 时，driver 会在后台启动并写入 PID 文件，而不是卡住当前脚本
+# 强制后台模式
 export SERVE_MODE="daemon"
 
-# 加载配方 (这会触发 Driver 启动服务)
+# 加载配方
 source "$SERVE_RECIPE"
 
-# --- 3. 健康检查 (Health Check) ---
-# 此时 $SERVE_PORT 已经被 source 进来了
-API_URL="http://localhost:$SERVE_PORT/v1/models"
-echo "⏳ Waiting for service at $API_URL ..."
+# 再次检查关键变量是否加载成功
+if [ -z "$SERVE_PORT" ]; then
+    echo "❌ Error: SERVE_PORT not set. Check your Serve Recipe."
+    exit 1
+fi
 
-MAX_RETRIES=120  # 等待 120秒 (模型加载可能慢)
+# --- 3. 健康检查 (智能版) ---
+API_URL="http://localhost:$SERVE_PORT/v1/models"
+PID_FILE="/dfs/data/work/Sloop/serve/logs/${SERVE_MODEL_NAME}_${SERVE_PORT}.pid"
+
+echo "⏳ Waiting for service at $API_URL ..."
+echo "   Checking PID file: $PID_FILE"
+
+MAX_RETRIES=120
 COUNTER=0
 
 while true; do
-    # 使用 curl 检查服务状态 (-s 静默, -o 丢弃输出, -w 返回状态码)
-    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL")
+    # [核心改进] 检查 PID 进程是否还活着
+    if [ -f "$PID_FILE" ]; then
+        PID=$(cat "$PID_FILE")
+        if ! kill -0 $PID 2>/dev/null; then
+            echo ""
+            echo "❌ CRITICAL: vLLM process (PID $PID) died unexpectedly!"
+            echo "   Check logs immediately: /dfs/data/work/Sloop/serve/logs/${SERVE_MODEL_NAME}_${SERVE_PORT}.log"
+            exit 1
+        fi
+    fi
+
+    # 检查服务端口
+    HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$API_URL" || echo "000")
     
     if [ "$HTTP_CODE" == "200" ]; then
         echo "✅ Service is UP and READY!"
@@ -83,21 +111,21 @@ while true; do
     COUNTER=$((COUNTER+1))
     
     if [ $COUNTER -ge $MAX_RETRIES ]; then
+        echo ""
         echo "❌ Timeout: Service failed to start within ${MAX_RETRIES}s."
-        echo "   Check logs at: /dfs/data/work/Sloop/serve/logs/"
         exit 1
     fi
     echo -n "."
 done
 
-# --- 4. 运行评测 (Eval Phase) ---
+# --- 4. 运行评测 ---
 echo ""
 echo "========================================================"
 echo "🧪 Phase 2: Running Evaluation..."
 echo "📜 Recipe: $EVAL_RECIPE"
 echo "========================================================"
 
-# 运行评测脚本
+# 运行评测
 bash "$EVAL_RECIPE"
 
-# 脚本运行到这里结束，会自动触发 trap cleanup
+# 脚本自然结束，触发 trap cleanup (exit code 0)
