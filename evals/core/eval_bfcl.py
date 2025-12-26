@@ -31,7 +31,7 @@ def append_to_checkpoint(checkpoint_path, subset_name):
 
 def format_friendly_result(subset_name, raw_result):
     """
-    【核心优化】解析复杂的 Report 对象，生成人类可读的成绩单
+    解析复杂的 Report 对象，生成人类可读的成绩单
     """
     try:
         # 1. 获取核心 Report 对象
@@ -44,7 +44,6 @@ def format_friendly_result(subset_name, raw_result):
         lines.append(f"📊 Model:   {getattr(report, 'model_name', 'Unknown')}")
         
         # 3. 深入挖掘 metrics -> categories -> subsets 找到分数
-        # 根据你提供的日志结构进行解析
         found_data = False
         if hasattr(report, 'metrics'):
             for metric in report.metrics:
@@ -64,8 +63,6 @@ def format_friendly_result(subset_name, raw_result):
         if found_data:
             return "\n".join(lines)
         else:
-            # 如果没挖到数据，可能是结构变了，回退到打印 Report 的原始字符串
-            # Report 对象的 str() 通常就是那个表格
             return str(report)
 
     except Exception as e:
@@ -139,6 +136,11 @@ def main():
                 api_key=api_key,
                 eval_type='openai_api',
                 datasets=['bfcl_v3'],
+                
+                # 指定 EvalScope 的工作目录
+                # 这样日志和临时文件会生成在 output_dir 下，而不是默认的 ./outputs
+                work_dir=output_dir,
+                
                 eval_batch_size=int(os.getenv('EVAL_BATCH_SIZE', '10')),
                 dataset_args={
                     'bfcl_v3': {
@@ -179,3 +181,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    

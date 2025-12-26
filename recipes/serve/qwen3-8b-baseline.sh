@@ -10,7 +10,7 @@ export EVAL_CORE_DIR="/dfs/data/work/Sloop/serve/core"
 # --- 2. 基础模型配置 ---
 # 这里是基座模型 (Base Model)
 export SERVE_MODEL_NAME="qwen3-8b-baseline"
-export SERVE_MODEL_PATH="/dfs/data/models/qwen3-8b-baseline" 
+export SERVE_MODEL_PATH="/dfs/data/models/Qwen3-8B" 
 
 # --- 3. LoRA配置 (按照你的要求) ---
 export SERVE_ENABLE_LORA="false"
