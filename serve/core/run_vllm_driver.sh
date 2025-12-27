@@ -10,9 +10,9 @@
 
 # (可选) 只有当文件存在时才加载 setup.sh
 # 这是我在modelfactory平台的初始化脚本
-if [ -f "/dfs/data/sbin/setup.sh" ]; then
-    source /dfs/data/sbin/setup.sh
-fi
+# if [ -f "/dfs/data/sbin/setup.sh" ]; then
+#     source /dfs/data/sbin/setup.sh
+# fi
 
 # 1. 确定虚拟环境路径 (优先用 Layer 3 传进来的，没有就用默认的)
 TARGET_VENV=${VENV_PATH:-"/dfs/data/uv-venv/modelscope"}
