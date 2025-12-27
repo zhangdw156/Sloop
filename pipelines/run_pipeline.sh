@@ -68,8 +68,14 @@ echo "========================================================"
 # 强制后台模式
 export SERVE_MODE="daemon"
 
+# [新增] 临时关闭“报错即退出”，防止 Recipe/Driver 里的非致命错误杀掉 Pipeline
+set +e
+
 # 加载配方
 source "$SERVE_RECIPE"
+
+# [新增] 恢复“报错即退出”
+set -e
 
 # 再次检查关键变量是否加载成功
 if [ -z "$SERVE_PORT" ]; then
