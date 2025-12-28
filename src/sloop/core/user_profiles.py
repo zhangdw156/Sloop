@@ -224,66 +224,130 @@ class UserBehaviorSimulator:
         self.profile = profile
         self.user_type = UserType(profile['type'])
 
-    def generate_initial_request(self, problem: str, apis: List[Dict[str, Any]]) -> str:
+    def generate_initial_request(self, apis: List[Dict[str, Any]]) -> str:
         """
-        根据用户画像生成初始请求
+        根据用户画像生成初始请求（表达实际需求，而非API使用）
 
         Args:
-            problem: 基础问题
-            apis: 可用API列表
+            apis: 可用API列表（用于生成相关需求）
 
         Returns:
             生成的用户请求
         """
         if self.user_type == UserType.CAREFUL:
-            return self._careful_request(problem, apis)
+            return self._careful_request(apis)
         elif self.user_type == UserType.CARELESS:
-            return self._careless_request(problem, apis)
+            return self._careless_request(apis)
         elif self.user_type == UserType.UNCLEAR:
-            return self._unclear_request(problem, apis)
+            return self._unclear_request(apis)
         elif self.user_type == UserType.CURIOUS:
-            return self._curious_request(problem, apis)
+            return self._curious_request(apis)
         elif self.user_type == UserType.TECHNICAL:
-            return self._technical_request(problem, apis)
+            return self._technical_request(apis)
         elif self.user_type == UserType.BUSINESS:
-            return self._business_request(problem, apis)
+            return self._business_request(apis)
         elif self.user_type == UserType.NOVICE:
-            return self._novice_request(problem, apis)
+            return self._novice_request(apis)
         else:
-            return problem
+            return "请帮我解决一个问题。"
 
-    def _careful_request(self, problem: str, apis: List[Dict[str, Any]]) -> str:
-        """细心用户的请求 - 准确、详细"""
-        api_names = [api['name'] for api in apis[:2]]  # 只提最相关的
-        return f"我想{problem}，我需要使用{api_names[0]}功能，请帮我操作。"
+    def _careful_request(self, apis: List[Dict[str, Any]]) -> str:
+        """细心用户的请求 - 准确、详细表达实际需求"""
+        # 基于API类型生成相应的实际需求
+        if apis:
+            api = apis[0]
+            category = api.get('category', 'general')
+            if category == 'weather':
+                return "我想了解一下北京今天的天气情况，包括温度和空气质量。"
+            elif category == 'travel':
+                return "我计划周末去上海，想知道那里的餐厅推荐。"
+            else:
+                return "我想查询一些重要的数据信息，请帮我获取。"
+        return "我想解决一个问题，请帮我处理。"
 
-    def _careless_request(self, problem: str, apis: List[Dict[str, Any]]) -> str:
-        """粗心用户的请求 - 参数经常错"""
-        # 故意在参数上出错
-        if "北京" in problem:
-            return f"我想{problem.replace('北京', '上海')}"  # 城市搞错
-        return f"我想{problem}，快点帮我搞定！"
+    def _careless_request(self, apis: List[Dict[str, Any]]) -> str:
+        """粗心用户的请求 - 表达需求但经常出错"""
+        # 粗心用户表达实际需求，但可能有遗漏或错误
+        if apis:
+            api = apis[0]
+            category = api.get('category', 'general')
+            if category == 'weather':
+                return "我想知道上海的天气怎么样，今天热不热？"  # 城市可能记错
+            elif category == 'travel':
+                return "帮我找找吃饭的地方，最近的就行。"  # 需求表达不完整
+            else:
+                return "我想查点东西，快帮我搞定！"
+        return "帮我办件事儿吧！"
 
-    def _unclear_request(self, problem: str, apis: List[Dict[str, Any]]) -> str:
-        """表达不清的请求 - 模糊、需要澄清"""
-        return f"我想{problem}，大概就是那个东西，你知道吧？"
+    def _unclear_request(self, apis: List[Dict[str, Any]]) -> str:
+        """表达不清的请求 - 模糊表达需求"""
+        # 表达不清的用户用模糊语言表达需求
+        if apis:
+            api = apis[0]
+            category = api.get('category', 'general')
+            if category == 'weather':
+                return "那个天气什么的，你知道吧？我想了解一下。"
+            elif category == 'travel':
+                return "就是吃饭那方面的事情，大概就是那样。"
+            else:
+                return "就是那个事情，你明白吗？"
+        return "就是那个东西，你知道的吧？"
 
-    def _curious_request(self, problem: str, apis: List[Dict[str, Any]]) -> str:
-        """好奇用户的请求 - 喜欢探索"""
-        return f"我想{problem}，这个功能有什么特别的地方吗？可以怎么用？"
+    def _curious_request(self, apis: List[Dict[str, Any]]) -> str:
+        """好奇用户的请求 - 充满好奇心的实际需求"""
+        # 好奇用户表达具体需求，并显示出探索欲
+        if apis:
+            api = apis[0]
+            category = api.get('category', 'general')
+            if category == 'weather':
+                return "我很好奇北京的空气质量到底怎么样？PM2.5数值是多少？"
+            elif category == 'travel':
+                return "我想知道有哪些不同类型的餐厅可以选择，为什么有些餐厅评分很高？"
+            else:
+                return "我想探索一下这个数据世界，有什么有趣的信息可以分享吗？"
+        return "我想了解一些有趣的事情，你能告诉我吗？"
 
-    def _technical_request(self, problem: str, apis: List[Dict[str, Any]]) -> str:
-        """技术用户的请求 - 关注技术细节"""
-        api_names = [api['name'] for api in apis[:3]]
-        return f"我想{problem}，请使用{', '.join(api_names)}API，注意参数格式和错误处理。"
+    def _technical_request(self, apis: List[Dict[str, Any]]) -> str:
+        """技术用户的请求 - 关注技术实现的需求"""
+        # 技术用户表达技术层面的需求
+        if apis:
+            api = apis[0]
+            category = api.get('category', 'general')
+            if category == 'weather':
+                return "我正在开发一个气象应用，需要获取准确的空气质量数据，包括所有参数和更新频率。"
+            elif category == 'travel':
+                return "我需要构建一个餐厅推荐系统，请提供完整的API规范和数据结构。"
+            else:
+                return "我需要访问某些数据接口，用于系统集成开发。"
+        return "我需要一些技术层面的帮助。"
 
-    def _business_request(self, problem: str, apis: List[Dict[str, Any]]) -> str:
-        """商务用户的请求 - 关注效率"""
-        return f"我想{problem}，请高效完成，最好快一点。"
+    def _business_request(self, apis: List[Dict[str, Any]]) -> str:
+        """商务用户的请求 - 关注商业价值的需求"""
+        # 商务用户表达商业层面的需求
+        if apis:
+            api = apis[0]
+            category = api.get('category', 'general')
+            if category == 'weather':
+                return "我想分析北京的天气趋势对业务的影响，需要获取长期的气象数据。"
+            elif category == 'travel':
+                return "我需要为客户提供餐厅推荐服务，请告诉我最受欢迎的选项。"
+            else:
+                return "我想获取一些商业数据，用于决策分析。"
+        return "我想解决一个商业问题。"
 
-    def _novice_request(self, problem: str, apis: List[Dict[str, Any]]) -> str:
-        """新手用户的请求 - 基础、需要指导"""
-        return f"我想{problem}，但我不太会用，这个怎么操作啊？"
+    def _novice_request(self, apis: List[Dict[str, Any]]) -> str:
+        """新手用户的请求 - 基础的实际需求"""
+        # 新手用户表达简单的基础需求
+        if apis:
+            api = apis[0]
+            category = api.get('category', 'general')
+            if category == 'weather':
+                return "我想知道今天的天气怎么样，但我不懂那些专业术语，能简单告诉我吗？"
+            elif category == 'travel':
+                return "我想找个地方吃饭，但不知道怎么选，你能推荐一下吗？"
+            else:
+                return "我想了解一些基本信息，但我不懂这些东西怎么办？"
+        return "我需要帮助，但不知道从哪里开始。"
 
 
 # 全局用户画像生成器实例

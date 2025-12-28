@@ -3,11 +3,15 @@
 实现User/Assistant/Service三个核心对话角色
 """
 
+import json
+import yaml
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from crewai import Agent, Task, LLM
 from textwrap import dedent
 from .config import config
 from .user_profiles import UserBehaviorSimulator
+from .prompt_manager import prompt_manager
 
 
 class ConversationRoleAgents:
@@ -45,65 +49,60 @@ class ConversationRoleAgents:
         """创建三个核心对话角色Agent"""
 
         # 1. User Agent - 基于用户画像模拟用户行为
+        user_config = prompt_manager.get_agent_config(
+            "user_agent",
+            user_type=self.user_profile.get('type', 'general'),
+            user_profile=json.dumps(self.user_profile, ensure_ascii=False),
+            communication_style=self.user_profile.get('communication_style', '口语化'),
+            error_handling=self.user_profile.get('error_handling', '一般'),
+            interaction_pattern=self.user_profile.get('interaction_pattern', '正常交流')
+        )
+
         user_agent = Agent(
-            role="用户模拟器",
-            goal=f"模拟{self.user_profile['type']}类型用户的对话行为",
-            backstory=dedent(f"""
-                你正在模拟一个{self.user_profile['type']}类型的用户。
-                用户画像：{self.user_profile}
-
-                你的行为应该符合这个画像：
-                - 沟通风格：{self.user_profile.get('communication_style', '一般')}
-                - 错误处理：{self.user_profile.get('error_handling', '一般')}
-                - 交互模式：{self.user_profile.get('interaction_pattern', '一般')}
-
-                你需要根据对话上下文自然地回复用户问题。
-            """),
+            role=user_config["role"],
+            goal=user_config["goal"],
+            backstory=user_config["backstory"],
             llm=self.llm,
             allow_delegation=False
         )
 
-        # 2. Assistant Agent - 生成助手回复和工具调用
-        assistant_agent = Agent(
-            role="智能助手",
-            goal="根据用户查询生成合适的回复和工具调用",
-            backstory=dedent("""
-                你是一个智能助手，可以调用工具来帮助用户解决问题。
-                当用户提出需求时，你需要：
-                1. 理解用户意图
-                2. 决定是否需要调用工具
-                3. 如果需要调用工具，用正确的格式生成工具调用
-                4. 基于工具结果生成最终回复
-
-                工具调用格式：
-                推理过程：<tool_call>思考内容</tool_call>
-                工具调用：<tool_call>{{"name": "api_name", "arguments": {{...}}}}</tool_call>
-            """),
+        # 2. 思考Assistant Agent - 专门负责推理和工具调用决策
+        thinking_config = prompt_manager.get_agent_config("thinking_agent")
+        thinking_agent = Agent(
+            role=thinking_config["role"],
+            goal=thinking_config["goal"],
+            backstory=thinking_config["backstory"],
             llm=self.llm,
             allow_delegation=False
         )
 
-        # 3. Service Agent - 模拟API调用结果
+        # 3. 执行Assistant Agent - 专门负责生成最终回复
+        execution_config = prompt_manager.get_agent_config("execution_agent")
+        execution_agent = Agent(
+            role=execution_config["role"],
+            goal=execution_config["goal"],
+            backstory=execution_config["backstory"],
+            llm=self.llm,
+            allow_delegation=False
+        )
+
+        # 4. Service Agent - 模拟API调用结果
+        service_config = prompt_manager.get_agent_config(
+            "service_agent",
+            available_apis=[api['name'] for api in self.apis]
+        )
         service_agent = Agent(
-            role="服务模拟器",
-            goal="模拟API调用的执行结果",
-            backstory=dedent(f"""
-                你是API服务的结果模拟器。
-                可用的API：{[api['name'] for api in self.apis]}
-
-                当接收到工具调用请求时，你需要：
-                1. 理解调用的API和参数
-                2. 模拟真实的API执行结果
-                3. 返回适当格式的执行结果
-                4. 考虑可能的错误情况
-            """),
+            role=service_config["role"],
+            goal=service_config["goal"],
+            backstory=service_config["backstory"],
             llm=self.llm,
             allow_delegation=False
         )
 
         return {
             "user": user_agent,
-            "assistant": assistant_agent,
+            "thinking": thinking_agent,
+            "execution": execution_agent,
             "service": service_agent
         }
 
@@ -124,7 +123,7 @@ class ConversationRoleAgents:
         user_simulator = UserBehaviorSimulator(self.user_profile)
 
         # 生成初始用户查询
-        initial_query = user_simulator.generate_initial_request(initial_problem, self.apis)
+        initial_query = user_simulator.generate_initial_request(self.apis)
         self.conversation_history.append({
             "role": "user",
             "content": initial_query
@@ -137,56 +136,75 @@ class ConversationRoleAgents:
 
         # 生成多轮对话
         current_turn = 1
+        max_iterations = actual_turns * 2  # 防止无限循环
+        iteration_count = 0
 
-        while current_turn < actual_turns:
+        while current_turn <= actual_turns and iteration_count < max_iterations:
             try:
+                iteration_count += 1
+
                 # Assistant回复和可能的工具调用
                 assistant_response = self._generate_assistant_response()
 
                 # 检查是否包含工具调用
                 if self._has_tool_call(assistant_response):
+                    # 生成并添加工具调用消息到对话历史
+                    tool_call_json = self._extract_tool_call_json(assistant_response)
+                    if tool_call_json:
+                        # 添加tool_call消息
+                        self.conversation_history.append({
+                            "role": "tool_call",
+                            "content": json.dumps({
+                                "name": tool_call_json["name"],
+                                "arguments": tool_call_json["arguments"]
+                            }, ensure_ascii=False)
+                        })
+
                     # 执行工具调用
                     tool_result = self._execute_tool_call(assistant_response)
 
-                    # 基于工具结果生成最终回复
-                    final_response = self._generate_final_response(tool_result)
-
+                    # 添加tool_response消息
                     self.conversation_history.append({
-                        "role": "assistant",
-                        "content": final_response
+                        "role": "tool_response",
+                        "content": json.dumps(tool_result, ensure_ascii=False)
                     })
 
-                    # 检查是否应该继续对话
-                    if self._should_end_conversation():
-                        break
+                    # 基于工具结果生成最终回复（使用execution agent）
+                    final_response = self._generate_final_response_with_agent(tool_result)
 
+                    # 组合成完整的ReAct格式回复
+                    # thinking agent的输出作为推理内容，execution agent的输出作为最终回复
+                    combined_response = f"<think>\n{assistant_response}\n</think>\n\n{final_response}"
+
+                    # 添加完整的助手消息（包含推理+最终回复）
+                    self.conversation_history.append({
+                        "role": "assistant",
+                        "content": combined_response
+                    })
                 else:
-                    # 直接回复，无需工具调用
+                    # 没有工具调用，直接添加助手回复
                     self.conversation_history.append({
                         "role": "assistant",
                         "content": assistant_response
                     })
 
-                    # 检查是否应该继续对话
-                    if self._should_end_conversation():
-                        break
-
-                # 生成用户后续回复（如果还没结束）
-                if current_turn < actual_turns - 1:
-                    user_followup = self._generate_user_followup()
-                    if user_followup:
-                        self.conversation_history.append({
-                            "role": "user",
-                            "content": user_followup
-                        })
-                    else:
-                        break
-
-                current_turn += 1
+                # 生成用户后续回复（总是尝试生成，除非明确结束）
+                user_followup = self._generate_user_followup()
+                if user_followup and current_turn < actual_turns:
+                    self.conversation_history.append({
+                        "role": "user",
+                        "content": user_followup
+                    })
+                    current_turn += 1
+                else:
+                    # 如果没有用户回复或达到轮数上限，结束对话
+                    break
 
             except Exception as e:
                 print(f"对话生成错误: {e}")
                 break
+
+        print(f"Generated {len(self.conversation_history)} messages in conversation")
 
         # 提取工具调用信息
         tool_calls = self._extract_tool_calls()
@@ -204,27 +222,29 @@ class ConversationRoleAgents:
         }
 
     def _generate_assistant_response(self) -> str:
-        """生成助手回复"""
-        # 这里应该调用Assistant Agent
-        # 暂时使用简化实现
+        """生成助手回复 - 使用Thinking Agent生成推理和工具调用"""
         conversation_text = self._format_conversation_history()
 
-        prompt = dedent(f"""
-            根据以下对话历史，作为智能助手回复用户：
+        # 使用PromptManager获取思考任务配置
+        thinking_task_config = prompt_manager.get_task_config(
+            "thinking_task",
+            conversation_history=conversation_text,
+            available_apis=[api['name'] for api in self.apis]
+        )
 
-            对话历史：
-            {conversation_text}
+        # 创建思考任务
+        thinking_task = Task(
+            description=thinking_task_config["description"],
+            expected_output=thinking_task_config["expected_output"],
+            agent=self.agents["thinking"]
+        )
 
-            如果需要调用工具，请使用以下格式：
-            推理：<tool_call>你的推理过程</tool_call>
-            调用：<tool_call>{{"name": "api_name", "arguments": {{...}}}}</tool_call>
+        # 执行任务
+        from crewai import Crew
+        crew = Crew(agents=[self.agents["thinking"]], tasks=[thinking_task], verbose=False)
+        result = crew.kickoff()
 
-            回复：
-        """)
-
-        # 模拟LLM调用
-        response = self.llm.call([{"role": "user", "content": prompt}])
-        return response.choices[0].message.content if hasattr(response, 'choices') else "我来帮你处理这个问题。"
+        return str(result)
 
     def _has_tool_call(self, response: str) -> bool:
         """检查回复是否包含工具调用"""
@@ -277,41 +297,82 @@ class ConversationRoleAgents:
         response = self.llm.call([{"role": "user", "content": prompt}])
         return response.choices[0].message.content if hasattr(response, 'choices') else "操作已完成。"
 
+    def _generate_final_response_with_agent(self, tool_result: Dict[str, Any]) -> str:
+        """基于工具结果生成最终回复 - 使用CrewAI Agent"""
+        conversation_text = self._format_conversation_history()
+
+        # 使用PromptManager获取执行任务配置
+        execution_task_config = prompt_manager.get_task_config(
+            "execution_task",
+            conversation_history=conversation_text,
+            tool_result=json.dumps(tool_result, ensure_ascii=False)
+        )
+
+        # 创建执行任务
+        final_task = Task(
+            description=execution_task_config["description"],
+            expected_output=execution_task_config["expected_output"],
+            agent=self.agents["execution"]
+        )
+
+        # 执行任务
+        from crewai import Crew
+        crew = Crew(agents=[self.agents["execution"]], tasks=[final_task], verbose=False)
+        result = crew.kickoff()
+
+        return str(result)
+
     def _generate_user_followup(self) -> Optional[str]:
-        """生成用户后续回复"""
+        """生成用户后续回复 - 使用CrewAI Agent"""
         # 基于用户画像决定是否继续对话
         user_type = self.user_profile.get('type', 'careful')
 
-        # 不同用户类型的跟进概率
-        followup_probabilities = {
-            'careful': 0.3,    # 细心用户可能会确认结果
-            'careless': 0.7,   # 粗心用户可能会发现错误
-            'unclear': 0.6,    # 表达不清的用户可能会继续澄清
-            'curious': 0.8,    # 好奇用户喜欢继续探索
-            'technical': 0.5,  # 技术用户可能会问细节
-            'business': 0.2,   # 商务用户倾向于结束对话
-            'novice': 0.4      # 新手用户可能需要更多指导
-        }
+        # 获取用户画像配置来确定跟进概率
+        user_profile_config = prompt_manager.get_user_profile(user_type)
+        followup_probability = 0.5  # 默认概率
+
+        # 根据用户画像类型调整跟进概率
+        if user_type == 'curious':
+            followup_probability = 0.8
+        elif user_type == 'careless':
+            followup_probability = 0.7
+        elif user_type == 'careful':
+            followup_probability = 0.3
+        elif user_type == 'business':
+            followup_probability = 0.2
+        elif user_type in ['technical', 'novice', 'unclear']:
+            followup_probability = 0.5
 
         import random
-        if random.random() < followup_probabilities.get(user_type, 0.3):
-            # 生成后续问题
+        if random.random() < followup_probability:
+            # 使用User Agent生成后续回复
             conversation_text = self._format_conversation_history()
 
-            prompt = dedent(f"""
-                作为{user_type}类型的用户，根据对话历史生成一个自然的后续问题或回复：
+            # 使用PromptManager获取用户任务配置
+            user_task_config = prompt_manager.get_task_config(
+                "user_followup_task",
+                user_name=user_profile_config.get('name', '普通用户'),
+                user_occupation=user_profile_config.get('occupation', '普通用户'),
+                user_age=self.user_profile.get('age', '25'),
+                user_personality=user_profile_config.get('personality', '普通性格'),
+                user_communication_style=user_profile_config.get('communication_style', '口语化'),
+                user_behavior=user_profile_config.get('typical_behavior', '正常交流'),
+                conversation_history=conversation_text
+            )
 
-                用户画像：{self.user_profile}
-                对话历史：
-                {conversation_text}
+            user_task = Task(
+                description=user_task_config["description"],
+                expected_output=user_task_config["expected_output"],
+                agent=self.agents["user"]
+            )
 
-                如果不需要继续对话，请回复"结束"，否则生成一个自然的问题：
-            """)
+            # 执行任务
+            from crewai import Crew
+            crew = Crew(agents=[self.agents["user"]], tasks=[user_task], verbose=False)
+            result = crew.kickoff()
 
-            response = self.llm.call([{"role": "user", "content": prompt}])
-            followup = response.choices[0].message.content if hasattr(response, 'choices') else ""
-
-            return None if followup.strip() == "结束" else followup.strip()
+            followup = str(result).strip()
+            return None if followup.lower().startswith("结束") else followup
 
         return None
 

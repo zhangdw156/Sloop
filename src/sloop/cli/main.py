@@ -10,7 +10,7 @@ from typing import Optional
 
 from sloop.core.config import config
 from sloop.core.api_structure import load_apis_from_file
-from sloop.core.data_generator import BatchDataGenerator
+from sloop.core.data_generator import BatchDataGenerator, DataGenerationCrew
 
 app = typer.Typer(
     help="Sloop: 基于CrewAI的智能工具调用数据生成器",
@@ -138,7 +138,7 @@ def gen(
         # 显示统计信息
         if dataset:
             total_conversations = len(dataset)
-            total_messages = sum(len(conv.get('conversations', [])) for conv in dataset)
+            total_messages = sum(len(conv.get('messages', [])) for conv in dataset)
             avg_messages = total_messages / total_conversations if total_conversations > 0 else 0
 
             typer.echo(f"\n🎉 生成完成!")
@@ -230,24 +230,35 @@ def validate(
             is_valid = True
             errors = []
 
-            # 检查ShareGPT必需字段
-            required_fields = ['conversations', 'tools', 'system']
+            # 检查OpenAI格式必需字段
+            required_fields = ['messages', 'tools']
             for field in required_fields:
                 if field not in conv:
                     is_valid = False
                     errors.append(f"缺少{field}字段")
 
-            # 检查conversations格式
-            if 'conversations' in conv:
-                conversations = conv['conversations']
-                if not isinstance(conversations, list):
+            # 检查messages格式
+            if 'messages' in conv:
+                messages = conv['messages']
+                if not isinstance(messages, list):
                     is_valid = False
-                    errors.append("conversations应为数组")
-                elif conversations and not all(isinstance(msg, dict) and 'from' in msg and 'value' in msg for msg in conversations):
+                    errors.append("messages应为数组")
+                elif messages and not all(isinstance(msg, dict) and 'role' in msg and 'content' in msg for msg in messages):
                     is_valid = False
-                    errors.append("conversations格式错误：每个消息应包含from和value")
+                    errors.append("messages格式错误：每个消息应包含role和content")
                 else:
-                    total_messages += len(conversations)
+                    total_messages += len(messages)
+
+                    # 检查消息角色
+                    roles = [msg['role'] for msg in messages]
+                    if 'user' not in roles or 'assistant' not in roles:
+                        is_valid = False
+                        errors.append("messages应包含user和assistant角色")
+
+                    # 检查是否有工具调用
+                    if not any(msg['role'] == 'tool_call' for msg in messages):
+                        is_valid = False
+                        errors.append("messages应包含tool_call角色")
 
             # 检查tools格式
             if 'tools' in conv:
@@ -256,6 +267,9 @@ def validate(
                     if not isinstance(tools_data, list):
                         is_valid = False
                         errors.append("tools应为数组或有效的JSON字符串")
+                    elif tools_data and not all(isinstance(tool, dict) and 'type' in tool and 'function' in tool for tool in tools_data):
+                        is_valid = False
+                        errors.append("tools格式错误：每个工具应包含type和function")
                 except json.JSONDecodeError:
                     is_valid = False
                     errors.append("tools字段不是有效的JSON")
@@ -266,7 +280,7 @@ def validate(
                 typer.echo(f"   ⚠️ 对话 {i+1} 格式问题: {', '.join(errors)}")
 
         validity_rate = valid_conversations / len(dataset) * 100 if dataset else 0
-        avg_messages = total_messages / len(dataset) if dataset else 0
+        avg_messages = total_messages / valid_conversations if valid_conversations > 0 else 0
 
         typer.echo(f"   • 格式有效率: {validity_rate:.1f}% ({valid_conversations}/{len(dataset)})")
         typer.echo(f"   • 平均消息数量: {avg_messages:.1f}")
@@ -280,6 +294,65 @@ def validate(
 
     except Exception as e:
         typer.secho(f"❌ 验证失败: {e}", fg=typer.colors.RED, err=True)
+        raise typer.Exit(1)
+
+
+@app.command()
+def convert(
+    dataset_file: str = typer.Option(
+        ..., "--dataset", "-d",
+        help="要转换的数据集文件路径"
+    ),
+    output_file: str = typer.Option(
+        ..., "--output", "-o",
+        help="转换后的输出文件路径"
+    ),
+    format: str = typer.Option(
+        "qwen", "--format", "-f",
+        help="目标格式 (qwen/hermes/react_en)"
+    ),
+):
+    """
+    将OpenAI格式数据集转换为其他格式（如Qwen chat_template）
+    """
+    try:
+        # 读取数据集
+        with open(dataset_file, 'r', encoding='utf-8') as f:
+            dataset = json.load(f)
+
+        if not isinstance(dataset, list):
+            typer.secho("❌ 数据集格式错误: 应为数组", fg=typer.colors.RED)
+            raise typer.Exit(1)
+
+        # 初始化数据生成器
+        from sloop.core.api_structure import load_apis_from_file
+        apis = load_apis_from_file("tests/data/tools.json")  # 临时加载API定义
+        generator = DataGenerationCrew(apis)
+
+        # 转换格式
+        converted_data = []
+
+        for i, item in enumerate(dataset):
+            typer.echo(f"转换对话 {i+1}/{len(dataset)}")
+
+            if format.lower() == "qwen":
+                # 转换为Qwen兼容的SFT格式
+                qwen_data = generator.convert_to_qwen_format(item)
+                converted_data.append(qwen_data)
+            else:
+                typer.secho(f"❌ 不支持的格式: {format}", fg=typer.colors.RED)
+                raise typer.Exit(1)
+
+        # 保存转换后的数据
+        with open(output_file, 'w', encoding='utf-8') as f:
+            json.dump(converted_data, f, ensure_ascii=False, indent=2)
+
+        typer.echo(f"✅ 转换完成! 输出文件: {output_file}")
+        typer.echo(f"   • 转换格式: {format}")
+        typer.echo(f"   • 对话数量: {len(converted_data)}")
+
+    except Exception as e:
+        typer.secho(f"❌ 转换失败: {e}", fg=typer.colors.RED, err=True)
         raise typer.Exit(1)
 
 
