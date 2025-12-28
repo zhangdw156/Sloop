@@ -9,5 +9,5 @@ swanlog/
 eval_results/
 outputs/
 logs/
-
-tests/data/apigen-mt_5k.json
+tmp/
+.DS_Store
