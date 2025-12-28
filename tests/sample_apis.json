@@ -1,0 +1,61 @@
+[
+  {
+    "name": "get_weather",
+    "description": "获取指定城市的天气信息",
+    "parameters": {
+      "city": "string",
+      "unit": "string"
+    },
+    "category": "weather"
+  },
+  {
+    "name": "search_restaurants",
+    "description": "搜索指定城市和类型的餐厅",
+    "parameters": {
+      "city": "string",
+      "cuisine_type": "string",
+      "price_range": "string"
+    },
+    "category": "travel"
+  },
+  {
+    "name": "book_restaurant",
+    "description": "预订餐厅座位",
+    "parameters": {
+      "restaurant_id": "string",
+      "date": "string",
+      "time": "string",
+      "party_size": "integer"
+    },
+    "category": "travel"
+  },
+  {
+    "name": "send_email",
+    "description": "发送电子邮件",
+    "parameters": {
+      "to": "string",
+      "subject": "string",
+      "body": "string"
+    },
+    "category": "communication"
+  },
+  {
+    "name": "get_news",
+    "description": "获取最新新闻",
+    "parameters": {
+      "category": "string",
+      "limit": "integer"
+    },
+    "category": "search"
+  },
+  {
+    "name": "calculate_route",
+    "description": "计算两地间的路线",
+    "parameters": {
+      "origin": "string",
+      "destination": "string",
+      "mode": "string"
+    },
+    "category": "travel"
+  }
+]

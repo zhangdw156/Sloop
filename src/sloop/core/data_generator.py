@@ -3,6 +3,7 @@
 使用多智能体协作生成高质量的工具调用对话数据
 """
 
+import json
 from typing import List, Dict, Any, Optional
 from crewai import Agent, Task, Crew, LLM
 from textwrap import dedent
@@ -12,13 +13,13 @@ from .api_structure import APICollection
 
 class DataGenerationCrew:
     """
-    基于CrewAI的数据生成团队
-    包含多个专业Agent协同工作
+    基于CrewAI的数据生成器
+    简化为单个Agent直接生成对话数据
     """
 
     def __init__(self, apis: List[Dict[str, Any]], structure_type: str = "tree"):
         """
-        初始化数据生成Crew
+        初始化数据生成器
 
         Args:
             apis: API定义列表
@@ -34,163 +35,22 @@ class DataGenerationCrew:
             base_url=config.strong.base_url
         )
 
-        # 创建Agent团队
-        self.agents = self._create_agents()
-        self.tasks = self._create_tasks()
+        # 创建单个对话生成Agent
+        self.agent = self._create_agent()
 
-        # 初始化Crew
-        self.crew = Crew(
-            agents=list(self.agents.values()),
-            tasks=self.tasks,
-            verbose=config.verbose
-        )
-
-    def _create_agents(self) -> Dict[str, Agent]:
-        """创建专业Agent团队"""
-
-        # 1. API分析专家 - 分析和结构化API
-        api_analyzer = Agent(
-            role="API结构化专家",
-            goal="分析API定义，识别功能类别和依赖关系",
+    def _create_agent(self) -> Agent:
+        """创建对话生成Agent"""
+        return Agent(
+            role="对话数据生成器",
+            goal="基于提供的API生成高质量的多轮对话数据",
             backstory=dedent("""
-                你是API分析领域的专家，擅长从API定义中提取结构化信息。
-                你能识别API的功能类别、参数模式和使用场景。
-                你的任务是帮助系统更好地理解和组织API工具。
+                你是专业的对话数据生成专家，擅长创建包含工具调用的多轮对话。
+                你能根据API规范生成真实、自然的对话场景，确保工具调用格式正确。
+                你的输出必须是标准JSON格式，包含messages、apis_used等字段。
             """),
             llm=self.llm,
             allow_delegation=False
         )
-
-        # 2. 场景规划师 - 基于API规划使用场景和用户画像
-        scenario_planner = Agent(
-            role="场景规划师",
-            goal="基于可用API设计合理的使用场景、用户画像和对话规划",
-            backstory=dedent("""
-                你是用户体验和场景设计的专家，擅长理解用户需求。
-                你能根据API功能设计出自然、实用的使用场景。
-                你还需要创建合适的用户画像，定义用户的类型和行为模式。
-                你的规划将为对话生成提供完整的上下文和指导。
-            """),
-            llm=self.llm,
-            allow_delegation=True
-        )
-
-        # 3. 对话生成协调器 - 协调三个核心对话角色
-        conversation_generator = Agent(
-            role="对话生成协调器",
-            goal="协调User/Assistant/Service三个角色生成完整的多轮对话",
-            backstory=dedent("""
-                你是对话生成的总协调者，负责管理整个对话流程。
-                你需要根据用户画像协调三个核心角色：
-                - User Agent: 基于用户画像模拟用户行为
-                - Assistant Agent: 生成助手回复和工具调用
-                - Service Agent: 模拟API调用结果
-
-                你确保对话自然流畅，符合用户画像特征。
-            """),
-            llm=self.llm,
-            allow_delegation=True
-        )
-
-        # 4. 质量评估师 - 评估生成数据的质量
-        quality_assessor = Agent(
-            role="质量评估师",
-            goal="评估生成数据的质量和正确性",
-            backstory=dedent("""
-                你是数据质量和工具调用专家，擅长识别问题和改进建议。
-                你能检查对话的合理性、工具调用的正确性格式规范。
-                你的评估将确保数据的训练价值。
-            """),
-            llm=self.llm,
-            allow_delegation=False
-        )
-
-        return {
-            "api_analyzer": api_analyzer,
-            "scenario_planner": scenario_planner,
-            "conversation_generator": conversation_generator,
-            "quality_assessor": quality_assessor
-        }
-
-    def _create_tasks(self) -> List[Task]:
-        """创建任务链"""
-
-        # 任务1: API分析任务
-        api_analysis_task = Task(
-            description=dedent(f"""
-                分析提供的API列表，提取关键信息：
-                1. 识别每个API的功能类别
-                2. 分析API间的潜在关系和依赖
-                3. 总结API的整体功能覆盖范围
-
-                API列表: {self.apis}
-
-                请提供结构化的分析结果。
-            """),
-            expected_output="结构化的API分析报告，包含类别划分和关系识别",
-            agent=self.agents["api_analyzer"]
-        )
-
-        # 任务2: 场景规划任务
-        scenario_planning_task = Task(
-            description=dedent("""
-                基于API分析结果和采样得到的API子集，设计具体的使用场景：
-                1. 确定用户的主要目标和需求
-                2. 设计合理的对话流程（用户查询 → 工具调用 → 结果处理）
-                3. 考虑异常情况和边界条件
-                4. 确保场景的实用性和多样性
-
-                请输出详细的场景规划方案。
-            """),
-            expected_output="完整的场景规划方案，包含用户目标、对话流程和边界条件",
-            agent=self.agents["scenario_planner"],
-            context=[api_analysis_task]
-        )
-
-        # 任务3: 对话生成任务
-        conversation_generation_task = Task(
-            description=dedent("""
-                作为对话生成协调器，你需要：
-                1. 分析场景规划中的用户画像
-                2. 初始化三个核心对话角色：User/Assistant/Service Agent
-                3. 协调它们生成完整的多轮对话
-                4. 确保对话符合用户画像特征
-
-                对话要求：
-                - User Agent: 基于用户画像模拟用户行为
-                - Assistant Agent: 生成工具调用和回复
-                - Service Agent: 模拟API执行结果
-                - 生成目标轮数的完整对话（考虑用户画像的交互模式）
-
-                输出完整的对话数据，包含所有角色消息和工具调用信息。
-            """),
-            expected_output="完整的多轮对话数据，包含用户画像、对话历史、工具调用和标签",
-            agent=self.agents["conversation_generator"],
-            context=[scenario_planning_task]
-        )
-
-        # 任务4: 质量评估任务
-        quality_assessment_task = Task(
-            description=dedent("""
-                评估生成对话数据的质量：
-                1. 检查对话的自然性和连贯性
-                2. 验证工具调用的格式正确性
-                3. 评估场景的实用性和覆盖面
-                4. 识别潜在的改进点
-
-                如果发现问题，请提供具体的改进建议。
-            """),
-            expected_output="质量评估报告，包含评分和改进建议",
-            agent=self.agents["quality_assessor"],
-            context=[conversation_generation_task]
-        )
-
-        return [
-            api_analysis_task,
-            scenario_planning_task,
-            conversation_generation_task,
-            quality_assessment_task
-        ]
 
     def generate_single_conversation(self, sampled_apis: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -202,71 +62,299 @@ class DataGenerationCrew:
         Returns:
             生成的对话数据
         """
-        # 更新任务描述，包含采样的API
+        # 构建API信息文本
         api_list_text = "\n".join([
-            f"- {api['name']}: {api.get('description', 'No description')}"
+            f"- {api['name']}: {api.get('description', 'No description')}\n  Parameters: {api.get('parameters', {})}"
             for api in sampled_apis
         ])
 
-        # 动态更新第一个任务的描述
-        self.tasks[0].description = dedent(f"""
-            分析提供的采样API列表，提取关键信息：
-            1. 识别每个API的功能类别
-            2. 分析API间的潜在关系和依赖
-            3. 总结API的整体功能覆盖范围
+        # 创建对话生成任务
+        task = Task(
+            description=dedent(f"""
+                基于以下API，生成一个多轮对话数据，包含工具调用：
 
-            采样API列表:
-            {api_list_text}
+                可用的API:
+                {api_list_text}
 
-            请提供结构化的分析结果。
-        """)
+                请生成一个JSON格式的对话数据，必须包含：
+                {{
+                  "messages": [
+                    {{"role": "user", "content": "用户查询"}},
+                    {{"role": "assistant", "content": "助手回复", "tool_calls": [
+                      {{"id": "call_1", "type": "function", "function": {{"name": "api_name", "arguments": {{...}} }} }}
+                    ]}},
+                    {{"role": "tool", "content": "API执行结果", "tool_call_id": "call_1"}}
+                  ],
+                  "apis_used": ["{sampled_apis[0]['name']}"],
+                  "user_profile": "描述用户类型"
+                }}
 
-        # 执行Crew任务
-        result = self.crew.kickoff()
+                要求：
+                1. 生成5-8轮对话
+                2. 包含实际的工具调用
+                3. 消息格式严格符合标准
+                4. 确保对话逻辑合理
+            """),
+            expected_output="JSON格式的对话数据",
+            agent=self.agent
+        )
 
-        # 解析结果并格式化
-        return self._parse_crew_result(result, sampled_apis)
+        # 创建临时的Crew来执行任务
+        crew = Crew(
+            agents=[self.agent],
+            tasks=[task],
+            verbose=config.verbose
+        )
 
-    def _parse_crew_result(self, crew_result: Any, sampled_apis: List[Dict[str, Any]]) -> Dict[str, Any]:
+        # 执行任务
+        result = crew.kickoff()
+
+        # 解析结果
+        return self._parse_crew_result(str(result), str(result), sampled_apis)
+
+    def _parse_crew_result(self, conversation_output: str, quality_output: str, sampled_apis: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        解析Crew执行结果，转换为标准格式
+        解析Crew执行结果，转换为ShareGPT格式
 
         Args:
-            crew_result: Crew执行结果
+            conversation_output: 对话生成任务的输出
+            quality_output: 质量评估任务的输出
             sampled_apis: 采样API列表
 
         Returns:
-            标准格式的对话数据
+            ShareGPT格式的字典
         """
-        # 这里需要根据Crew的输出格式解析结果
-        # 由于CrewAI的输出格式可能变化，这里提供一个基础实现
+        # 优先使用对话输出解析消息，如果失败则使用质量输出
+        messages = self._extract_messages_from_output(conversation_output)
+        if not messages:
+            messages = self._extract_messages_from_output(quality_output)
+
+        # 如果无法解析，返回空conversations
+        if not messages:
+            messages = []
+
+        # 转换为ShareGPT格式
+        conversations = self._convert_to_sharegpt_format(messages)
+
+        # 生成tools字符串
+        tools_json = self._generate_tools_json(sampled_apis)
+
+        # 生成system提示词
+        system_prompt = self._generate_system_prompt()
+
+        return {
+            "conversations": conversations,
+            "tools": tools_json,
+            "system": system_prompt
+        }
+
+    def _extract_messages_from_output(self, output: str) -> List[Dict[str, Any]]:
+        """
+        从CrewAI输出中提取消息列表
+
+        Args:
+            output: CrewAI的原始输出
+
+        Returns:
+            标准格式的消息列表
+        """
+        messages = []
 
         try:
-            # 假设最后一个任务的输出包含最终对话
-            final_output = str(crew_result)
-
-            # 尝试解析JSON格式的对话数据
+            # 尝试从输出中查找JSON格式的消息
             import json
-            conversation_data = json.loads(final_output)
+            import re
 
-            return {
-                "problem": conversation_data.get("problem", "Generated conversation"),
-                "apis_used": [api["name"] for api in sampled_apis],
-                "conversation": conversation_data.get("conversation", []),
-                "label": conversation_data.get("label", {}),
-                "quality_score": conversation_data.get("quality_score", 0.8)
-            }
+            # 首先尝试直接解析整个输出作为JSON
+            try:
+                data = json.loads(output.strip())
+                if isinstance(data, dict) and "messages" in data:
+                    return data["messages"]
+                elif isinstance(data, dict) and "conversation" in data:
+                    return data["conversation"]
+            except json.JSONDecodeError:
+                pass
 
-        except (json.JSONDecodeError, KeyError):
-            # 如果解析失败，返回基础格式
-            return {
-                "problem": "Generated conversation",
-                "apis_used": [api["name"] for api in sampled_apis],
-                "conversation": [],
-                "label": {"tool_call": {}, "thought_process": ""},
-                "quality_score": 0.5,
-                "raw_output": str(crew_result)
+            # 如果直接解析失败，查找可能的JSON块
+            json_pattern = r'\{[^{}]*\}|\{[^{}]*\{[^{}]*\}[^{}]*\}|\{[^{}]*\{[^{}]*\{[^{}]*\}[^{}]*\}[^{}]*\}'
+            json_matches = re.findall(json_pattern, output, re.DOTALL)
+
+            for match in json_matches:
+                try:
+                    data = json.loads(match)
+                    if isinstance(data, dict) and "messages" in data:
+                        return data["messages"]
+                    elif isinstance(data, dict) and "conversation" in data:
+                        return data["conversation"]
+                    elif isinstance(data, list) and len(data) > 0 and isinstance(data[0], dict):
+                        # 检查是否是消息列表
+                        if all(msg.get("role") and msg.get("content") for msg in data):
+                            return data
+                except json.JSONDecodeError:
+                    continue
+
+            # 如果没找到JSON，尝试手动解析对话模式
+            # 查找用户和助手对话模式
+            lines = output.split('\n')
+            current_role = None
+            current_content = []
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                # 检测角色切换
+                if line.lower().startswith(('user:', '用户:')):
+                    if current_role and current_content:
+                        messages.append({
+                            "role": current_role,
+                            "content": '\n'.join(current_content)
+                        })
+                    current_role = "user"
+                    current_content = [line.split(':', 1)[1].strip()]
+                elif line.lower().startswith(('assistant:', '助手:', 'ai:')):
+                    if current_role and current_content:
+                        messages.append({
+                            "role": current_role,
+                            "content": '\n'.join(current_content)
+                        })
+                    current_role = "assistant"
+                    current_content = [line.split(':', 1)[1].strip()]
+                elif line.lower().startswith(('tool:', '工具:', 'system:')):
+                    if current_role and current_content:
+                        messages.append({
+                            "role": current_role,
+                            "content": '\n'.join(current_content)
+                        })
+                    current_role = "tool"
+                    current_content = [line.split(':', 1)[1].strip()]
+                elif current_role:
+                    current_content.append(line)
+
+            # 添加最后一个消息
+            if current_role and current_content:
+                messages.append({
+                    "role": current_role,
+                    "content": '\n'.join(current_content)
+                })
+
+        except Exception as e:
+            print(f"Error parsing messages: {e}")
+
+        return messages
+
+    def _convert_to_sharegpt_format(self, messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        将OpenAI messages格式转换为ShareGPT格式
+
+        Args:
+            messages: OpenAI格式的消息列表
+
+        Returns:
+            ShareGPT格式的对话列表
+        """
+        conversations = []
+
+        for msg in messages:
+            role = msg.get("role")
+            content = msg.get("content", "")
+
+            if role == "user":
+                conversations.append({
+                    "from": "human",
+                    "value": content
+                })
+            elif role == "assistant":
+                # 检查是否有工具调用
+                tool_calls = msg.get("tool_calls")
+                if tool_calls:
+                    # 添加助手回复（如果有的话）
+                    if content.strip():
+                        conversations.append({
+                            "from": "gpt",
+                            "value": content
+                        })
+
+                    # 添加工具调用
+                    for tool_call in tool_calls:
+                        function_call = {
+                            "name": tool_call["function"]["name"],
+                            "arguments": tool_call["function"]["arguments"]
+                        }
+                        conversations.append({
+                            "from": "function_call",
+                            "value": json.dumps(function_call)
+                        })
+                else:
+                    # 普通助手回复
+                    conversations.append({
+                        "from": "gpt",
+                        "value": content
+                    })
+            elif role == "tool":
+                # 工具执行结果
+                conversations.append({
+                    "from": "observation",
+                    "value": json.dumps(content) if isinstance(content, dict) else str(content)
+                })
+
+        return conversations
+
+    def _generate_tools_json(self, sampled_apis: List[Dict[str, Any]]) -> str:
+        """
+        生成ShareGPT格式的tools JSON字符串
+
+        Args:
+            sampled_apis: 采样得到的API列表
+
+        Returns:
+            tools的JSON字符串
+        """
+        tools = []
+        for api in sampled_apis:
+            tool = {
+                "name": api.get("name", ""),
+                "description": api.get("description", ""),
+                "parameters": api.get("parameters", {})
             }
+            tools.append(tool)
+
+        return json.dumps(tools)
+
+    def _generate_system_prompt(self) -> str:
+        """
+        生成系统提示词
+
+        Returns:
+            系统提示词字符串
+        """
+        return dedent("""
+            # Tool Calling Agent
+
+            You are a helpful AI assistant that can use various tools to help users accomplish tasks.
+            When users ask you to perform actions that require external tools or APIs, use the available tools to gather information and complete the request.
+
+            ## Guidelines:
+            - Use tools when needed to get accurate, up-to-date information
+            - Explain your actions clearly to users
+            - Be helpful and provide detailed responses
+            - If a tool call fails, try alternative approaches
+        """).strip()
+
+    def _extract_tool_calls_from_output(self, output: str) -> Dict[str, Any]:
+        """
+        从输出中提取工具调用信息
+
+        Args:
+            output: CrewAI输出
+
+        Returns:
+            工具调用信息
+        """
+        # 从采样的API中提取可能的工具调用
+        # 这里可以根据需要扩展更复杂的解析逻辑
+        return {}
 
 
 class BatchDataGenerator:
@@ -312,10 +400,11 @@ class BatchDataGenerator:
                     continue
 
                 # 生成对话
-                conversation = self.generation_crew.generate_single_conversation(sampled_apis)
-                conversation["id"] = f"conv_{i+1:04d}"
+                conversation_data = self.generation_crew.generate_single_conversation(sampled_apis)
+                # 添加ID字段
+                conversation_data["id"] = f"conv_{i+1:04d}"
 
-                dataset.append(conversation)
+                dataset.append(conversation_data)
 
                 print(f"Generated conversation {i+1}/{num_conversations}")
 

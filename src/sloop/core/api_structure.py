@@ -218,7 +218,10 @@ class GraphAPIStructure(APIStructure):
             rel_type = rel.get('type', 'related')
 
             if api_from in self.api_map and api_to in self.api_map:
-                G.add_edge(api_from, api_to, type=rel_type, **rel)
+                # 移除type键以避免冲突，然后添加边
+                edge_attrs = {k: v for k, v in rel.items() if k not in ['from', 'to']}
+                edge_attrs['type'] = rel_type
+                G.add_edge(api_from, api_to, **edge_attrs)
 
         # 如果没有显式关系，基于描述自动构建关系
         if not relationships:
