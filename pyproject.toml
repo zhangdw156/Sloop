@@ -14,6 +14,9 @@ dependencies = [
     "tqdm>=4.67.1",
     "typer>=0.15.1",
     "uvicorn>=0.32.0",
+    "crewai>=0.70.0",
+    "networkx>=3.0",
+    "matplotlib>=3.5.0",
 ]
 
 [project.optional-dependencies]
