@@ -143,38 +143,42 @@ class ConversationRoleAgents:
             try:
                 iteration_count += 1
 
-                # Assistant回复和可能的工具调用
-                assistant_response = self._generate_assistant_response()
+                # 步骤1: 生成思考内容
+                thought_content = self._generate_assistant_response()
 
-                # 检查是否包含工具调用
-                if self._has_tool_call(assistant_response):
-                    # 生成并添加工具调用消息到对话历史
-                    tool_call_json = self._extract_tool_call_json(assistant_response)
-                    if tool_call_json:
-                        # 添加tool_call消息
-                        self.conversation_history.append({
-                            "role": "tool_call",
-                            "content": json.dumps({
-                                "name": tool_call_json["name"],
-                                "arguments": tool_call_json["arguments"]
-                            }, ensure_ascii=False)
-                        })
+                # 步骤2: 决定是否需要工具调用（基于思考内容）
+                needs_tool = self._decide_if_needs_tool(thought_content)
 
-                    # 执行工具调用
-                    tool_result = self._execute_tool_call(assistant_response)
+                if needs_tool:
+                    # 步骤3: 生成工具调用
+                    tool_call_data = self._generate_tool_call(thought_content)
 
-                    # 添加tool_response消息
+                    # 添加tool_call消息到对话历史
                     self.conversation_history.append({
-                        "role": "tool_response",
-                        "content": json.dumps(tool_result, ensure_ascii=False)
+                        "role": "tool_call",
+                        "content": json.dumps({
+                            "name": tool_call_data["name"],
+                            "arguments": tool_call_data["arguments"]
+                        }, ensure_ascii=False)
                     })
 
-                    # 基于工具结果生成最终回复（使用execution agent）
+                    # 步骤4: 执行工具调用
+                    tool_result = self._execute_tool_call_from_data(tool_call_data)
+                    print(f"Tool result: {tool_result}")
+
+                    # 添加tool_response消息
+                    tool_response_content = json.dumps(tool_result, ensure_ascii=False)
+                    print(f"Adding tool_response: {tool_response_content}")
+                    self.conversation_history.append({
+                        "role": "tool_response",
+                        "content": tool_response_content
+                    })
+
+                    # 步骤5: 基于工具结果生成最终回复
                     final_response = self._generate_final_response_with_agent(tool_result)
 
-                    # 组合成完整的ReAct格式回复
-                    # thinking agent的输出作为推理内容，execution agent的输出作为最终回复
-                    combined_response = f"<think>\n{assistant_response}\n</think>\n\n{final_response}"
+                    # 步骤6: 组合成完整的ReAct格式回复
+                    combined_response = f"<think>\n{thought_content}\n</think>\n\n{final_response}"
 
                     # 添加完整的助手消息（包含推理+最终回复）
                     self.conversation_history.append({
@@ -182,10 +186,16 @@ class ConversationRoleAgents:
                         "content": combined_response
                     })
                 else:
-                    # 没有工具调用，直接添加助手回复
+                    # 不需要工具调用，直接生成回复
+                    final_response = self._generate_direct_response(thought_content)
+
+                    # 组合成ReAct格式
+                    combined_response = f"<think>\n{thought_content}\n</think>\n\n{final_response}"
+
+                    # 添加助手消息
                     self.conversation_history.append({
                         "role": "assistant",
-                        "content": assistant_response
+                        "content": combined_response
                     })
 
                 # 生成用户后续回复（总是尝试生成，除非明确结束）
@@ -222,26 +232,101 @@ class ConversationRoleAgents:
         }
 
     def _generate_assistant_response(self) -> str:
-        """生成助手回复 - 使用Thinking Agent生成推理和工具调用"""
+        """生成助手回复 - 只返回推理过程，工具调用和最终回复分开处理"""
         conversation_text = self._format_conversation_history()
 
-        # 使用PromptManager获取思考任务配置
+        # 使用Thinking Agent生成思考内容
         thinking_task_config = prompt_manager.get_task_config(
             "thinking_task",
             conversation_history=conversation_text,
             available_apis=[api['name'] for api in self.apis]
         )
 
-        # 创建思考任务
         thinking_task = Task(
             description=thinking_task_config["description"],
             expected_output=thinking_task_config["expected_output"],
             agent=self.agents["thinking"]
         )
 
-        # 执行任务
         from crewai import Crew
-        crew = Crew(agents=[self.agents["thinking"]], tasks=[thinking_task], verbose=False)
+        thinking_crew = Crew(agents=[self.agents["thinking"]], tasks=[thinking_task], verbose=False)
+        thought_content = str(thinking_crew.kickoff())
+
+        # 返回纯思考内容（不包含<think>标签，标签由调用方添加）
+        return thought_content
+
+    def _decide_if_needs_tool(self, thought_content: str) -> bool:
+        """基于思考内容决定是否需要工具调用"""
+        # 简单的启发式判断：如果思考内容提到"调用"或"使用"相关API，就认为需要工具
+        tool_keywords = ["调用", "使用", "查询", "获取", "需要", "应该"]
+        api_names = [api['name'] for api in self.apis]
+
+        for keyword in tool_keywords:
+            if keyword in thought_content:
+                # 检查是否提到了具体的API名称
+                for api_name in api_names:
+                    if api_name in thought_content:
+                        return True
+
+        # 默认情况下，假设大多数情况下都需要工具
+        return True
+
+    def _generate_tool_call(self, thought_content: str) -> Dict[str, Any]:
+        """基于思考内容生成工具调用"""
+        # 简单的实现：从思考内容中提取API名称，选择第一个匹配的API
+        api_names = [api['name'] for api in self.apis]
+
+        for api_name in api_names:
+            if api_name in thought_content:
+                return {
+                    "name": api_name,
+                    "arguments": {}  # 默认空参数
+                }
+
+        # 如果没有找到匹配的API，使用第一个可用的API
+        return {
+            "name": self.apis[0]['name'] if self.apis else "default_api",
+            "arguments": {}
+        }
+
+    def _execute_tool_call_from_data(self, tool_call_data: Dict[str, Any]) -> Dict[str, Any]:
+        """基于工具调用数据执行工具调用"""
+        api_name = tool_call_data.get("name", "")
+        if api_name not in self.api_map:
+            return {"error": f"API {api_name} not found"}
+
+        # 模拟API执行结果
+        result = {
+            "result": "success",
+            "data": {
+                "message": f"{api_name} 执行成功",
+                "api_called": api_name,
+                "parameters": tool_call_data.get("arguments", {})
+            }
+        }
+
+        return result
+
+    def _generate_direct_response(self, thought_content: str) -> str:
+        """基于思考内容生成直接回复（不需要工具）"""
+        # 使用execution agent生成回复，但没有工具结果
+        conversation_text = self._format_conversation_history()
+
+        execution_task_config = prompt_manager.get_task_config(
+            "execution_task",
+            conversation_history=conversation_text,
+            thought_content=thought_content,
+            tool_result="{}"  # 空工具结果
+        )
+
+        final_task = Task(
+            description=execution_task_config["description"],
+            expected_output=execution_task_config["expected_output"],
+            agent=self.agents["execution"]
+        )
+
+        from crewai import Crew
+        crew = Crew(agents=[self.agents["execution"]], tasks=[final_task], verbose=False)
         result = crew.kickoff()
 
         return str(result)
@@ -422,10 +507,13 @@ class ConversationRoleAgents:
         tool_calls = []
 
         for msg in self.conversation_history:
-            if msg["role"] == "assistant":
-                tool_call = self._extract_tool_call_json(msg["content"])
-                if tool_call:
+            if msg["role"] == "tool_call":
+                # tool_call消息的内容就是JSON字符串
+                try:
+                    tool_call = json.loads(msg["content"])
                     tool_calls.append(tool_call)
+                except json.JSONDecodeError:
+                    continue
 
         return tool_calls
 

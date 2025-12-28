@@ -59,14 +59,16 @@ class TestGenerate10TurnConversation:
             assert "content" in msg, "每条消息应该有content字段"
             assert msg["role"] in ["user", "assistant", "tool_call", "tool_response"], f"无效的role: {msg['role']}"
 
-        # 如果有助手消息，验证ReAct格式
+        # 验证至少有一条assistant消息
         assistant_messages = [msg for msg in messages if msg["role"] == "assistant"]
-        if assistant_messages:
-            for msg in assistant_messages:
-                content = msg["content"]
-                # 应该包含<think>标签
-                assert "<think>" in content, "assistant消息应该包含<think>标签"
-                assert "</think>" in content, "assistant消息应该包含</think>标签"
+        assert len(assistant_messages) > 0, "对话应该包含至少一条assistant消息"
+
+        # 验证ReAct格式（<think>标签由代码手动添加）
+        for msg in assistant_messages:
+            content = msg["content"]
+            # 应该包含<think>标签
+            assert "<think>" in content, "assistant消息应该包含<think>标签"
+            assert "</think>" in content, "assistant消息应该包含</think>标签"
 
         estimated_turns = len([msg for msg in messages if msg["role"] == "user"])
         print(f"✅ 成功生成对话，包含 {len(messages)} 条消息，约 {estimated_turns} 轮对话")

@@ -261,16 +261,11 @@ class DataGenerationCrew:
                 })
                 i += 1
 
-            elif role == 'tool':
-                # 工具执行结果
-                if isinstance(content, dict):
-                    tool_response = json.dumps(content, ensure_ascii=False)
-                else:
-                    tool_response = str(content)
-
+            elif role == 'tool_response':
+                # 工具执行结果 - 已经是JSON字符串，直接使用
                 messages.append({
                     "role": "tool_response",
-                    "content": tool_response
+                    "content": content
                 })
                 i += 1
 
