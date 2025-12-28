@@ -26,17 +26,36 @@ Sloop follows a strong-weak model (Teacher-Student) closed-loop paradigm:
 - **Strong Model (Teacher API)**: Used for `gen` (generating high-quality initial data) and `optimize` (executing JGLV label correction and EDDE error-driven expansion).
 - **Weak Model (Student API)**: The target model to be optimized. Used for `probe` (executing Greedy Capability Probing to identify boundary cases).
 
-While inspired by LoopTool's vision, Sloop aims to provide a cleaner, more modular implementation adhering to standard software engineering practices.
+### ✨ The New Sloop Framework (v0.2.0)
 
-### ✨ The Sloop Framework
+**基于CrewAI的分层多智能体架构**：
 
-![Framework](<./assets/framework.png>)
+```
+高层编排Agent (CrewAI)
+├── API分析专家      - 分析API结构
+├── 场景规划师       - 设计场景和用户画像
+├── 对话协调器       - 协调对话生成
+└── 质量评估师       - 评估数据质量
+
+低层对话Agent (核心角色)
+├── User Agent       - 模拟用户行为
+├── Assistant Agent  - 生成回复和工具调用
+└── Service Agent    - 模拟API执行结果
+```
+
+**核心创新**：
+- **分层Agent架构**: 高层编排vs低层执行的清晰分工
+- **用户画像系统**: 7种用户类型，支持多样化对话生成
+- **智能API结构化**: 树形/图形组织，支持游走采样
+- **多轮对话控制**: 指定目标轮数，生成高质量长对话
+- **CrewAI集成**: 专业多Agent协作框架
 
 **Key Features:**
-- **Strong-Weak Model Closed Loop**: A clear separation of concerns between the strong (teacher) and weak (student) models for data generation, probing, and optimization.
-- **Multi-Agent Data Generation**: The `gen` command uses a coordinated system of agents (User, Assistant, Planner, etc.) to generate high-quality, diverse dialogues.
-- **Configurable Agent System**: Agent implementations are dynamically loaded from a YAML configuration file, making the system highly extensible.
-- **Open-Source Ecosystem**: Designed to work within a cost-effective, open-source environment.
+- **Hierarchical Agent System**: 分层设计，实现复杂任务编排
+- **User Profile Engine**: 7种用户画像，生成真实对话行为
+- **Intelligent Sampling**: 树游走/图连通采样，构造合理API组合
+- **Multi-turn Control**: 精确控制对话轮数（±40%偏差）
+- **Production Ready**: 完整的CLI工具，支持大规模数据生成
 
 ## 🔧 Installation
 
@@ -52,37 +71,176 @@ uv pip install -e .
 
 ## 🛠️ Usage
 
-Sloop provides a CLI interface. **Currently, only the `gen` command is implemented. Other commands are under active development.**
+Sloop provides a comprehensive CLI interface with multiple commands for data generation and analysis.
 
 ### 1. Configure Your Environment
-Create a `.env` file in the project root based on `.env.example`. You must set the following environment variables for the strong model:
+Create a `.env` file in the project root based on `.env.example`:
 ```bash
-SLOOP_STRONG_API_KEY=your_strong_api_key
-SLOOP_STRONG_BASE_URL=https://api.your-strong-model-provider.com/v1
+# 强模型配置 (必需) - 用于数据生成
+SLOOP_STRONG_API_KEY=your_strong_api_key_here
+SLOOP_STRONG_BASE_URL=https://api.strongmodel.com/v1
+SLOOP_STRONG_MODEL_NAME=gpt-4o
+
+# 弱模型配置 (可选) - 用于能力探测
+SLOOP_WEAK_API_KEY=your_weak_api_key_here
+SLOOP_WEAK_BASE_URL=https://api.weakmodel.com/v1
+SLOOP_WEAK_MODEL_NAME=gpt-3.5-turbo
+
+# 系统配置
+SLOOP_VERBOSE=true
 ```
 
+**配置说明**:
+- `SLOOP_STRONG_*`: 强模型配置，用于生成高质量数据（必需）
+- `SLOOP_WEAK_*`: 弱模型配置，用于能力探测（可选）
+- `SLOOP_VERBOSE`: 是否启用详细输出（默认true）
+
 ### 2. Prepare Your Service Definitions
-Create a `services.json` file that describes the tools/APIs you want to generate data for. Example:
+Create a `services.json` file with your API definitions:
 ```json
 [
   {
     "name": "get_weather",
-    "description": "Get the current weather for a location.",
+    "description": "获取指定城市的天气信息",
     "parameters": {
-      "location": "string"
-    }
+      "city": "string",
+      "unit": "string"
+    },
+    "category": "weather"
+  },
+  {
+    "name": "search_restaurants",
+    "description": "搜索餐厅",
+    "parameters": {
+      "city": "string",
+      "cuisine_type": "string"
+    },
+    "category": "travel"
   }
 ]
 ```
 
-### 3. Generate Data with `gen`
-Use the `gen` command to generate a dataset of tool-calling dialogues.
-
+### 3. Analyze Your APIs
+Before generating data, analyze your API structure:
 ```bash
-uv run sloop gen --services services.json --output dataset.json --agent-config configs/default_agents.yaml
+# 分析API结构和类别
+uv run sloop analyze --services services.json
 ```
 
-You can customize the agents used by providing a different YAML configuration file.
+### 4. Generate Training Data
+Use the `gen` command with CrewAI-powered multi-agent generation:
+```bash
+# 基本用法：生成10个对话
+uv run sloop gen --services services.json --output dataset.json
+
+# 高级用法：自定义参数
+uv run sloop gen \
+  --services services.json \
+  --output dataset.json \
+  --num-conversations 50 \
+  --apis-per-conversation 3 \
+  --sampling-strategy balanced \
+  --structure-type tree \
+  --verbose
+```
+
+**参数说明**:
+- `--num-conversations`: 生成**对话样本**的数量，每样本包含多轮完整对话 (默认10)
+- `--apis-per-conversation`: 每个对话样本使用的API数量 (默认3)
+- `--target-turns`: 目标对话轮数，允许±40%偏差 (默认10，范围3-50)
+- `--sampling-strategy`: API采样策略 (random/balanced/connected/tree_walk)
+- `--structure-type`: API组织方式 (tree/graph/auto)
+
+**新增功能**:
+- 🎭 **用户画像系统**: 7种不同用户类型（细心、粗心、表达不清、好奇、技术、商务、新手）
+- 🧠 **智能采样**: 支持树游走和图连通采样，构造合理的API序列
+- 🔄 **对话轮数控制**: 可指定目标轮数，生成高质量多轮对话
+- 📊 **复杂场景**: 根据用户画像和采样API生成多样化场景
+
+### 5. Validate Generated Data
+Check the quality of your generated dataset:
+```bash
+# 验证数据集格式和质量
+uv run sloop validate --dataset dataset.json
+```
+
+### Example Workflow
+```bash
+# 1. 设置环境
+cp .env.example .env
+# 编辑.env文件设置API密钥
+
+# 2. 分析API结构
+uv run sloop analyze --services services.json
+
+# 3. 生成高质量多轮对话数据
+uv run sloop gen \
+  --services services.json \
+  --output dataset.json \
+  --num-conversations 100 \
+  --target-turns 10 \
+  --apis-per-conversation 3 \
+  --sampling-strategy tree_walk \
+  --structure-type tree
+
+# 4. 验证生成的数据质量
+uv run sloop validate --dataset dataset.json
+```
+
+### Advanced Usage Examples
+
+#### 生成特定用户类型的对话
+```bash
+# 生成技术型用户的对话（关注API细节和错误处理）
+uv run sloop gen --services services.json --output tech_dataset.json --user-type technical
+
+# 生成新手用户的对话（基础问题，需要详细指导）
+uv run sloop gen --services services.json --output novice_dataset.json --user-type novice
+```
+
+#### 使用图结构进行复杂采样
+```bash
+# 使用图结构和连通采样，生成相关性强的API组合
+uv run sloop gen \
+  --services services.json \
+  --output connected_dataset.json \
+  --sampling-strategy connected \
+  --structure-type graph \
+  --relationships api_relationships.json
+```
+
+#### 生成超长对话进行深度测试
+```bash
+# 生成15-25轮的长对话，测试复杂场景
+uv run sloop gen \
+  --services services.json \
+  --output long_conversations.json \
+  --target-turns 20 \
+  --num-conversations 50
+```
+
+### Output Format
+Generated conversations follow this structure:
+```json
+[
+  {
+    "id": "conv_0001",
+    "problem": "用户的问题描述",
+    "apis_used": ["api1", "api2"],
+    "conversation": [
+      {"role": "user", "content": "用户查询"},
+      {"role": "assistant", "content": "助手回复和工具调用"},
+      {"role": "tool", "content": "工具执行结果"},
+      {"role": "assistant", "content": "最终回复"}
+    ],
+    "label": {
+      "tool_call": {"name": "api_name", "arguments": {...}},
+      "thought_process": "推理过程"
+    },
+    "quality_score": 0.85
+  }
+]
+```
 
 ## 🚧 Future Work
 
