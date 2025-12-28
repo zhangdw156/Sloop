@@ -160,7 +160,7 @@ def gen(
 @app.command()
 def analyze(
     services_file: str = typer.Option(
-        "services.json", "--services", "-s",
+        "tests/data/tools.json", "--services", "-s",
         help="API服务定义文件路径"
     ),
     structure_type: str = typer.Option(
@@ -173,6 +173,7 @@ def analyze(
     """
     try:
         apis = load_apis_from_file(services_file)
+        from sloop.core.api_structure import APICollection
         api_collection = APICollection(apis, structure_type)
         structure_info = api_collection.get_structure_info()
 
