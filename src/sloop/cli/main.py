@@ -21,11 +21,11 @@ app = typer.Typer(
 @app.command()
 def gen(
     services_file: str = typer.Option(
-        "services.json", "--services", "-s",
+        "tests/data/tools.json", "--services", "-s",
         help="API服务定义文件路径"
     ),
     output_file: str = typer.Option(
-        "dataset.json", "--output", "-o",
+        "tests/data/dataset.json", "--output", "-o",
         help="输出数据集文件路径"
     ),
     num_conversations: int = typer.Option(
@@ -51,6 +51,10 @@ def gen(
     verbose: bool = typer.Option(
         True, "--verbose", "-v",
         help="启用详细输出"
+    ),
+    yes: bool = typer.Option(
+        False, "--yes", "-y",
+        help="跳过确认提示，直接开始生成"
     ),
 ):
     """
@@ -116,8 +120,8 @@ def gen(
         typer.echo(f"   • 采样策略: {sampling_strategy}")
         typer.echo(f"   • 输出文件: {output_file}")
 
-        # 确认开始生成
-        if not typer.confirm("\n🚀 开始生成数据集?", default=True):
+        # 确认开始生成（如果未指定--yes）
+        if not yes and not typer.confirm("\n🚀 开始生成数据集?", default=True):
             typer.echo("已取消")
             return
 
@@ -134,17 +138,13 @@ def gen(
         # 显示统计信息
         if dataset:
             total_conversations = len(dataset)
-            avg_quality = sum(conv.get('quality_score', 0) for conv in dataset) / total_conversations
-            api_usage = {}
-            for conv in dataset:
-                for api_name in conv.get('apis_used', []):
-                    api_usage[api_name] = api_usage.get(api_name, 0) + 1
+            total_messages = sum(len(conv.get('conversations', [])) for conv in dataset)
+            avg_messages = total_messages / total_conversations if total_conversations > 0 else 0
 
             typer.echo(f"\n🎉 生成完成!")
             typer.echo(f"📊 统计信息:")
             typer.echo(f"   • 成功生成对话: {total_conversations}")
-            typer.echo(f"   • 平均质量评分: {avg_quality:.2f}")
-            typer.echo(f"   • API使用频率: {dict(sorted(api_usage.items(), key=lambda x: x[1], reverse=True)[:5])}")
+            typer.echo(f"   • 平均消息数量: {avg_messages:.1f}")
             typer.echo(f"💾 数据已保存至: {output_file}")
         else:
             typer.secho("❌ 生成失败: 未产生任何对话数据", fg=typer.colors.RED)
@@ -176,7 +176,8 @@ def analyze(
         api_collection = APICollection(apis, structure_type)
         structure_info = api_collection.get_structure_info()
 
-        typer.echo("📊 API分析结果:"        typer.echo(f"   • 总API数量: {structure_info['total_apis']}")
+        typer.echo("📊 API分析结果:")
+        typer.echo(f"   • 总API数量: {structure_info['total_apis']}")
         typer.echo(f"   • 结构类型: {structure_info['type']}")
 
         if structure_info['type'] == 'tree':
@@ -187,8 +188,8 @@ def analyze(
                 typer.echo(f"     - {category}: {apis_in_category} 个API")
 
         # 显示API详情
-        typer.echo("
-🔧 API详情:"        for i, api in enumerate(apis[:5], 1):  # 显示前5个
+        typer.echo("\n🔧 API详情:")
+        for i, api in enumerate(apis[:5], 1):  # 显示前5个
             typer.echo(f"   {i}. {api['name']}: {api.get('description', 'No description')[:50]}...")
 
         if len(apis) > 5:
@@ -222,50 +223,52 @@ def validate(
 
         # 检查格式
         valid_conversations = 0
-        total_quality = 0
+        total_messages = 0
 
         for i, conv in enumerate(dataset):
             is_valid = True
             errors = []
 
-            # 检查必需字段
-            required_fields = ['conversation', 'label']
+            # 检查ShareGPT必需字段
+            required_fields = ['conversations', 'tools', 'system']
             for field in required_fields:
                 if field not in conv:
                     is_valid = False
-                    errors.append(f"缺少字段: {field}")
+                    errors.append(f"缺少{field}字段")
 
-            # 检查conversation格式
-            if 'conversation' in conv:
-                conv_data = conv['conversation']
-                if not isinstance(conv_data, list):
+            # 检查conversations格式
+            if 'conversations' in conv:
+                conversations = conv['conversations']
+                if not isinstance(conversations, list):
                     is_valid = False
-                    errors.append("conversation应为数组")
-                elif conv_data and not all(isinstance(msg, dict) and 'role' in msg and 'content' in msg for msg in conv_data):
+                    errors.append("conversations应为数组")
+                elif conversations and not all(isinstance(msg, dict) and 'from' in msg and 'value' in msg for msg in conversations):
                     is_valid = False
-                    errors.append("conversation消息格式错误")
-
-            # 检查label格式
-            if 'label' in conv and isinstance(conv['label'], dict):
-                label = conv['label']
-                if 'tool_call' not in label or 'thought_process' not in label:
-                    errors.append("label缺少必需字段")
+                    errors.append("conversations格式错误：每个消息应包含from和value")
                 else:
-                    total_quality += conv.get('quality_score', 0.5)
-            else:
-                is_valid = False
-                errors.append("label格式错误")
+                    total_messages += len(conversations)
+
+            # 检查tools格式
+            if 'tools' in conv:
+                try:
+                    tools_data = json.loads(conv['tools']) if isinstance(conv['tools'], str) else conv['tools']
+                    if not isinstance(tools_data, list):
+                        is_valid = False
+                        errors.append("tools应为数组或有效的JSON字符串")
+                except json.JSONDecodeError:
+                    is_valid = False
+                    errors.append("tools字段不是有效的JSON")
 
             if is_valid:
                 valid_conversations += 1
             elif i < 5:  # 只显示前5个错误
                 typer.echo(f"   ⚠️ 对话 {i+1} 格式问题: {', '.join(errors)}")
 
-        validity_rate = valid_conversations / len(dataset) * 100
-        avg_quality = total_quality / len(dataset)
+        validity_rate = valid_conversations / len(dataset) * 100 if dataset else 0
+        avg_messages = total_messages / len(dataset) if dataset else 0
 
         typer.echo(f"   • 格式有效率: {validity_rate:.1f}% ({valid_conversations}/{len(dataset)})")
-        typer.echo(f"   • 平均质量分: {avg_quality:.2f}")
+        typer.echo(f"   • 平均消息数量: {avg_messages:.1f}")
 
         if validity_rate >= 95:
             typer.echo("✅ 数据集质量良好")

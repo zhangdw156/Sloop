@@ -1,0 +1,57 @@
+[
+  {
+    "conversations": [
+      {
+        "from": "human",
+        "value": "你好，我想查一下昨天英国的灵缇赛狗比赛结果。"
+      },
+      {
+        "from": "gpt",
+        "value": "我正在为您查询昨天英国灵缇赛狗的比赛结果。"
+      },
+      {
+        "from": "function_call",
+        "value": "{\"name\": \"results_for_greyhound_racing_uk\", \"arguments\": {}}"
+      },
+      {
+        "from": "observation",
+        "value": "{\"date\": \"2023-09-18\", \"races\": [{\"track\": \"Nottingham\", \"time\": \"19:15\", \"winner\": \"Swift Star\", \"distance\": \"480m\"}, {\"track\": \"Belle Vue\", \"time\": \"19:30\", \"winner\": \"Thunder Bolt\", \"distance\": \"500m\"}]}"
+      },
+      {
+        "from": "gpt",
+        "value": "已找到昨天（2023年9月18日）英国的灵缇赛狗比赛结果：\n\n1. 诺丁汉赛道，19:15场次，冠军是 'Swift Star'，赛程480米。\n2. 贝尔维尤赛道，19:30场次，冠军是 'Thunder Bolt'，赛程500米。\n\n您还想了解哪场比赛的详细信息吗？"
+      },
+      {
+        "from": "human",
+        "value": "Swift Star 是哪个赛道的冠军？"
+      },
+      {
+        "from": "gpt",
+        "value": "Swift Star 是诺丁汉（Nottingham）赛道19:15场次的冠军。"
+      },
+      {
+        "from": "human",
+        "value": "你能查一下比特币网络的状态吗？比如主网信息。"
+      },
+      {
+        "from": "gpt",
+        "value": "我正在为您查询比特币主网的状态信息。"
+      },
+      {
+        "from": "function_call",
+        "value": "{\"name\": \"v1_network_for_blocktrail_bitcoin_developers_platform\", \"arguments\": {\"network\": \"BTC\"}}"
+      },
+      {
+        "from": "observation",
+        "value": "{\"network\": \"BTC\", \"block_height\": 810000, \"difficulty\": \"34.2T\", \"price_usd\": 26500, \"last_updated\": \"2023-09-19T12:00:00Z\"}"
+      },
+      {
+        "from": "gpt",
+        "value": "比特币主网（BTC）当前状态如下：\n- 区块高度：810000\n- 挖矿难度：34.2T\n- 当前价格：26,500 美元\n- 数据更新时间：2023年9月19日 12:00 UTC\n\n如需更多信息，可进一步查询。"
+      }
+    ],
+    "tools": "[{\"name\": \"results_for_greyhound_racing_uk\", \"description\": \"Get results races by date\", \"parameters\": {\"type\": \"object\", \"properties\": {}, \"required\": [], \"optional\": []}}, {\"name\": \"v1_network_for_blocktrail_bitcoin_developers_platform\", \"description\": \"BlockTrail API Endpoint\", \"parameters\": {\"type\": \"object\", \"properties\": {\"network\": {\"type\": \"string\", \"description\": \"\"}}, \"required\": [\"network\"], \"optional\": []}}, {\"name\": \"halobiru_for_halobiru_store\", \"description\": \"halobiru_for_halobiru_store,store\", \"parameters\": {\"type\": \"object\", \"properties\": {}, \"required\": [], \"optional\": []}}]",
+    "system": "# Tool Calling Agent\n\nYou are a helpful AI assistant that can use various tools to help users accomplish tasks.\nWhen users ask you to perform actions that require external tools or APIs, use the available tools to gather information and complete the request.\n\n## Guidelines:\n- Use tools when needed to get accurate, up-to-date information\n- Explain your actions clearly to users\n- Be helpful and provide detailed responses\n- If a tool call fails, try alternative approaches",
+    "id": "conv_0001"
+  }
+]

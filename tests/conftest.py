@@ -28,8 +28,8 @@ def sample_apis():
 
 @pytest.fixture
 def sample_services_file(tmp_path, sample_apis):
-    """创建临时services.json文件"""
-    services_file = tmp_path / "services.json"
+    """创建临时sample_apis.json文件"""
+    services_file = tmp_path / "sample_apis.json"
     with open(services_file, 'w', encoding='utf-8') as f:
         json.dump(sample_apis, f, ensure_ascii=False, indent=2)
     return str(services_file)
