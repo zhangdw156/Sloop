@@ -65,6 +65,9 @@ class ConversationLoop:
         # 初始化环境状态
         self.context.env_state.update(blueprint.initial_state)
 
+        # 初始化用户轮数计数器
+        self.user_turn_count = 0
+
         # 设置状态机
         self._setup_state_machine()
 
@@ -126,7 +129,8 @@ class ConversationLoop:
     def on_enter_user_action(self):
         """进入用户发言状态"""
         logger.info("👤 [USER_ACTION] 用户准备发言")
-        print(f"👤 [USER_ACTION] 轮次 {self.context.turn_count + 1}")
+        self.user_turn_count += 1
+        print(f"👤 [USER_ACTION] 用户轮次 {self.user_turn_count}")
 
         # 调用用户智能体生成消息
         user_message_content = self.user_agent.generate_message(
