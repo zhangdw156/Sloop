@@ -36,7 +36,7 @@ class TestGenerate10TurnConversation:
             num_conversations=1,
             apis_per_conversation=3,
             sampling_strategy="balanced",
-            target_turns=5,  # 降低目标轮数，让测试更容易通过
+            target_turns=10,  # 降低目标轮数，让测试更容易通过
             output_file=output_file
         )
 
