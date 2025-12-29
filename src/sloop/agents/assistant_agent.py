@@ -101,6 +101,11 @@ class AssistantAgent:
             return False
 
         latest_message = history[-1]
+
+        # 只有用户消息才可能触发工具调用
+        if latest_message.get("role") != "user":
+            return False
+
         user_content = latest_message.get("content", "").lower()
 
         # 简单的关键词触发逻辑
