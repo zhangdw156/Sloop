@@ -1,21 +1,110 @@
 [
   {
     "name": "get_weather",
-    "description": "获取指定城市的天气信息",
+    "description": "获取指定城市的天气信息，包括温度、湿度和天气状况",
     "parameters": {
       "type": "object",
       "properties": {
         "city": {
           "type": "string",
-          "description": "城市名称"
+          "description": "城市名称，例如：北京"
         }
       },
       "required": ["city"]
     }
   },
   {
+    "name": "search_flights",
+    "description": "查询航班信息。输入出发地和目的地，返回可用的航班列表及其航班ID (flight_id)",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "origin": {
+          "type": "string",
+          "description": "出发城市"
+        },
+        "destination": {
+          "type": "string",
+          "description": "到达城市"
+        },
+        "date": {
+          "type": "string",
+          "description": "出发日期，格式 YYYY-MM-DD"
+        }
+      },
+      "required": ["origin", "destination", "date"]
+    }
+  },
+  {
+    "name": "book_flight",
+    "description": "预订航班。需要提供 search_flights 返回的 flight_id",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "flight_id": {
+          "type": "string",
+          "description": "航班ID"
+        },
+        "passenger_name": {
+          "type": "string",
+          "description": "乘客姓名"
+        },
+        "id_card": {
+          "type": "string",
+          "description": "身份证号"
+        }
+      },
+      "required": ["flight_id", "passenger_name"]
+    }
+  },
+  {
+    "name": "search_hotels",
+    "description": "查询酒店信息。返回指定城市的酒店列表及其酒店ID (hotel_id)",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string",
+          "description": "城市名称"
+        },
+        "check_in": {
+          "type": "string",
+          "description": "入住日期"
+        },
+        "check_out": {
+          "type": "string",
+          "description": "退房日期"
+        }
+      },
+      "required": ["city", "check_in"]
+    }
+  },
+  {
+    "name": "book_hotel",
+    "description": "预订酒店房间。需要提供 search_hotels 返回的 hotel_id",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "hotel_id": {
+          "type": "string",
+          "description": "酒店ID"
+        },
+        "room_type": {
+          "type": "string",
+          "description": "房型，如：大床房、双人房",
+          "enum": ["大床房", "双人房", "套房"]
+        },
+        "guest_name": {
+          "type": "string",
+          "description": "入住人姓名"
+        }
+      },
+      "required": ["hotel_id", "room_type", "guest_name"]
+    }
+  },
+  {
     "name": "search_restaurants",
-    "description": "在指定城市搜索餐厅",
+    "description": "搜索餐厅。返回餐厅列表及其餐厅ID (restaurant_id)",
     "parameters": {
       "type": "object",
       "properties": {
@@ -25,15 +114,29 @@
         },
         "cuisine": {
           "type": "string",
-          "description": "菜系类型"
+          "description": "菜系，如：川菜、粤菜、日料"
         }
       },
       "required": ["city"]
     }
   },
   {
+    "name": "get_restaurant_menu",
+    "description": "获取餐厅菜单。需要提供 restaurant_id，返回菜品列表",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "restaurant_id": {
+          "type": "string",
+          "description": "餐厅ID"
+        }
+      },
+      "required": ["restaurant_id"]
+    }
+  },
+  {
     "name": "book_restaurant",
-    "description": "预订餐厅",
+    "description": "预订餐厅座位。需要 restaurant_id",
     "parameters": {
       "type": "object",
       "properties": {
@@ -41,20 +144,131 @@
           "type": "string",
           "description": "餐厅ID"
         },
-        "date": {
-          "type": "string",
-          "description": "预订日期"
-        },
         "time": {
           "type": "string",
           "description": "预订时间"
         },
         "party_size": {
           "type": "integer",
-          "description": "就餐人数"
+          "description": "人数"
         }
       },
-      "required": ["restaurant_id", "date", "time"]
+      "required": ["restaurant_id", "time", "party_size"]
+    }
+  },
+  {
+    "name": "search_products",
+    "description": "搜索电商商品。返回商品列表及其商品ID (product_id)",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "type": "string",
+          "description": "搜索关键词，如：手机、耳机"
+        }
+      },
+      "required": ["query"]
+    }
+  },
+  {
+    "name": "get_product_details",
+    "description": "查看商品详情。需要 product_id，返回库存和详细参数",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "product_id": {
+          "type": "string",
+          "description": "商品ID"
+        }
+      },
+      "required": ["product_id"]
+    }
+  },
+  {
+    "name": "add_to_cart",
+    "description": "将商品加入购物车。需要 product_id",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "product_id": {
+          "type": "string",
+          "description": "商品ID"
+        },
+        "quantity": {
+          "type": "integer",
+          "description": "数量"
+        }
+      },
+      "required": ["product_id", "quantity"]
+    }
+  },
+  {
+    "name": "create_order",
+    "description": "创建订单。从购物车结算并生成订单ID (order_id)",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "description": "收货地址"
+        }
+      },
+      "required": ["address"]
+    }
+  },
+  {
+    "name": "pay_order",
+    "description": "支付订单。需要 order_id",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "order_id": {
+          "type": "string",
+          "description": "订单ID"
+        },
+        "payment_method": {
+          "type": "string",
+          "description": "支付方式",
+          "enum": ["alipay", "wechat", "credit_card"]
+        }
+      },
+      "required": ["order_id", "payment_method"]
+    }
+  },
+  {
+    "name": "check_calendar",
+    "description": "查询日历日程。查看指定日期的空闲时间",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "日期"
+        }
+      },
+      "required": ["date"]
+    }
+  },
+  {
+    "name": "schedule_meeting",
+    "description": "安排会议。发送会议邀请",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "会议主题"
+        },
+        "datetime": {
+          "type": "string",
+          "description": "会议时间"
+        },
+        "attendees": {
+          "type": "string",
+          "description": "参会人员邮箱列表"
+        }
+      },
+      "required": ["title", "datetime", "attendees"]
     }
   }
 ]

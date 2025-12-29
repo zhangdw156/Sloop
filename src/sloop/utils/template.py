@@ -183,7 +183,7 @@ def get_service_template():
     return _load_template("service")
 
 
-def render_service_prompt(tool_call, current_state, blueprint) -> str:
+def render_service_prompt(tool_call, current_state, blueprint, conversation_history=None) -> str:
     """
     渲染服务智能体提示
 
@@ -191,6 +191,7 @@ def render_service_prompt(tool_call, current_state, blueprint) -> str:
         tool_call: 工具调用对象
         current_state: 当前状态对象
         blueprint: 蓝图对象
+        conversation_history: 对话历史消息列表（可选）
 
     返回:
         渲染后的提示字符串
@@ -215,8 +216,24 @@ def render_service_prompt(tool_call, current_state, blueprint) -> str:
         "expected_state": blueprint.expected_state
     }
 
+    # 转换对话历史为字典格式
+    history_dict = []
+    if conversation_history:
+        for message in conversation_history:
+            if hasattr(message, 'role') and hasattr(message, 'content'):
+                # 这是ChatMessage对象
+                msg_dict = {
+                    "role": message.role,
+                    "content": message.content
+                }
+            else:
+                # 这已经是字典了
+                msg_dict = message
+            history_dict.append(msg_dict)
+
     return template.render(
         tool_call=tool_call_dict,
         current_state=state_dict,
-        blueprint=blueprint_dict
+        blueprint=blueprint_dict,
+        conversation_history=history_dict
     )
