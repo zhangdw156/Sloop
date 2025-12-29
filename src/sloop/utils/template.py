@@ -237,3 +237,144 @@ def render_service_prompt(tool_call, current_state, blueprint, conversation_hist
         blueprint=blueprint_dict,
         conversation_history=history_dict
     )
+
+
+def get_assistant_think_template():
+    """
+    获取助手思考模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("assistant_think")
+
+
+def render_assistant_think_prompt(conversation_history: list) -> str:
+    """
+    渲染助手思考提示
+
+    参数:
+        conversation_history: 对话历史消息列表
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_assistant_think_template()
+
+    # 转换消息对象为字典格式
+    history_dict = []
+    for message in conversation_history:
+        msg_dict = {
+            "role": message.role,
+            "content": message.content
+        }
+        history_dict.append(msg_dict)
+
+    return template.render(conversation_history=history_dict)
+
+
+def get_assistant_decide_template():
+    """
+    获取助手决策模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("assistant_decide")
+
+
+def render_assistant_decide_prompt(thought: str, tools: list) -> str:
+    """
+    渲染助手决策提示
+
+    参数:
+        thought: 思考过程字符串
+        tools: 工具定义列表
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_assistant_decide_template()
+
+    # 转换工具对象为字典格式
+    tools_dict = []
+    for tool in tools:
+        tool_dict = {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters.model_dump() if hasattr(tool.parameters, 'model_dump') else tool.parameters
+        }
+        tools_dict.append(tool_dict)
+
+    return template.render(thought=thought, tools=tools_dict)
+
+
+def get_tool_call_gen_template():
+    """
+    获取工具调用生成模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("tool_call_gen")
+
+
+def render_tool_call_gen_prompt(thought: str, tools: list) -> str:
+    """
+    渲染工具调用生成提示
+
+    参数:
+        thought: 思考过程字符串
+        tools: 工具定义列表
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_tool_call_gen_template()
+
+    # 转换工具对象为字典格式
+    tools_dict = []
+    for tool in tools:
+        tool_dict = {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters.model_dump() if hasattr(tool.parameters, 'model_dump') else tool.parameters
+        }
+        tools_dict.append(tool_dict)
+
+    return template.render(thought=thought, tools=tools_dict)
+
+
+def get_assistant_reply_template():
+    """
+    获取助手回复模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("assistant_reply")
+
+
+def render_assistant_reply_prompt(thought: str, conversation_history: list) -> str:
+    """
+    渲染助手回复提示
+
+    参数:
+        thought: 思考过程字符串
+        conversation_history: 对话历史消息列表
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_assistant_reply_template()
+
+    # 转换消息对象为字典格式
+    history_dict = []
+    for message in conversation_history:
+        msg_dict = {
+            "role": message.role,
+            "content": message.content
+        }
+        history_dict.append(msg_dict)
+
+    return template.render(thought=thought, conversation_history=history_dict)

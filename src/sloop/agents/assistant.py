@@ -10,7 +10,13 @@ import re
 from typing import List, Optional, Dict, Any
 from ..models import ToolDefinition, ChatMessage, ToolCall
 from ..utils.llm import chat_completion
-from ..utils.template import render_assistant_prompt
+from ..utils.template import (
+    render_assistant_prompt,
+    render_assistant_think_prompt,
+    render_assistant_decide_prompt,
+    render_tool_call_gen_prompt,
+    render_assistant_reply_prompt
+)
 
 logger = logging.getLogger(__name__)
 
@@ -144,30 +150,19 @@ class AssistantAgent:
         """
         logger.info("Generating assistant thought process (CoT)")
 
-        # 构造思考提示
-        prompt = f"""Based on the conversation history, generate a step-by-step reasoning process for how to respond to the user's latest message.
-
-Conversation History:
-{self._format_history(conversation_history)}
-
-Please provide a detailed thought process considering:
-1. What the user is asking for
-2. What information you have
-3. What tools might be needed
-4. How to structure your response
-
-Thought Process:"""
+        # 使用模板渲染提示
+        prompt = render_assistant_think_prompt(conversation_history)
 
         # 调用LLM生成思考过程
         thought = chat_completion(
             prompt=prompt,
-            system_message="You are a reasoning AI that generates detailed thought processes. Be thorough and logical.",
+            system_message="你是生成详细思考过程的推理AI。请保持逻辑性和全面性。",
             json_mode=False
         )
 
         if not thought or thought.startswith("调用错误"):
             logger.error(f"Failed to generate thought: {thought}")
-            return "I need to analyze the user's request and determine the best way to respond."
+            return "我需要分析用户的请求并确定最佳响应方式。"
 
         logger.info(f"Generated thought: {thought[:100]}...")
         return thought.strip()
@@ -184,19 +179,12 @@ Thought Process:"""
         """
         logger.info("Deciding whether to use tools based on thought process")
 
-        prompt = f"""Based on the following thought process, determine if tools are needed to fulfill the user's request.
-
-Thought Process:
-{thought}
-
-Available Tools:
-{self._format_tools()}
-
-Answer with only 'YES' or 'NO': Do tools need to be called?"""
+        # 使用模板渲染提示
+        prompt = render_assistant_decide_prompt(thought, self.tools)
 
         decision = chat_completion(
             prompt=prompt,
-            system_message="You are a decision-making AI. Answer only with YES or NO.",
+            system_message="你是决策AI。只回答YES或NO。",
             json_mode=False
         ).strip().upper()
 
@@ -217,22 +205,12 @@ Answer with only 'YES' or 'NO': Do tools need to be called?"""
         """
         logger.info("Generating tool calls based on thought process")
 
-        prompt = f"""Based on the thought process, generate the appropriate tool calls in JSON format.
-
-Thought Process:
-{thought}
-
-Available Tools:
-{self._format_tools()}
-
-Generate tool calls as a JSON array. Each tool call should have 'name' and 'arguments' fields.
-If no tools are needed, return an empty array.
-
-Tool Calls:"""
+        # 使用模板渲染提示
+        prompt = render_tool_call_gen_prompt(thought, tools)
 
         response = chat_completion(
             prompt=prompt,
-            system_message="You are a tool-calling AI. Generate tool calls in valid JSON format.",
+            system_message="你是工具调用AI。请生成有效的JSON格式工具调用。",
             json_mode=True
         )
 
@@ -272,51 +250,21 @@ Tool Calls:"""
         """
         logger.info("Generating final reply based on thought process")
 
-        prompt = f"""Based on your thought process, generate a helpful and natural response to the user.
-
-Thought Process:
-{thought}
-
-Conversation History:
-{self._format_history(conversation_history)}
-
-Generate a response that:
-1. Addresses the user's needs
-2. Is helpful and friendly
-3. Uses information from the thought process
-4. Does not mention internal reasoning
-
-Response:"""
+        # 使用模板渲染提示
+        prompt = render_assistant_reply_prompt(thought, conversation_history)
 
         reply = chat_completion(
             prompt=prompt,
-            system_message="You are a helpful AI assistant. Generate natural, helpful responses.",
+            system_message="你是乐于助人的AI助手。请生成自然、有帮助的回复。",
             json_mode=False
         )
 
         if not reply or reply.startswith("调用错误"):
             logger.error(f"Failed to generate reply: {reply}")
-            return "I'm here to help! How can I assist you?"
+            return "我很乐意为您提供帮助！有什么可以效劳的吗？"
 
         logger.info(f"Generated reply: {reply[:100]}...")
         return reply.strip()
-
-    def _format_history(self, history: List[ChatMessage]) -> str:
-        """格式化对话历史"""
-        formatted = []
-        for msg in history:
-            formatted.append(f"{msg.role}: {msg.content}")
-        return "\n".join(formatted)
-
-    def _format_tools(self) -> str:
-        """格式化工具列表"""
-        formatted = []
-        for tool in self.tools:
-            formatted.append(f"- {tool.name}: {tool.description}")
-            if tool.parameters and 'properties' in tool.parameters:
-                for prop_name, prop_info in tool.parameters['properties'].items():
-                    formatted.append(f"  * {prop_name}: {prop_info.get('description', 'No description')}")
-        return "\n".join(formatted)
 
 
 # ==================== 测试代码 ====================

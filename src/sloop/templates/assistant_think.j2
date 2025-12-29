@@ -1,0 +1,15 @@
+基于对话历史，生成一步步的推理过程来回应用户的最新消息。
+
+## 对话历史
+{% for message in conversation_history %}
+{{ message.role }}: {{ message.content }}
+{% endfor %}
+
+## 指令
+请提供详细的思考过程，考虑：
+1. 用户在问什么
+2. 我们有什么信息
+3. 可能需要什么工具
+4. 如何构建回复
+
+## 思考过程
