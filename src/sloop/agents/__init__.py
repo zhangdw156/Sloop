@@ -4,5 +4,6 @@ Sloop Agents Package
 """
 
 from .service_agent import ServiceAgent
+from .assistant_agent import AssistantAgent
 
-__all__ = ["ServiceAgent"]
+__all__ = ["ServiceAgent", "AssistantAgent"]
