@@ -169,11 +169,11 @@ class ConversationLoop:
             # 将工具调用添加到pending列表
             self.context.pending_tool_calls.extend(tool_calls)
 
-            # 创建助手消息（包含工具调用）
+            # 创建助手消息（包含所有工具调用）
             assistant_message = ChatMessage(
                 role="assistant",
                 content=assistant_response,
-                tool_call=tool_calls[0] if tool_calls else None  # 简化，假设只有一个调用
+                tool_calls=tool_calls  # 记录所有并行工具调用
             )
             self.context.add_message(assistant_message)
 

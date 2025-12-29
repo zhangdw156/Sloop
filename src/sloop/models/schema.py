@@ -43,7 +43,8 @@ class ChatMessage(BaseModel):
     """聊天消息定义"""
     role: str = Field(..., description="消息角色：'user', 'assistant', 'tool', 'system'")
     content: Optional[str] = Field(None, description="消息内容")
-    tool_call: Optional[ToolCall] = Field(None, description="工具调用（仅assistant消息）")
+    tool_call: Optional[ToolCall] = Field(None, description="单个工具调用（仅assistant消息，向后兼容）")
+    tool_calls: Optional[List[ToolCall]] = Field(None, description="并行工具调用列表（仅assistant消息）")
     tool_call_id: Optional[str] = Field(None, description="工具调用ID（仅tool消息）")
 
     class Config:
