@@ -31,7 +31,7 @@ class Coordinator:
 
         # 初始化各个Agent
         self.user_agent = UserAgent(user_profile)
-        self.assistant_agent = AssistantAgent(assistant_profile)
+        self.assistant_agent = AssistantAgent(assistant_profile, tools_schema)
         self.service_agent = ServiceAgent(tools_schema)
 
         # 全局对话历史
