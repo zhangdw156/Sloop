@@ -89,6 +89,8 @@ def generate(
     input_file: str = typer.Option("tests/data/tools.json", "--input", "-i", help="工具定义文件路径"),
     output_file: str = typer.Option("output.jsonl", "--output", "-o", help="输出文件路径"),
     count: int = typer.Option(1, "--count", "-c", help="生成对话数量"),
+    max_turns: int = typer.Option(20, "--max-turns", "-t", help="最大对话轮数"),
+    chain_length: int = typer.Option(3, "--chain-length", "-l", help="工具链长度"),
 ):
     """
     生成多轮工具调用对话数据
@@ -98,6 +100,8 @@ def generate(
     typer.echo(f"🚀 开始生成 {count} 个对话数据")
     typer.echo(f"   📥 输入文件: {input_file}")
     typer.echo(f"   📤 输出文件: {output_file}")
+    typer.echo(f"   🔄 最大轮数: {max_turns}")
+    typer.echo(f"   🔗 工具链长度: {chain_length}")
 
     # 1. 加载工具定义
     typer.echo("📋 加载工具定义...")
@@ -131,7 +135,7 @@ def generate(
         for i in range(count):
             try:
                 # 生成蓝图
-                blueprint = generator.generate()
+                blueprint = generator.generate(chain_length=chain_length)
 
                 # 根据blueprint.required_tools筛选active_tools
                 active_tools = [
@@ -142,7 +146,7 @@ def generate(
 
                 # 创建对话循环（只传入active_tools，防止Context溢出）
                 conversation_id = f"conv_{i+1:04d}"
-                loop = ConversationLoop(blueprint, active_tools, conversation_id)
+                loop = ConversationLoop(blueprint, active_tools, conversation_id, max_turns=max_turns)
 
                 # 运行对话
                 loop.run()

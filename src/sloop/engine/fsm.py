@@ -34,7 +34,7 @@ class ConversationLoop:
     使用 transitions.Machine 实现状态流转。
     """
 
-    def __init__(self, blueprint: Blueprint, tools: List[ToolDefinition], conversation_id: str = None):
+    def __init__(self, blueprint: Blueprint, tools: List[ToolDefinition], conversation_id: str = None, max_turns: int = 20):
         """
         初始化对话循环
 
@@ -42,6 +42,7 @@ class ConversationLoop:
             blueprint: 任务蓝图
             tools: 可用的工具定义列表
             conversation_id: 对话ID，如果不提供则自动生成
+            max_turns: 最大对话轮数
         """
         self.blueprint = blueprint
         self.tools = tools
@@ -58,7 +59,7 @@ class ConversationLoop:
             blueprint_id=getattr(blueprint, 'id', None),
             initial_state=blueprint.initial_state.copy(),
             current_user_intent=blueprint.intent,
-            max_turns=10  # 默认最大轮次
+            max_turns=max_turns
         )
 
         # 初始化环境状态
@@ -237,11 +238,10 @@ class ConversationLoop:
 
         self.context.increment_turn()
 
-        # 评估结束条件
+        # 评估结束条件（移除随机结束逻辑，确保对话充分展开）
         should_finish = (
             self.context.turn_count >= self.context.max_turns or
-            self.context.env_state.validate_transition(self.blueprint.expected_state) or
-            random.random() < 0.2  # 20%概率随机结束
+            self.context.env_state.validate_transition(self.blueprint.expected_state)
         )
 
         if should_finish:
