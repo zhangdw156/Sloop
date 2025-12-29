@@ -182,7 +182,7 @@ class BlueprintGenerator:
         logger.info("Generating fallback blueprint")
 
         # 构建简单的intent
-        tool_names = [self.tool_map.get(name, {}).get('name', name) for name in tool_chain]
+        tool_names = [name for name in tool_chain]  # 直接使用工具名
         intent = f"执行工具链: {' -> '.join(tool_names)}"
 
         # 简单的状态
