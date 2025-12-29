@@ -98,7 +98,7 @@ class ToolGraphBuilder:
 
     def sample_tool_chain(self, min_length: int = 2, max_length: int = 5) -> List[str]:
         """
-        从图中采样一条工具调用链
+        从图中采样一条工具调用链，考虑领域粘性
 
         参数:
             min_length: 最小链长度
@@ -124,6 +124,9 @@ class ToolGraphBuilder:
         current_node = random.choice(start_nodes)
         chain = [current_node]
 
+        # 获取当前工具的category作为基准
+        current_category = self._get_tool_category(current_node)
+
         # 随机游走构建链（增加最大尝试次数避免死循环）
         max_attempts = 50
         attempts = 0
@@ -136,8 +139,38 @@ class ToolGraphBuilder:
                 # 没有后继节点，结束
                 break
 
-            # 随机选择下一个节点
-            next_node = random.choice(successors)
+            # 按领域粘性对后继节点进行排序
+            # 同领域或相关领域的节点优先级更高
+            scored_successors = []
+            for successor in successors:
+                score = self._calculate_domain_stickiness(current_category, successor)
+                scored_successors.append((successor, score))
+
+            # 按分数降序排序，相同分数随机打乱
+            scored_successors.sort(key=lambda x: x[1], reverse=True)
+            # 对相同分数的项目随机排序
+            current_score = None
+            same_score_group = []
+            final_successors = []
+
+            for successor, score in scored_successors:
+                if current_score is None or score != current_score:
+                    if same_score_group:
+                        random.shuffle(same_score_group)
+                        final_successors.extend(same_score_group)
+                        same_score_group = []
+                    current_score = score
+                same_score_group.append(successor)
+
+            if same_score_group:
+                random.shuffle(same_score_group)
+                final_successors.extend(same_score_group)
+
+            # 按80%的概率选择高粘性节点，20%概率随机选择
+            if random.random() < 0.8 and final_successors:
+                next_node = final_successors[0]  # 选择最相关的节点
+            else:
+                next_node = random.choice(successors)  # 随机选择以保持多样性
 
             # 避免环路
             if next_node in chain:
@@ -146,6 +179,7 @@ class ToolGraphBuilder:
 
             chain.append(next_node)
             current_node = next_node
+            current_category = self._get_tool_category(current_node)
 
         # 确保最小长度（简化逻辑）
         if len(chain) < min_length:
@@ -153,6 +187,108 @@ class ToolGraphBuilder:
             pass
 
         return chain
+
+    def _get_tool_category(self, tool_name: str) -> str:
+        """
+        获取工具的category
+
+        参数:
+            tool_name: 工具名
+
+        返回:
+            工具的category，如果没有则返回"general"
+        """
+        if tool_name in self.tool_map:
+            tool = self.tool_map[tool_name]
+            # 从tool的额外字段中获取category
+            if hasattr(tool, 'category') and tool.category:
+                return tool.category
+            # 或者从model_extra中获取
+            if hasattr(tool, 'model_extra') and tool.model_extra and 'category' in tool.model_extra:
+                return tool.model_extra['category']
+
+        return "general"
+
+    def _calculate_domain_stickiness(self, current_category: str, candidate_tool: str) -> float:
+        """
+        计算领域粘性分数
+
+        参数:
+            current_category: 当前工具的category
+            candidate_tool: 候选工具名
+
+        返回:
+            粘性分数 (0-1)，越高表示越相关
+        """
+        candidate_category = self._get_tool_category(candidate_tool)
+
+        if current_category == candidate_category:
+            # 同领域，最高分数
+            return 1.0
+        elif self._are_related_categories(current_category, candidate_category):
+            # 相关领域，中等分数
+            return 0.7
+        else:
+            # 无关领域，低分数
+            return 0.3
+
+    def _are_related_categories(self, cat1: str, cat2: str) -> bool:
+        """
+        判断两个category是否相关
+
+        参数:
+            cat1: 类别1
+            cat2: 类别2
+
+        返回:
+            是否相关
+        """
+        # 定义相关类别的映射
+        related_categories = {
+            "finance": ["business", "investment", "stock", "banking"],
+            "business": ["finance", "investment", "company"],
+            "investment": ["finance", "business", "stock"],
+            "stock": ["finance", "investment"],
+            "banking": ["finance", "payment"],
+
+            "travel": ["booking", "hotel", "flight", "transport"],
+            "booking": ["travel", "hotel", "flight", "restaurant"],
+            "hotel": ["travel", "booking"],
+            "flight": ["travel", "booking", "transport"],
+            "transport": ["travel", "flight"],
+
+            "food": ["restaurant", "cooking", "delivery"],
+            "restaurant": ["food", "booking"],
+            "cooking": ["food", "recipe"],
+            "delivery": ["food", "restaurant"],
+
+            "music": ["audio", "entertainment"],
+            "audio": ["music", "entertainment"],
+            "entertainment": ["music", "audio", "game"],
+
+            "game": ["entertainment", "gaming"],
+            "gaming": ["game", "entertainment"],
+
+            "health": ["medical", "fitness"],
+            "medical": ["health", "doctor"],
+            "fitness": ["health", "exercise"],
+
+            "education": ["learning", "study"],
+            "learning": ["education", "study"],
+            "study": ["education", "learning"],
+
+            "shopping": ["ecommerce", "retail"],
+            "ecommerce": ["shopping", "retail"],
+            "retail": ["shopping", "ecommerce"],
+        }
+
+        # 检查双向关系
+        if cat1 in related_categories and cat2 in related_categories[cat1]:
+            return True
+        if cat2 in related_categories and cat1 in related_categories[cat2]:
+            return True
+
+        return False
 
     def get_graph_stats(self) -> Dict:
         """

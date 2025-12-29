@@ -38,71 +38,93 @@ class BlueprintGenerator:
 
         logger.info(f"BlueprintGenerator initialized with {len(tools)} tools")
 
-    def generate(self, chain_length: int = 3) -> Blueprint:
+    def generate(self, chain_length: int = 3, max_retries: int = 3) -> Blueprint:
         """
-        生成对话蓝图
+        生成对话蓝图，包含合理性验证和重试机制
 
         参数:
             chain_length: 工具链长度
+            max_retries: 最大重试次数
 
         返回:
             生成的对话蓝图
         """
-        logger.info(f"Generating blueprint with chain length {chain_length}")
+        logger.info(f"Generating blueprint with chain length {chain_length}, max_retries {max_retries}")
 
-        # 1. 从图谱中采样工具链
-        tool_chain = self.graph_builder.sample_tool_chain(
-            min_length=max(1, chain_length - 1),
-            max_length=chain_length
-        )
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Attempt {attempt + 1}/{max_retries}")
 
-        if not tool_chain:
-            raise ValueError("无法采样到有效的工具链")
+                # 1. 从图谱中采样工具链
+                tool_chain = self.graph_builder.sample_tool_chain(
+                    min_length=max(1, chain_length - 1),
+                    max_length=chain_length
+                )
 
-        logger.info(f"Sampled tool chain: {tool_chain}")
+                if not tool_chain:
+                    logger.warning(f"Attempt {attempt + 1}: Failed to sample tool chain, retrying...")
+                    continue
 
-        # 2. 获取工具定义
-        tool_definitions = []
-        for tool_name in tool_chain:
-            if tool_name in self.tool_map:
-                tool_definitions.append(self.tool_map[tool_name])
-            else:
-                logger.warning(f"Tool {tool_name} not found in tool map")
+                logger.info(f"Sampled tool chain: {tool_chain}")
 
-        if not tool_definitions:
-            raise ValueError("没有找到有效的工具定义")
+                # 2. 获取工具定义
+                tool_definitions = []
+                for tool_name in tool_chain:
+                    if tool_name in self.tool_map:
+                        tool_definitions.append(self.tool_map[tool_name])
+                    else:
+                        logger.warning(f"Tool {tool_name} not found in tool map")
 
-        # 3. 构造和发送提示
-        prompt = render_planner_prompt(tool_chain, tool_definitions)
+                if not tool_definitions:
+                    logger.warning(f"Attempt {attempt + 1}: No valid tool definitions found, retrying...")
+                    continue
 
-        logger.info("Sending prompt to LLM for blueprint generation")
+                # 3. 构造和发送提示
+                prompt = render_planner_prompt(tool_chain, tool_definitions)
 
-        # 4. 调用LLM生成蓝图
-        llm_response = chat_completion(
-            prompt=prompt,
-            system_message="You are an expert AI dataset generator. Always respond with valid JSON.",
-            json_mode=True
-        )
+                logger.info("Sending prompt to LLM for blueprint generation")
 
-        if not llm_response or llm_response.startswith("调用错误"):
-            raise RuntimeError(f"LLM调用失败: {llm_response}")
+                # 4. 调用LLM生成蓝图
+                llm_response = chat_completion(
+                    prompt=prompt,
+                    system_message="你是专家级AI数据集生成器。始终用有效的JSON格式响应。",
+                    json_mode=True
+                )
 
-        # 5. 解析和验证响应
-        try:
-            blueprint_data = json.loads(llm_response)
-            logger.info("Successfully parsed LLM response")
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse LLM response as JSON: {llm_response}")
-            raise ValueError(f"LLM响应不是有效的JSON: {e}")
+                if not llm_response or llm_response.startswith("调用错误"):
+                    logger.warning(f"Attempt {attempt + 1}: LLM call failed: {llm_response}, retrying...")
+                    continue
 
-        # 6. 验证和修正数据
-        validated_data = self._validate_blueprint_data(blueprint_data, tool_chain)
+                # 5. 解析和验证响应
+                try:
+                    blueprint_data = json.loads(llm_response)
+                    logger.info("Successfully parsed LLM response")
+                except json.JSONDecodeError as e:
+                    logger.warning(f"Attempt {attempt + 1}: Failed to parse LLM response as JSON: {llm_response}, retrying...")
+                    continue
 
-        # 7. 创建Blueprint对象
-        blueprint = Blueprint(**validated_data)
+                # 6. 检查蓝图合理性
+                if not blueprint_data.get("valid", True):
+                    reason = blueprint_data.get("reason", "Unknown reason")
+                    logger.warning(f"Attempt {attempt + 1}: Blueprint marked as invalid: {reason}, retrying...")
+                    continue
 
-        logger.info(f"Successfully generated blueprint: {blueprint.intent}")
-        return blueprint
+                # 7. 验证和修正数据
+                validated_data = self._validate_blueprint_data(blueprint_data, tool_chain)
+
+                # 8. 创建Blueprint对象
+                blueprint = Blueprint(**validated_data)
+
+                logger.info(f"Successfully generated valid blueprint: {blueprint.intent}")
+                return blueprint
+
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1} failed: {e}, retrying...")
+                continue
+
+        # 所有重试都失败了，返回一个简单的默认蓝图
+        logger.error(f"All {max_retries} attempts failed, generating fallback blueprint")
+        return self._generate_fallback_blueprint(tool_chain)
 
     def _validate_blueprint_data(self, data: dict, expected_chain: List[str]) -> dict:
         """
@@ -146,6 +168,34 @@ class BlueprintGenerator:
             validated["expected_state"] = data["expected_state"]
 
         return validated
+
+    def _generate_fallback_blueprint(self, tool_chain: List[str]) -> Blueprint:
+        """
+        生成后备蓝图，当所有重试都失败时使用
+
+        参数:
+            tool_chain: 工具链列表
+
+        返回:
+            简单的后备蓝图
+        """
+        logger.info("Generating fallback blueprint")
+
+        # 构建简单的intent
+        tool_names = [self.tool_map.get(name, {}).get('name', name) for name in tool_chain]
+        intent = f"执行工具链: {' -> '.join(tool_names)}"
+
+        # 简单的状态
+        initial_state = {f"{name}_executed": False for name in tool_chain}
+        expected_state = {f"{name}_executed": True for name in tool_chain}
+
+        return Blueprint(
+            intent=intent,
+            required_tools=tool_chain,
+            ground_truth=tool_chain,
+            initial_state=initial_state,
+            expected_state=expected_state
+        )
 
     def generate_multiple(self, count: int = 5, chain_length: int = 3) -> List[Blueprint]:
         """

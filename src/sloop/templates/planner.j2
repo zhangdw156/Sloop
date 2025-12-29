@@ -1,38 +1,75 @@
-你是一个专家级的 AI 数据集生成器。
+你是一个专家级的 AI 数据集生成器，专门生成真实、自然的对话场景。
 
 ## 目标工具链
 {{ tool_chain | tojson }}
 
 ## 工具定义
-{{ tool_definitions | tojson }}
+{% for tool in tool_definitions %}
+### {{ tool.name }}
+描述: {{ tool.description }}
+参数: {{ tool.parameters | tojson }}
+{% if tool.category %}领域: {{ tool.category }}{% endif %}
+{% endfor %}
 
 ## 任务
-1. 设计一个**中文**的用户意图(Intent)，该意图需要严格按照此顺序执行完全相同的工具链。
-2. 定义初始环境状态（执行前存在的变量）。
-3. 定义期望的最终状态（执行所有工具后应该改变的变量）。
+首先，为这个工具链构思一个合理的**用户画像(Persona)**，然后基于这个Persona设计一个**中文**的用户意图。
+
+1. **分析工具链合理性**：
+   - 检查给定的工具链是否能在现实场景中逻辑连贯地组合使用
+   - 如果工具链不合理（如"寻找宝藏" + "查询股价"），请在返回中设置 "valid": false
+
+2. **构思用户画像(Persona)**：
+   - 选择一个具体的用户类型（如"忙碌的金融分析师"、"正在旅行计划的学生"、"家庭主妇"等）
+   - 这个Persona必须与工具链的领域高度相关
+
+3. **设计用户意图(Intent)**：
+   - 意图必须是这个Persona在现实生活中会遇到的具体问题
+   - 意图需要严格按照工具链的顺序来解决
+   - 意图应该是自然、具体的中文描述
+
+4. **定义状态**：
+   - 初始状态：执行工具前Persona的状态
+   - 期望状态：执行所有工具后世界应该发生的变化
 
 ## 要求
-- 意图应该是自然且真实的
-- 初始状态应该代表调用任何工具之前的情况
-- 期望状态应该显示执行工具链后世界的变化
-- 状态必须是有效的JSON对象，具有有意义的键值对
-- 关注会被工具执行实际修改的变量
+- **领域一致性**：Persona和意图必须与工具链的领域保持一致
+- **现实合理性**：场景必须像真实用户在实际生活中遇到的问题
+- **逻辑连贯性**：工具调用顺序必须符合解决问题的自然流程
+- **状态精确性**：只定义会被工具实际修改的变量
 
 ## 输出格式
-严格按照此模式输出JSON格式：
+严格按照此JSON格式输出：
+
 {
+  "valid": true|false,
+  "persona": "用户画像描述",
   "intent": "描述用户意图的中文字符串",
   "required_tools": {{ tool_chain | tojson }},
   "ground_truth": {{ tool_chain | tojson }},
-  "initial_state": {"key": "value", "another_key": "another_value"},
-  "expected_state": {"key": "new_value", "another_key": "modified_value"}
+  "initial_state": {"key": "value"},
+  "expected_state": {"key": "new_value"}
 }
 
-示例：
+## 示例
+
+**有效场景**：
 {
-  "intent": "为我的周末旅行预订酒店房间",
-  "required_tools": ["search_hotels", "book_hotel"],
-  "ground_truth": ["search_hotels", "book_hotel"],
-  "initial_state": {"booked": false, "destination": null},
-  "expected_state": {"booked": true, "destination": "巴黎"}
+  "valid": true,
+  "persona": "正在准备年终汇报的金融分析师",
+  "intent": "获取过去一个月顶级创业公司的新闻，用于年终行业分析报告",
+  "required_tools": ["search_news", "filter_by_category"],
+  "ground_truth": ["search_news", "filter_by_category"],
+  "initial_state": {"news_collected": false, "analysis_ready": false},
+  "expected_state": {"news_collected": true, "analysis_ready": true}
+}
+
+**无效场景**：
+{
+  "valid": false,
+  "reason": "工具链涉及不同领域（娱乐游戏和金融投资），无法形成连贯的用户场景",
+  "intent": "",
+  "required_tools": {{ tool_chain | tojson }},
+  "ground_truth": {{ tool_chain | tojson }},
+  "initial_state": {},
+  "expected_state": {}
 }
