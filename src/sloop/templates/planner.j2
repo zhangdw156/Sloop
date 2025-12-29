@@ -1,0 +1,38 @@
+你是一个专家级的 AI 数据集生成器。
+
+## 目标工具链
+{{ tool_chain | tojson }}
+
+## 工具定义
+{{ tool_definitions | tojson }}
+
+## 任务
+1. 设计一个**中文**的用户意图(Intent)，该意图需要严格按照此顺序执行完全相同的工具链。
+2. 定义初始环境状态（执行前存在的变量）。
+3. 定义期望的最终状态（执行所有工具后应该改变的变量）。
+
+## 要求
+- 意图应该是自然且真实的
+- 初始状态应该代表调用任何工具之前的情况
+- 期望状态应该显示执行工具链后世界的变化
+- 状态必须是有效的JSON对象，具有有意义的键值对
+- 关注会被工具执行实际修改的变量
+
+## 输出格式
+严格按照此模式输出JSON格式：
+{
+  "intent": "描述用户意图的中文字符串",
+  "required_tools": {{ tool_chain | tojson }},
+  "ground_truth": {{ tool_chain | tojson }},
+  "initial_state": {"key": "value", "another_key": "another_value"},
+  "expected_state": {"key": "new_value", "another_key": "modified_value"}
+}
+
+示例：
+{
+  "intent": "为我的周末旅行预订酒店房间",
+  "required_tools": ["search_hotels", "book_hotel"],
+  "ground_truth": ["search_hotels", "book_hotel"],
+  "initial_state": {"booked": false, "destination": null},
+  "expected_state": {"booked": true, "destination": "巴黎"}
+}

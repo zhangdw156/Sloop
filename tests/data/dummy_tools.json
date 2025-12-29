@@ -1,0 +1,60 @@
+[
+  {
+    "name": "get_weather",
+    "description": "获取指定城市的天气信息",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string",
+          "description": "城市名称"
+        }
+      },
+      "required": ["city"]
+    }
+  },
+  {
+    "name": "search_restaurants",
+    "description": "在指定城市搜索餐厅",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string",
+          "description": "城市名称"
+        },
+        "cuisine": {
+          "type": "string",
+          "description": "菜系类型"
+        }
+      },
+      "required": ["city"]
+    }
+  },
+  {
+    "name": "book_restaurant",
+    "description": "预订餐厅",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "restaurant_id": {
+          "type": "string",
+          "description": "餐厅ID"
+        },
+        "date": {
+          "type": "string",
+          "description": "预订日期"
+        },
+        "time": {
+          "type": "string",
+          "description": "预订时间"
+        },
+        "party_size": {
+          "type": "integer",
+          "description": "就餐人数"
+        }
+      },
+      "required": ["restaurant_id", "date", "time"]
+    }
+  }
+]

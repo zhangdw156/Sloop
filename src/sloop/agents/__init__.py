@@ -1,10 +1,15 @@
 """
-Sloop Agents Package
-多智能体架构中的各个Agent实现
+智能代理模块
+
+包含各种AI代理的核心逻辑类。
 """
 
-from .service_agent import ServiceAgent
-from .assistant_agent import AssistantAgent
-from .user_agent import UserAgent
+from .user import UserAgent
+from .assistant import AssistantAgent
+from .service import ServiceAgent
 
-__all__ = ["ServiceAgent", "AssistantAgent", "UserAgent"]
+__all__ = [
+    "UserAgent",
+    "AssistantAgent",
+    "ServiceAgent",
+]

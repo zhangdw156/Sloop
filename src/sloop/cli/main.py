@@ -1,359 +1,169 @@
 """
-Sloop CLI 主入口
-基于CrewAI的数据生成工具
+Sloop CLI 入口
+
+使用 typer 实现命令行接口，用于生成多轮工具调用对话数据。
 """
 
 import json
-import typer
+import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 
-from sloop.core.config import config
-from sloop.core.api_structure import load_apis_from_file
-from sloop.core.data_generator import BatchDataGenerator, DataGenerationCrew
+import typer
+from tqdm import tqdm
 
-app = typer.Typer(
-    help="Sloop: 基于CrewAI的智能工具调用数据生成器",
-    add_completion=False
-)
+from ..engine import BlueprintGenerator
+from ..engine.fsm import ConversationLoop
+from ..models import ToolDefinition, ChatMessage, ToolCall
+
+# 设置日志
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+app = typer.Typer()
+
+
+@app.callback()
+def main():
+    """
+    Sloop - 多轮工具调用数据生成框架
+    """
+    pass
+
+
+def convert_to_training_format(tools: List[ToolDefinition], messages: List[ChatMessage]) -> dict:
+    """
+    将内部消息格式转换为训练数据格式
+
+    参数:
+        tools: 活跃的工具定义列表
+        messages: 对话消息列表
+
+    返回:
+        训练数据格式的字典
+    """
+    # 转换tools为JSON字符串
+    tools_list = [tool.model_dump() for tool in tools]
+    tools_str = json.dumps(tools_list, ensure_ascii=False)
+
+    # 转换messages
+    converted_messages = []
+    for msg in messages:
+        if msg.role == "user":
+            # 用户消息保持不变
+            converted_messages.append({
+                "role": "user",
+                "content": msg.content
+            })
+        elif msg.role == "assistant" and msg.tool_call:
+            # 助手消息（有工具调用）-> tool_call
+            tool_call_data = {
+                "name": msg.tool_call.name,
+                "arguments": msg.tool_call.arguments
+            }
+            converted_messages.append({
+                "role": "tool_call",
+                "content": json.dumps(tool_call_data, ensure_ascii=False)
+            })
+        elif msg.role == "tool":
+            # 工具响应 -> tool_response
+            converted_messages.append({
+                "role": "tool_response",
+                "content": msg.content
+            })
+        elif msg.role == "assistant":
+            # 助手消息（无工具调用）保持不变
+            converted_messages.append({
+                "role": "assistant",
+                "content": msg.content
+            })
+
+    return {
+        "tools": tools_str,
+        "messages": converted_messages
+    }
 
 
 @app.command()
-def gen(
-    services_file: str = typer.Option(
-        "tests/data/tools.json", "--services", "-s",
-        help="API服务定义文件路径"
-    ),
-    output_file: str = typer.Option(
-        "tests/data/dataset.json", "--output", "-o",
-        help="输出数据集文件路径"
-    ),
-    num_conversations: int = typer.Option(
-        10, "--num-conversations", "-n",
-        help="生成对话数量", min=1, max=1000
-    ),
-    apis_per_conversation: int = typer.Option(
-        3, "--apis-per-conversation", "-k",
-        help="每个对话使用的API数量", min=1, max=10
-    ),
-    target_turns: int = typer.Option(
-        10, "--target-turns", "-t",
-        help="目标对话轮数（允许±40%偏差）", min=3, max=50
-    ),
-    sampling_strategy: str = typer.Option(
-        "balanced", "--sampling-strategy",
-        help="API采样策略 (random/balanced/connected)"
-    ),
-    structure_type: str = typer.Option(
-        "tree", "--structure-type",
-        help="API结构化类型 (tree/graph/auto)"
-    ),
-    verbose: bool = typer.Option(
-        True, "--verbose", "-v",
-        help="启用详细输出"
-    ),
-    yes: bool = typer.Option(
-        False, "--yes", "-y",
-        help="跳过确认提示，直接开始生成"
-    ),
+def generate(
+    input_file: str = typer.Option("tests/data/tools.json", "--input", "-i", help="工具定义文件路径"),
+    output_file: str = typer.Option("output.jsonl", "--output", "-o", help="输出文件路径"),
+    count: int = typer.Option(1, "--count", "-c", help="生成对话数量"),
 ):
     """
-    使用CrewAI生成高质量的多轮工具调用对话数据集
+    生成多轮工具调用对话数据
 
-    工作流程:
-    1. 加载并结构化API定义（树形/图形）
-    2. 智能采样相关API组合
-    3. 多Agent协作生成对话数据
-    4. 输出标准格式的数据集
+    从工具定义文件中读取工具，自动生成对话蓝图和完整的对话流程。
     """
-    # 验证配置
-    if not config.validate():
-        typer.secho(
-            "❌ 配置错误: 请检查 .env 文件中的 SLOOP_STRONG_API_KEY 和 SLOOP_STRONG_BASE_URL",
-            fg=typer.colors.RED,
-            err=True
-        )
-        raise typer.Exit(1)
+    typer.echo(f"🚀 开始生成 {count} 个对话数据")
+    typer.echo(f"   📥 输入文件: {input_file}")
+    typer.echo(f"   📤 输出文件: {output_file}")
 
-    # 检查输入文件
-    services_path = Path(services_file)
-    if not services_path.exists():
-        typer.secho(
-            f"❌ 服务文件不存在: {services_file}",
-            fg=typer.colors.RED,
-            err=True
-        )
-        raise typer.Exit(1)
-
-    # 设置verbose
-    config.verbose = verbose
-
+    # 1. 加载工具定义
+    typer.echo("📋 加载工具定义...")
     try:
-        # 加载API定义
-        typer.echo("📚 加载API服务定义...")
-        apis = load_apis_from_file(services_file)
-        if not apis:
-            typer.secho("❌ API文件为空或格式错误", fg=typer.colors.RED)
-            raise typer.Exit(1)
+        with open(input_file, 'r', encoding='utf-8') as f:
+            tools_data = json.load(f)
 
-        typer.echo(f"✅ 加载了 {len(apis)} 个API定义")
+        # 转换为 ToolDefinition 对象
+        tools = [ToolDefinition(**tool) for tool in tools_data]
+        typer.echo(f"   ✅ 加载了 {len(tools)} 个工具定义")
 
-        # 显示API结构信息
-        from sloop.core.api_structure import APICollection
-        api_collection = APICollection(apis, structure_type)
-        structure_info = api_collection.get_structure_info()
-
-        typer.echo(f"🏗️  API结构化类型: {structure_info['type']}")
-        if structure_info['type'] == 'tree':
-            typer.echo(f"📁 识别出 {len(structure_info['categories'])} 个功能类别: {', '.join(structure_info['categories'][:5])}{'...' if len(structure_info['categories']) > 5 else ''}")
-        else:
-            typer.echo(f"🔗 图结构: {structure_info['nodes']} 节点, {structure_info['edges']} 边")
-
-        # 初始化数据生成器
-        typer.echo("🤖 初始化CrewAI数据生成器...")
-        generator = BatchDataGenerator(apis, structure_type)
-
-        # 显示生成计划
-        typer.echo(f"🎯 生成计划:")
-        typer.echo(f"   • 对话数量: {num_conversations}")
-        typer.echo(f"   • 每对话API数: {apis_per_conversation}")
-        typer.echo(f"   • 采样策略: {sampling_strategy}")
-        typer.echo(f"   • 输出文件: {output_file}")
-
-        # 确认开始生成（如果未指定--yes）
-        if not yes and not typer.confirm("\n🚀 开始生成数据集?", default=True):
-            typer.echo("已取消")
-            return
-
-        # 生成数据集
-        typer.echo("\n⚡ 开始生成对话数据...")
-        dataset = generator.generate_dataset(
-            num_conversations=num_conversations,
-            apis_per_conversation=apis_per_conversation,
-            sampling_strategy=sampling_strategy,
-            target_turns=target_turns,
-            output_file=output_file
-        )
-
-        # 显示统计信息
-        if dataset:
-            total_conversations = len(dataset)
-            total_messages = sum(len(conv.get('messages', [])) for conv in dataset)
-            avg_messages = total_messages / total_conversations if total_conversations > 0 else 0
-
-            typer.echo(f"\n🎉 生成完成!")
-            typer.echo(f"📊 统计信息:")
-            typer.echo(f"   • 成功生成对话: {total_conversations}")
-            typer.echo(f"   • 平均消息数量: {avg_messages:.1f}")
-            typer.echo(f"💾 数据已保存至: {output_file}")
-        else:
-            typer.secho("❌ 生成失败: 未产生任何对话数据", fg=typer.colors.RED)
-
-    except Exception as e:
-        typer.secho(f"❌ 生成过程中出现错误: {e}", fg=typer.colors.RED, err=True)
-        if verbose:
-            import traceback
-            typer.echo(traceback.format_exc())
+    except FileNotFoundError:
+        typer.echo(f"❌ 找不到输入文件: {input_file}", err=True)
+        raise typer.Exit(1)
+    except json.JSONDecodeError as e:
+        typer.echo(f"❌ JSON解析错误: {e}", err=True)
         raise typer.Exit(1)
 
+    # 2. 初始化蓝图生成器
+    typer.echo("🔧 初始化蓝图生成器...")
+    generator = BlueprintGenerator(tools)
 
-@app.command()
-def analyze(
-    services_file: str = typer.Option(
-        "tests/data/tools.json", "--services", "-s",
-        help="API服务定义文件路径"
-    ),
-    structure_type: str = typer.Option(
-        "auto", "--structure-type",
-        help="API结构化类型 (tree/graph/auto)"
-    ),
-):
-    """
-    分析API服务定义，显示结构化信息
-    """
-    try:
-        apis = load_apis_from_file(services_file)
-        from sloop.core.api_structure import APICollection
-        api_collection = APICollection(apis, structure_type)
-        structure_info = api_collection.get_structure_info()
+    # 3. 准备输出文件
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        typer.echo("📊 API分析结果:")
-        typer.echo(f"   • 总API数量: {structure_info['total_apis']}")
-        typer.echo(f"   • 结构类型: {structure_info['type']}")
+    # 4. 生成对话数据
+    typer.echo("🎬 开始生成对话...")
 
-        if structure_info['type'] == 'tree':
-            typer.echo(f"   • 功能类别: {len(structure_info['categories'])}")
-            for category in structure_info['categories'][:10]:  # 显示前10个
-                apis_in_category = len([api for api in apis if api.get('category') == category or
-                                      api_collection.structure._extract_category(api) == category])
-                typer.echo(f"     - {category}: {apis_in_category} 个API")
+    with tqdm(total=count, desc="生成进度") as pbar:
+        for i in range(count):
+            try:
+                # 生成蓝图
+                blueprint = generator.generate()
 
-        # 显示API详情
-        typer.echo("\n🔧 API详情:")
-        for i, api in enumerate(apis[:5], 1):  # 显示前5个
-            typer.echo(f"   {i}. {api['name']}: {api.get('description', 'No description')[:50]}...")
+                # 根据blueprint.required_tools筛选active_tools
+                active_tools = [
+                    tool for tool in tools
+                    if tool.name in blueprint.required_tools
+                ]
+                typer.echo(f"   🔧 使用 {len(active_tools)} 个活跃工具: {blueprint.required_tools}")
 
-        if len(apis) > 5:
-            typer.echo(f"   ... 还有 {len(apis) - 5} 个API")
+                # 创建对话循环（只传入active_tools，防止Context溢出）
+                conversation_id = f"conv_{i+1:04d}"
+                loop = ConversationLoop(blueprint, active_tools, conversation_id)
 
-    except Exception as e:
-        typer.secho(f"❌ 分析失败: {e}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
+                # 运行对话
+                loop.run()
 
+                # 转换为训练数据格式
+                training_data = convert_to_training_format(active_tools, loop.context.messages)
 
-@app.command()
-def validate(
-    dataset_file: str = typer.Option(
-        ..., "--dataset", "-d",
-        help="要验证的数据集文件路径"
-    ),
-):
-    """
-    验证生成的数据集格式和质量
-    """
-    try:
-        with open(dataset_file, 'r', encoding='utf-8') as f:
-            dataset = json.load(f)
+                # 追加写入输出文件
+                with open(output_path, 'a', encoding='utf-8') as f:
+                    f.write(json.dumps(training_data, ensure_ascii=False) + '\n')
 
-        if not isinstance(dataset, list):
-            typer.secho("❌ 数据集格式错误: 应为数组", fg=typer.colors.RED)
-            return
+                pbar.set_description(f"生成进度 (最近: {blueprint.intent[:20]}...)")
 
-        typer.echo(f"📊 数据集验证结果:")
-        typer.echo(f"   • 对话数量: {len(dataset)}")
+            except Exception as e:
+                logger.error(f"生成对话 {i+1} 失败: {e}")
+                typer.echo(f"⚠️ 跳过失败的对话 {i+1}: {e}", err=True)
+                continue
 
-        # 检查格式
-        valid_conversations = 0
-        total_messages = 0
+            pbar.update(1)
 
-        for i, conv in enumerate(dataset):
-            is_valid = True
-            errors = []
-
-            # 检查OpenAI格式必需字段
-            required_fields = ['messages', 'tools']
-            for field in required_fields:
-                if field not in conv:
-                    is_valid = False
-                    errors.append(f"缺少{field}字段")
-
-            # 检查messages格式
-            if 'messages' in conv:
-                messages = conv['messages']
-                if not isinstance(messages, list):
-                    is_valid = False
-                    errors.append("messages应为数组")
-                elif messages and not all(isinstance(msg, dict) and 'role' in msg and 'content' in msg for msg in messages):
-                    is_valid = False
-                    errors.append("messages格式错误：每个消息应包含role和content")
-                else:
-                    total_messages += len(messages)
-
-                    # 检查消息角色
-                    roles = [msg['role'] for msg in messages]
-                    if 'user' not in roles or 'assistant' not in roles:
-                        is_valid = False
-                        errors.append("messages应包含user和assistant角色")
-
-                    # 检查是否有工具调用
-                    if not any(msg['role'] == 'tool_call' for msg in messages):
-                        is_valid = False
-                        errors.append("messages应包含tool_call角色")
-
-            # 检查tools格式
-            if 'tools' in conv:
-                try:
-                    tools_data = json.loads(conv['tools']) if isinstance(conv['tools'], str) else conv['tools']
-                    if not isinstance(tools_data, list):
-                        is_valid = False
-                        errors.append("tools应为数组或有效的JSON字符串")
-                    elif tools_data and not all(isinstance(tool, dict) and 'type' in tool and 'function' in tool for tool in tools_data):
-                        is_valid = False
-                        errors.append("tools格式错误：每个工具应包含type和function")
-                except json.JSONDecodeError:
-                    is_valid = False
-                    errors.append("tools字段不是有效的JSON")
-
-            if is_valid:
-                valid_conversations += 1
-            elif i < 5:  # 只显示前5个错误
-                typer.echo(f"   ⚠️ 对话 {i+1} 格式问题: {', '.join(errors)}")
-
-        validity_rate = valid_conversations / len(dataset) * 100 if dataset else 0
-        avg_messages = total_messages / valid_conversations if valid_conversations > 0 else 0
-
-        typer.echo(f"   • 格式有效率: {validity_rate:.1f}% ({valid_conversations}/{len(dataset)})")
-        typer.echo(f"   • 平均消息数量: {avg_messages:.1f}")
-
-        if validity_rate >= 95:
-            typer.echo("✅ 数据集质量良好")
-        elif validity_rate >= 80:
-            typer.echo("⚠️ 数据集质量一般，建议检查")
-        else:
-            typer.secho("❌ 数据集质量较差，需要改进", fg=typer.colors.RED)
-
-    except Exception as e:
-        typer.secho(f"❌ 验证失败: {e}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
-
-
-@app.command()
-def convert(
-    dataset_file: str = typer.Option(
-        ..., "--dataset", "-d",
-        help="要转换的数据集文件路径"
-    ),
-    output_file: str = typer.Option(
-        ..., "--output", "-o",
-        help="转换后的输出文件路径"
-    ),
-    format: str = typer.Option(
-        "qwen", "--format", "-f",
-        help="目标格式 (qwen/hermes/react_en)"
-    ),
-):
-    """
-    将OpenAI格式数据集转换为其他格式（如Qwen chat_template）
-    """
-    try:
-        # 读取数据集
-        with open(dataset_file, 'r', encoding='utf-8') as f:
-            dataset = json.load(f)
-
-        if not isinstance(dataset, list):
-            typer.secho("❌ 数据集格式错误: 应为数组", fg=typer.colors.RED)
-            raise typer.Exit(1)
-
-        # 初始化数据生成器
-        from sloop.core.api_structure import load_apis_from_file
-        apis = load_apis_from_file("tests/data/tools.json")  # 临时加载API定义
-        generator = DataGenerationCrew(apis)
-
-        # 转换格式
-        converted_data = []
-
-        for i, item in enumerate(dataset):
-            typer.echo(f"转换对话 {i+1}/{len(dataset)}")
-
-            if format.lower() == "qwen":
-                # 转换为Qwen兼容的SFT格式
-                qwen_data = generator.convert_to_qwen_format(item)
-                converted_data.append(qwen_data)
-            else:
-                typer.secho(f"❌ 不支持的格式: {format}", fg=typer.colors.RED)
-                raise typer.Exit(1)
-
-        # 保存转换后的数据
-        with open(output_file, 'w', encoding='utf-8') as f:
-            json.dump(converted_data, f, ensure_ascii=False, indent=2)
-
-        typer.echo(f"✅ 转换完成! 输出文件: {output_file}")
-        typer.echo(f"   • 转换格式: {format}")
-        typer.echo(f"   • 对话数量: {len(converted_data)}")
-
-    except Exception as e:
-        typer.secho(f"❌ 转换失败: {e}", fg=typer.colors.RED, err=True)
-        raise typer.Exit(1)
+    typer.echo(f"✅ 生成完成！输出文件: {output_file}")
 
 
 if __name__ == "__main__":
