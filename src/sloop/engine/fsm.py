@@ -4,6 +4,7 @@
 实现对话生成的核心循环逻辑，使用 transitions 库管理状态流转。
 """
 
+import json
 import random
 import logging
 from typing import Optional, List
@@ -17,13 +18,15 @@ logger = logging.getLogger(__name__)
 
 # 状态常量定义
 class FSMStates:
-    """FSM 状态常量"""
-    S_INIT = "init"
-    S_USER_ACTION = "user_action"
-    S_ASSISTANT_THINK = "assistant_think"
-    S_TOOL_EXECUTION = "tool_execution"
-    S_EVALUATION = "evaluation"
-    S_FINISH = "finish"
+    """FSM 状态常量 - 细粒度状态管理"""
+    USER_GEN = "user_gen"
+    ASSISTANT_THINK = "assistant_think"
+    ASSISTANT_DECIDE = "assistant_decide"
+    TOOL_CALL_GEN = "tool_call_gen"
+    TOOL_EXEC = "tool_exec"
+    ASSISTANT_REPLY_GEN = "assistant_reply_gen"
+    EVALUATION = "evaluation"
+    FINISH = "finish"
 
 
 class ConversationLoop:
@@ -72,7 +75,7 @@ class ConversationLoop:
         self._setup_state_machine()
 
         # 手动触发初始状态的回调（transitions不会自动调用）
-        self.on_enter_init()
+        self.on_enter_user_gen()
 
         logger.info(f"🎬 ConversationLoop initialized: {self.conversation_id}")
 
@@ -80,57 +83,56 @@ class ConversationLoop:
         """设置状态机"""
         # 定义状态
         states = [
-            FSMStates.S_INIT,
-            FSMStates.S_USER_ACTION,
-            FSMStates.S_ASSISTANT_THINK,
-            FSMStates.S_TOOL_EXECUTION,
-            FSMStates.S_EVALUATION,
-            FSMStates.S_FINISH
+            FSMStates.USER_GEN,
+            FSMStates.ASSISTANT_THINK,
+            FSMStates.ASSISTANT_DECIDE,
+            FSMStates.TOOL_CALL_GEN,
+            FSMStates.TOOL_EXEC,
+            FSMStates.ASSISTANT_REPLY_GEN,
+            FSMStates.EVALUATION,
+            FSMStates.FINISH
         ]
 
         # 定义状态机
         self.machine = Machine(
             model=self,
             states=states,
-            initial=FSMStates.S_INIT,
+            initial=FSMStates.USER_GEN,
             model_attribute='current_state'
         )
 
         # 定义状态转换
-        self.machine.add_transition('start_conversation', FSMStates.S_INIT, FSMStates.S_USER_ACTION)
-        self.machine.add_transition('user_speaks', FSMStates.S_USER_ACTION, FSMStates.S_ASSISTANT_THINK)
-        self.machine.add_transition('call_tool', FSMStates.S_ASSISTANT_THINK, FSMStates.S_TOOL_EXECUTION)
-        self.machine.add_transition('reply_text', FSMStates.S_ASSISTANT_THINK, FSMStates.S_EVALUATION)
-        self.machine.add_transition('tool_executed', FSMStates.S_TOOL_EXECUTION, FSMStates.S_ASSISTANT_THINK)
-        self.machine.add_transition('continue_conversation', FSMStates.S_EVALUATION, FSMStates.S_USER_ACTION)
-        self.machine.add_transition('finish_conversation', FSMStates.S_EVALUATION, FSMStates.S_FINISH)
+        self.machine.add_transition('user_generated', FSMStates.USER_GEN, FSMStates.ASSISTANT_THINK)
+        self.machine.add_transition('thought_generated', FSMStates.ASSISTANT_THINK, FSMStates.ASSISTANT_DECIDE)
+        self.machine.add_transition('decide_tool_call', FSMStates.ASSISTANT_DECIDE, FSMStates.TOOL_CALL_GEN)
+        self.machine.add_transition('decide_reply', FSMStates.ASSISTANT_DECIDE, FSMStates.ASSISTANT_REPLY_GEN)
+        self.machine.add_transition('tool_calls_generated', FSMStates.TOOL_CALL_GEN, FSMStates.TOOL_EXEC)
+        self.machine.add_transition('skip_tools_reply', FSMStates.TOOL_CALL_GEN, FSMStates.ASSISTANT_REPLY_GEN)  # 没有工具调用时直接回复
+        self.machine.add_transition('tools_executed', FSMStates.TOOL_EXEC, FSMStates.ASSISTANT_THINK)  # ReAct 闭环
+        self.machine.add_transition('reply_generated', FSMStates.ASSISTANT_REPLY_GEN, FSMStates.EVALUATION)
+        self.machine.add_transition('continue_dialogue', FSMStates.EVALUATION, FSMStates.USER_GEN)
+        self.machine.add_transition('finish_dialogue', FSMStates.EVALUATION, FSMStates.FINISH)
         # 允许从任何状态直接结束对话
-        self.machine.add_transition('finish_conversation', FSMStates.S_USER_ACTION, FSMStates.S_FINISH)
-        self.machine.add_transition('finish_conversation', FSMStates.S_ASSISTANT_THINK, FSMStates.S_FINISH)
-        self.machine.add_transition('finish_conversation', FSMStates.S_TOOL_EXECUTION, FSMStates.S_FINISH)
+        self.machine.add_transition('finish_dialogue', FSMStates.USER_GEN, FSMStates.FINISH)
+        self.machine.add_transition('finish_dialogue', FSMStates.ASSISTANT_THINK, FSMStates.FINISH)
+        self.machine.add_transition('finish_dialogue', FSMStates.ASSISTANT_DECIDE, FSMStates.FINISH)
+        self.machine.add_transition('finish_dialogue', FSMStates.TOOL_CALL_GEN, FSMStates.FINISH)
+        self.machine.add_transition('finish_dialogue', FSMStates.TOOL_EXEC, FSMStates.FINISH)
+        self.machine.add_transition('finish_dialogue', FSMStates.ASSISTANT_REPLY_GEN, FSMStates.FINISH)
 
         # 注意：transitions库会自动绑定名为 on_enter_{state_name} 的方法作为状态进入回调
         # 无需手动绑定，以避免重复绑定导致的回调执行问题
 
     # ==================== 状态回调方法 ====================
 
-    def on_enter_init(self):
-        """进入初始化状态"""
-        logger.info("🔄 [INIT] 对话初始化完成")
-        print(f"🔄 [INIT] 对话 {self.conversation_id} 初始化完成")
-        print(f"   📋 蓝图意图: {self.blueprint.intent}")
-        print(f"   🛠️ 必需工具: {self.blueprint.required_tools}")
-
-        # 自动触发开始对话
-        print("   🚀 自动开始对话...")
-        self.start_conversation()
-        print(f"   ✅ 状态转换完成，当前状态: {self.current_state}")
-
-    def on_enter_user_action(self):
-        """进入用户发言状态"""
-        logger.info("👤 [USER_ACTION] 用户准备发言")
+    def on_enter_user_gen(self):
+        """进入用户消息生成状态"""
+        logger.info("👤 [USER_GEN] 用户消息生成")
         self.user_turn_count += 1
-        print(f"👤 [USER_ACTION] 用户轮次 {self.user_turn_count}")
+        print(f"👤 [USER_GEN] 用户轮次 {self.user_turn_count}")
+
+        # 清空上一轮的缓冲区
+        self.context.clear_buffers()
 
         # 调用用户智能体生成消息
         user_message_content = self.user_agent.generate_message(
@@ -142,7 +144,7 @@ class ConversationLoop:
         if self.user_agent.is_task_complete(user_message_content):
             print("   ✅ 用户表示任务完成")
             self.context.is_completed = True
-            self.finish_conversation()
+            self.finish_dialogue()
             return
 
         # 创建消息对象并添加到上下文
@@ -151,50 +153,74 @@ class ConversationLoop:
         print(f"   💬 用户: {user_message.content}")
 
         # 触发到助手思考
-        self.user_speaks()
+        self.user_generated()
 
     def on_enter_assistant_think(self):
-        """进入助手思考状态"""
-        logger.info("🤖 [ASSISTANT_THINK] 助手正在思考")
-        print(f"🤖 [ASSISTANT_THINK] 助手正在分析用户输入...")
+        """进入助手思考状态 - 生成 CoT"""
+        logger.info("🤖 [ASSISTANT_THINK] 助手正在生成思考过程")
+        print(f"🤖 [ASSISTANT_THINK] 助手正在生成思考过程 (CoT)...")
 
-        # 调用助手智能体生成响应
-        assistant_response = self.assistant_agent.generate_response(self.context.messages)
+        # 调用助手智能体生成思考过程
+        thought_content = self.assistant_agent.generate_thought(self.context.messages)
 
-        # 解析工具调用
-        tool_calls = self.assistant_agent.parse_tool_calls(assistant_response)
+        # 存储到上下文缓冲区
+        self.context.current_thought = thought_content
+        print(f"   💭 思考过程: {thought_content[:100]}...")
+
+        # 触发到决策状态
+        self.thought_generated()
+
+    def on_enter_assistant_decide(self):
+        """进入助手决策状态 - 基于思考决定下一步"""
+        logger.info("🤖 [ASSISTANT_DECIDE] 助手正在决策")
+        print(f"🤖 [ASSISTANT_DECIDE] 基于思考过程进行决策...")
+
+        # 基于思考过程决定是否需要工具调用
+        needs_tools = self.assistant_agent.decide_tool_use(self.context.current_thought)
+
+        if needs_tools:
+            print("   🔧 决策: 需要调用工具")
+            self.decide_tool_call()
+        else:
+            print("   💬 决策: 直接回复")
+            self.decide_reply()
+
+    def on_enter_tool_call_gen(self):
+        """进入工具调用生成状态 - 生成具体的工具调用参数"""
+        logger.info("🔧 [TOOL_CALL_GEN] 生成工具调用参数")
+        print(f"🔧 [TOOL_CALL_GEN] 基于思考过程生成工具调用参数...")
+
+        # 基于思考过程生成工具调用
+        tool_calls = self.assistant_agent.generate_tool_calls(self.context.current_thought, self.tools)
 
         if tool_calls:
-            print(f"   🔧 检测到 {len(tool_calls)} 个工具调用")
-            # 将工具调用添加到pending列表
-            self.context.pending_tool_calls.extend(tool_calls)
+            # 为每个工具调用创建独立的 tool_call 消息（扁平化格式）
+            for tool_call in tool_calls:
+                tool_call_data = {
+                    "name": tool_call.name,
+                    "arguments": tool_call.arguments
+                }
+                tool_call_message = ChatMessage(
+                    role="tool_call",
+                    content=json.dumps(tool_call_data, ensure_ascii=False)
+                )
+                self.context.add_message(tool_call_message)
 
-            # 创建助手消息（包含所有工具调用）
-            assistant_message = ChatMessage(
-                role="assistant",
-                content=assistant_response,
-                tool_calls=tool_calls  # 记录所有并行工具调用
-            )
-            self.context.add_message(assistant_message)
+            # 同时存储到pending列表供后续执行
+            self.context.pending_tool_calls.extend(tool_calls)
+            print(f"   📝 生成 {len(tool_calls)} 个工具调用消息")
 
             # 触发工具执行
-            self.call_tool()
+            self.tool_calls_generated()
         else:
-            print("   💬 助手直接回复")
-            # 创建助手消息
-            assistant_message = ChatMessage(
-                role="assistant",
-                content=assistant_response
-            )
-            self.context.add_message(assistant_message)
+            print("   📝 没有生成工具调用，直接进入回复生成")
+            # 如果没有工具调用，直接进入回复生成状态
+            self.skip_tools_reply()
 
-            # 触发回复文本
-            self.reply_text()
-
-    def on_enter_tool_execution(self):
+    def on_enter_tool_exec(self):
         """进入工具执行状态"""
-        logger.info("🛠️ [TOOL_EXECUTION] 正在执行工具")
-        print(f"🛠️ [TOOL_EXECUTION] 执行工具调用...")
+        logger.info("🛠️ [TOOL_EXEC] 正在执行工具")
+        print(f"🛠️ [TOOL_EXEC] 执行工具调用...")
 
         # 处理所有pending的工具调用
         while self.context.pending_tool_calls:
@@ -228,7 +254,30 @@ class ConversationLoop:
             print(f"   ✅ 工具执行结果: {execution_result['response']}")
 
         # 返回到助手思考（ReAct闭环）
-        self.tool_executed()
+        self.tools_executed()
+
+    def on_enter_assistant_reply_gen(self):
+        """进入助手回复生成状态 - 生成最终回复文本"""
+        logger.info("🤖 [ASSISTANT_REPLY_GEN] 生成最终回复")
+        print(f"🤖 [ASSISTANT_REPLY_GEN] 基于思考过程生成最终回复...")
+
+        # 基于思考过程生成最终回复
+        reply_content = self.assistant_agent.generate_reply(self.context.current_thought, self.context.messages)
+
+        # 将思考过程和回复拼接为完整内容（用于训练数据格式）
+        full_content = f"{self.context.current_thought}\n\n{reply_content}"
+
+        # 创建助手消息（包含思考和回复）
+        assistant_message = ChatMessage(
+            role="assistant",
+            content=full_content
+        )
+        self.context.add_message(assistant_message)
+
+        print(f"   💬 助手回复: {full_content[:100]}...")
+
+        # 触发到评估状态
+        self.reply_generated()
 
     def on_enter_evaluation(self):
         """进入评估状态"""
@@ -250,11 +299,11 @@ class ConversationLoop:
 
         if should_finish:
             print("   🏁 满足结束条件，完成对话")
-            self.finish_conversation()
+            self.finish_dialogue()
             return  # 立即返回，避免后续逻辑
         else:
             print("   🔄 继续下一轮对话")
-            self.continue_conversation()
+            self.continue_dialogue()
 
     def on_enter_finish(self):
         """进入结束状态"""
@@ -278,10 +327,10 @@ class ConversationLoop:
         # 等待直到达到结束状态（最多等待100次，避免无限循环）
         max_wait = 100
         wait_count = 0
-        while self.current_state != FSMStates.S_FINISH and wait_count < max_wait:
+        while self.current_state != FSMStates.FINISH and wait_count < max_wait:
             wait_count += 1
 
-        if self.current_state == FSMStates.S_FINISH:
+        if self.current_state == FSMStates.FINISH:
             logger.info("🎉 对话循环运行完成")
             print("🎉 对话循环运行完成")
         else:

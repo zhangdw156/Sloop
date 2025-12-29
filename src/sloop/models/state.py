@@ -81,6 +81,8 @@ class ConversationContext(BaseModel):
 
     current_user_intent: Optional[str] = Field(None, description="当前用户意图")
     pending_tool_calls: List[ToolCall] = Field(default_factory=list, description="待处理的工具调用")
+    current_thought: Optional[str] = Field(None, description="当前 Assistant 的思考过程 (CoT) 缓冲区")
+    scratchpad: Dict[str, Any] = Field(default_factory=dict, description="状态机流转过程中的临时变量存储")
 
     max_turns: int = Field(default=10, description="最大对话轮次限制")
     is_completed: bool = Field(default=False, description="对话是否完成")
@@ -105,6 +107,13 @@ class ConversationContext(BaseModel):
     def complete_conversation(self) -> None:
         """标记对话完成"""
         self.is_completed = True
+        self.updated_at = datetime.now()
+
+    def clear_buffers(self) -> None:
+        """清空临时缓冲区，为下一轮对话做准备"""
+        self.current_thought = None
+        self.pending_tool_calls.clear()
+        self.scratchpad.clear()
         self.updated_at = datetime.now()
 
     def get_last_message(self) -> Optional[ChatMessage]:

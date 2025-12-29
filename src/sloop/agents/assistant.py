@@ -132,6 +132,192 @@ class AssistantAgent:
         """
         return len(self.parse_tool_calls(response)) > 0
 
+    def generate_thought(self, conversation_history: List[ChatMessage]) -> str:
+        """
+        生成助手思考过程 (Chain of Thought)
+
+        参数:
+            conversation_history: 对话历史消息列表
+
+        返回:
+            思考过程字符串
+        """
+        logger.info("Generating assistant thought process (CoT)")
+
+        # 构造思考提示
+        prompt = f"""Based on the conversation history, generate a step-by-step reasoning process for how to respond to the user's latest message.
+
+Conversation History:
+{self._format_history(conversation_history)}
+
+Please provide a detailed thought process considering:
+1. What the user is asking for
+2. What information you have
+3. What tools might be needed
+4. How to structure your response
+
+Thought Process:"""
+
+        # 调用LLM生成思考过程
+        thought = chat_completion(
+            prompt=prompt,
+            system_message="You are a reasoning AI that generates detailed thought processes. Be thorough and logical.",
+            json_mode=False
+        )
+
+        if not thought or thought.startswith("调用错误"):
+            logger.error(f"Failed to generate thought: {thought}")
+            return "I need to analyze the user's request and determine the best way to respond."
+
+        logger.info(f"Generated thought: {thought[:100]}...")
+        return thought.strip()
+
+    def decide_tool_use(self, thought: str) -> bool:
+        """
+        基于思考过程决定是否需要使用工具
+
+        参数:
+            thought: 思考过程字符串
+
+        返回:
+            是否需要使用工具
+        """
+        logger.info("Deciding whether to use tools based on thought process")
+
+        prompt = f"""Based on the following thought process, determine if tools are needed to fulfill the user's request.
+
+Thought Process:
+{thought}
+
+Available Tools:
+{self._format_tools()}
+
+Answer with only 'YES' or 'NO': Do tools need to be called?"""
+
+        decision = chat_completion(
+            prompt=prompt,
+            system_message="You are a decision-making AI. Answer only with YES or NO.",
+            json_mode=False
+        ).strip().upper()
+
+        needs_tools = decision.startswith('YES')
+        logger.info(f"Tool use decision: {needs_tools}")
+        return needs_tools
+
+    def generate_tool_calls(self, thought: str, tools: List[ToolDefinition]) -> List[ToolCall]:
+        """
+        基于思考过程生成工具调用
+
+        参数:
+            thought: 思考过程字符串
+            tools: 可用的工具列表
+
+        返回:
+            工具调用列表
+        """
+        logger.info("Generating tool calls based on thought process")
+
+        prompt = f"""Based on the thought process, generate the appropriate tool calls in JSON format.
+
+Thought Process:
+{thought}
+
+Available Tools:
+{self._format_tools()}
+
+Generate tool calls as a JSON array. Each tool call should have 'name' and 'arguments' fields.
+If no tools are needed, return an empty array.
+
+Tool Calls:"""
+
+        response = chat_completion(
+            prompt=prompt,
+            system_message="You are a tool-calling AI. Generate tool calls in valid JSON format.",
+            json_mode=True
+        )
+
+        try:
+            tool_calls_data = json.loads(response)
+            if not isinstance(tool_calls_data, list):
+                tool_calls_data = [tool_calls_data]
+
+            tool_calls = []
+            for call_data in tool_calls_data:
+                if isinstance(call_data, dict) and 'name' in call_data and 'arguments' in call_data:
+                    tool_name = call_data['name']
+                    if tool_name in self.tool_map:
+                        tool_call = ToolCall(
+                            name=tool_name,
+                            arguments=call_data['arguments']
+                        )
+                        tool_calls.append(tool_call)
+                        logger.info(f"Generated tool call: {tool_name}")
+
+            return tool_calls
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Failed to parse generated tool calls: {e}")
+            return []
+
+    def generate_reply(self, thought: str, conversation_history: List[ChatMessage]) -> str:
+        """
+        基于思考过程生成最终回复
+
+        参数:
+            thought: 思考过程字符串
+            conversation_history: 对话历史消息列表
+
+        返回:
+            最终回复字符串
+        """
+        logger.info("Generating final reply based on thought process")
+
+        prompt = f"""Based on your thought process, generate a helpful and natural response to the user.
+
+Thought Process:
+{thought}
+
+Conversation History:
+{self._format_history(conversation_history)}
+
+Generate a response that:
+1. Addresses the user's needs
+2. Is helpful and friendly
+3. Uses information from the thought process
+4. Does not mention internal reasoning
+
+Response:"""
+
+        reply = chat_completion(
+            prompt=prompt,
+            system_message="You are a helpful AI assistant. Generate natural, helpful responses.",
+            json_mode=False
+        )
+
+        if not reply or reply.startswith("调用错误"):
+            logger.error(f"Failed to generate reply: {reply}")
+            return "I'm here to help! How can I assist you?"
+
+        logger.info(f"Generated reply: {reply[:100]}...")
+        return reply.strip()
+
+    def _format_history(self, history: List[ChatMessage]) -> str:
+        """格式化对话历史"""
+        formatted = []
+        for msg in history:
+            formatted.append(f"{msg.role}: {msg.content}")
+        return "\n".join(formatted)
+
+    def _format_tools(self) -> str:
+        """格式化工具列表"""
+        formatted = []
+        for tool in self.tools:
+            formatted.append(f"- {tool.name}: {tool.description}")
+            if tool.parameters and 'properties' in tool.parameters:
+                for prop_name, prop_info in tool.parameters['properties'].items():
+                    formatted.append(f"  * {prop_name}: {prop_info.get('description', 'No description')}")
+        return "\n".join(formatted)
+
 
 # ==================== 测试代码 ====================
 

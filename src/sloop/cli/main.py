@@ -33,20 +33,20 @@ def main():
 
 def convert_to_training_format(tools: List[ToolDefinition], messages: List[ChatMessage]) -> dict:
     """
-    将内部消息格式转换为训练数据格式
+    将内部消息格式转换为扁平化的训练数据格式
 
     参数:
         tools: 活跃的工具定义列表
         messages: 对话消息列表
 
     返回:
-        训练数据格式的字典
+        训练数据格式的字典（扁平化格式）
     """
     # 转换tools为JSON字符串
     tools_list = [tool.model_dump() for tool in tools]
     tools_str = json.dumps(tools_list, ensure_ascii=False)
 
-    # 转换messages
+    # 转换messages为扁平化格式
     converted_messages = []
     for msg in messages:
         if msg.role == "user":
@@ -55,15 +55,11 @@ def convert_to_training_format(tools: List[ToolDefinition], messages: List[ChatM
                 "role": "user",
                 "content": msg.content
             })
-        elif msg.role == "assistant" and msg.tool_call:
-            # 助手消息（有工具调用）-> tool_call
-            tool_call_data = {
-                "name": msg.tool_call.name,
-                "arguments": msg.tool_call.arguments
-            }
+        elif msg.role == "tool_call":
+            # 工具调用消息（FSM中已创建独立的tool_call消息）
             converted_messages.append({
                 "role": "tool_call",
-                "content": json.dumps(tool_call_data, ensure_ascii=False)
+                "content": msg.content
             })
         elif msg.role == "tool":
             # 工具响应 -> tool_response
@@ -72,7 +68,7 @@ def convert_to_training_format(tools: List[ToolDefinition], messages: List[ChatM
                 "content": msg.content
             })
         elif msg.role == "assistant":
-            # 助手消息（无工具调用）保持不变
+            # 助手消息（已包含思考 + 回复）
             converted_messages.append({
                 "role": "assistant",
                 "content": msg.content
