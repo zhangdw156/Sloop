@@ -265,7 +265,7 @@ class ConversationLoop:
         reply_content = self.assistant_agent.generate_reply(self.context.current_thought, self.context.messages)
 
         # 将思考过程和回复拼接为完整内容（用于训练数据格式）
-        full_content = f"{self.context.current_thought}\n\n{reply_content}"
+        full_content = f"<think>\n{self.context.current_thought}\n</think>\n\n{reply_content}"
 
         # 创建助手消息（包含思考和回复）
         assistant_message = ChatMessage(
