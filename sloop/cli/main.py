@@ -83,10 +83,10 @@ def convert_to_training_format(tools: List[ToolDefinition], messages: List[ChatM
 @app.command()
 def generate(
     input_file: str = typer.Option("tests/data/tools.json", "--input", "-i", help="工具定义文件路径"),
-    output_file: str = typer.Option("output.jsonl", "--output", "-o", help="输出文件路径"),
-    count: int = typer.Option(1, "--count", "-c", help="生成对话数量"),
+    output_file: str = typer.Option("tests/data/output.json", "--output", "-o", help="输出文件路径"),
+    count: int = typer.Option(2, "--count", "-c", help="生成对话数量"),
     max_turns: int = typer.Option(20, "--max-turns", "-t", help="最大对话轮数"),
-    chain_length: int = typer.Option(3, "--chain-length", "-l", help="工具链长度"),
+    chain_length: int = typer.Option(5, "--chain-length", "-l", help="工具链长度"),
 ):
     """
     生成多轮工具调用对话数据

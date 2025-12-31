@@ -138,12 +138,13 @@ class AssistantAgent:
         """
         return len(self.parse_tool_calls(response)) > 0
 
-    def generate_thought(self, conversation_history: List[ChatMessage]) -> str:
+    def generate_thought(self, conversation_history: List[ChatMessage], context_hint: str = "") -> str:
         """
         生成助手思考过程 (Chain of Thought)
 
         参数:
             conversation_history: 对话历史消息列表
+            context_hint: 栈上下文提示信息（可选）
 
         返回:
             思考过程字符串
@@ -151,7 +152,7 @@ class AssistantAgent:
         logger.info("Generating assistant thought process (CoT)")
 
         # 使用模板渲染提示
-        prompt = render_assistant_think_prompt(conversation_history)
+        prompt = render_assistant_think_prompt(conversation_history, context_hint)
 
         # 调用LLM生成思考过程
         thought = chat_completion(

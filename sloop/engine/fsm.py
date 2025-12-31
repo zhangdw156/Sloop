@@ -123,6 +123,28 @@ class ConversationLoop:
         # 注意：transitions库会自动绑定名为 on_enter_{state_name} 的方法作为状态进入回调
         # 无需手动绑定，以避免重复绑定导致的回调执行问题
 
+    def _generate_context_hint(self) -> str:
+        """生成栈上下文提示信息"""
+        stack_top = self.context.peek_context()
+        if not stack_top or stack_top["type"] == "ROOT":
+            return ""
+
+        if stack_top["type"] == "WAITING_FOR_TOOLS":
+            tool_names = stack_top["data"].get("tool_names", [])
+            intent = stack_top["data"].get("intent", "未知意图")
+            nested_level = stack_top["data"].get("nested_level", 0)
+            indent = "  " * nested_level
+            return f"{indent}系统提示：你正在等待工具结果来完成子任务。等待的工具：{', '.join(tool_names)}。任务意图：{intent}。请基于最新工具结果继续推理。"
+
+        return ""
+
+    def _extract_intent_from_thought(self, thought: str) -> str:
+        """从思考过程中提取意图摘要"""
+        if not thought:
+            return "未知意图"
+        # 简单提取前50个字符作为意图摘要
+        return thought[:50].strip() + "..." if len(thought) > 50 else thought.strip()
+
     # ==================== 状态回调方法 ====================
 
     def on_enter_user_gen(self):
@@ -140,17 +162,25 @@ class ConversationLoop:
             self.context.messages
         )
 
-        # 检查是否任务完成
-        if self.user_agent.is_task_complete(user_message_content):
+        # 检查是否任务完成，并处理停止标记
+        should_stop = self.user_agent.is_task_complete(user_message_content)
+        if should_stop:
+            # 剥离停止标记，保留干净的消息内容
+            user_message_content = user_message_content.replace("###STOP###", "").strip()
             print("   ✅ 用户表示任务完成")
+
+        # 如果消息内容不为空，始终添加到对话历史
+        if user_message_content:
+            # 创建消息对象并添加到上下文
+            user_message = ChatMessage(role="user", content=user_message_content)
+            self.context.add_message(user_message)
+            print(f"   💬 用户: {user_message.content}")
+
+        # 如果需要停止，则标记完成并结束对话
+        if should_stop:
             self.context.is_completed = True
             self.finish_dialogue()
             return
-
-        # 创建消息对象并添加到上下文
-        user_message = ChatMessage(role="user", content=user_message_content)
-        self.context.add_message(user_message)
-        print(f"   💬 用户: {user_message.content}")
 
         # 触发到助手思考
         self.user_generated()
@@ -159,9 +189,13 @@ class ConversationLoop:
         """进入助手思考状态 - 生成 CoT"""
         logger.info("🤖 [ASSISTANT_THINK] 助手正在生成思考过程")
         print(f"🤖 [ASSISTANT_THINK] 助手正在生成思考过程 (CoT)...")
+        print(f"   📚 当前栈状态: {[frame['type'] for frame in self.context.stack]}")
+
+        # 生成栈上下文提示
+        context_hint = self._generate_context_hint()
 
         # 调用助手智能体生成思考过程
-        thought_content = self.assistant_agent.generate_thought(self.context.messages)
+        thought_content = self.assistant_agent.generate_thought(self.context.messages, context_hint)
 
         # 存储到上下文缓冲区
         self.context.current_thought = thought_content
@@ -175,13 +209,25 @@ class ConversationLoop:
         logger.info("🤖 [ASSISTANT_DECIDE] 助手正在决策")
         print(f"🤖 [ASSISTANT_DECIDE] 基于思考过程进行决策...")
 
+        # 检查栈顶是否为WAITING_FOR_TOOLS，如果是则根据决策进行POP操作
+        stack_top = self.context.peek_context()
+        was_waiting = stack_top and stack_top["type"] == "WAITING_FOR_TOOLS"
+
         # 基于思考过程决定是否需要工具调用
         needs_tools = self.assistant_agent.decide_tool_use(self.context.current_thought)
 
         if needs_tools:
+            if was_waiting:
+                # 任务进展：POP旧的WAITING帧，为新的工具调用让路
+                popped = self.context.pop_context()
+                print(f"   📚 POP 栈: {popped['type']} - 任务进展，继续调用工具")
             print("   🔧 决策: 需要调用工具")
             self.decide_tool_call()
         else:
+            if was_waiting:
+                # 子任务完成：POP WAITING帧
+                popped = self.context.pop_context()
+                print(f"   📚 POP 栈: {popped['type']} - 子任务完成")
             print("   💬 决策: 直接回复")
             self.decide_reply()
 
@@ -194,6 +240,16 @@ class ConversationLoop:
         tool_calls = self.assistant_agent.generate_tool_calls(self.context.current_thought, self.tools)
 
         if tool_calls:
+            # PUSH 等待工具结果的上下文帧
+            tool_names = [tc.name for tc in tool_calls]
+            nested_level = self.context.get_stack_depth()
+            self.context.push_context("WAITING_FOR_TOOLS", {
+                "tool_names": tool_names,
+                "intent": self._extract_intent_from_thought(self.context.current_thought),
+                "nested_level": nested_level
+            })
+            print(f"   📚 PUSH 栈: WAITING_FOR_TOOLS - 工具: {tool_names}")
+
             # 为每个工具调用创建独立的 tool_call 消息（扁平化格式）
             for tool_call in tool_calls:
                 tool_call_data = {

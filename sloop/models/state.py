@@ -84,6 +84,9 @@ class ConversationContext(BaseModel):
     current_thought: Optional[str] = Field(None, description="当前 Assistant 的思考过程 (CoT) 缓冲区")
     scratchpad: Dict[str, Any] = Field(default_factory=dict, description="状态机流转过程中的临时变量存储")
 
+    # PDA Stack: 用于实现Pushdown Automaton，支持嵌套工具调用和上下文管理
+    stack: List[Dict[str, Any]] = Field(default_factory=lambda: [{"type": "ROOT", "data": {}}], description="对话栈，用于跟踪待处理的任务上下文")
+
     max_turns: int = Field(default=10, description="最大对话轮次限制")
     is_completed: bool = Field(default=False, description="对话是否完成")
 
@@ -127,6 +130,28 @@ class ConversationContext(BaseModel):
             if msg.tool_call:
                 tool_calls.append(msg.tool_call)
         return tool_calls
+
+    def push_context(self, context_type: str, data: Dict[str, Any] = None) -> None:
+        """推入新的上下文帧到栈顶"""
+        frame = {"type": context_type, "data": data or {}}
+        self.stack.append(frame)
+        self.updated_at = datetime.now()
+
+    def pop_context(self) -> Optional[Dict[str, Any]]:
+        """弹出栈顶上下文帧"""
+        if len(self.stack) > 1:  # 保留ROOT帧
+            frame = self.stack.pop()
+            self.updated_at = datetime.now()
+            return frame
+        return None
+
+    def peek_context(self) -> Optional[Dict[str, Any]]:
+        """查看栈顶上下文帧（不弹出）"""
+        return self.stack[-1] if self.stack else None
+
+    def get_stack_depth(self) -> int:
+        """获取栈深度（不包括ROOT）"""
+        return len(self.stack) - 1
 
     def __str__(self) -> str:
         """上下文的字符串表示"""

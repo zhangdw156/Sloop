@@ -59,7 +59,7 @@ line-ending = "auto"
 indent-style = "space"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/sloop"]
+packages = ["sloop"]
 
 [tool.pytest.ini_options]
 markers = [

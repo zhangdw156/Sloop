@@ -3,10 +3,10 @@ from pathlib import Path
 
 # ================= 配置区域 =================
 # 项目根目录 (当前目录用 '.')
-SOURCE_DIR = r"." 
+SOURCE_DIR = r"sloop" 
 
 # 输出文件名
-OUTPUT_FILE = r"project_context.txt"
+OUTPUT_FILE = r"sloop_context.txt"
 
 # 要忽略的文件夹 (非常重要，防止无关文件占用 Token)
 IGNORE_DIRS = {

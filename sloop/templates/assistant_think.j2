@@ -5,6 +5,11 @@
 {{ message.role }}: {{ message.content }}
 {% endfor %}
 
+{% if context_hint %}
+## 当前上下文状态
+{{ context_hint }}
+{% endif %}
+
 ## 指令
 请提供详细的思考过程，考虑：
 1. 用户在问什么

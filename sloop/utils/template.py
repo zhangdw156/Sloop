@@ -249,12 +249,13 @@ def get_assistant_think_template():
     return _load_template("assistant_think")
 
 
-def render_assistant_think_prompt(conversation_history: list) -> str:
+def render_assistant_think_prompt(conversation_history: list, context_hint: str = "") -> str:
     """
     渲染助手思考提示
 
     参数:
         conversation_history: 对话历史消息列表
+        context_hint: 栈上下文提示信息（可选）
 
     返回:
         渲染后的提示字符串
@@ -270,7 +271,7 @@ def render_assistant_think_prompt(conversation_history: list) -> str:
         }
         history_dict.append(msg_dict)
 
-    return template.render(conversation_history=history_dict)
+    return template.render(conversation_history=history_dict, context_hint=context_hint)
 
 
 def get_assistant_decide_template():
