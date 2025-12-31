@@ -125,52 +125,7 @@ def render_user_prompt(intent: str, conversation_history: list) -> str:
     )
 
 
-def get_assistant_template():
-    """
-    获取助手智能体模板
 
-    返回:
-        编译后的Jinja2模板对象
-    """
-    return _load_template("assistant")
-
-
-def render_assistant_prompt(tools: list, conversation_history: list) -> str:
-    """
-    渲染助手智能体提示
-
-    参数:
-        tools: 工具定义列表
-        conversation_history: 对话历史消息列表
-
-    返回:
-        渲染后的提示字符串
-    """
-    template = get_assistant_template()
-
-    # 转换消息对象为字典格式
-    history_dict = []
-    for message in conversation_history:
-        msg_dict = {
-            "role": message.role,
-            "content": message.content
-        }
-        history_dict.append(msg_dict)
-
-    # 转换工具对象为字典格式
-    tools_dict = []
-    for tool in tools:
-        tool_dict = {
-            "name": tool.name,
-            "description": tool.description,
-            "parameters": tool.parameters.model_dump() if hasattr(tool.parameters, 'model_dump') else tool.parameters
-        }
-        tools_dict.append(tool_dict)
-
-    return template.render(
-        tools=tools_dict,
-        conversation_history=history_dict
-    )
 
 
 def get_service_template():

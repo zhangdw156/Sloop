@@ -11,7 +11,6 @@ from typing import List, Optional, Dict, Any
 from ..models import ToolDefinition, ChatMessage, ToolCall
 from ..utils.llm import chat_completion
 from ..utils.template import (
-    render_assistant_prompt,
     render_assistant_think_prompt,
     render_assistant_decide_prompt,
     render_tool_call_gen_prompt,
@@ -41,37 +40,7 @@ class AssistantAgent:
 
         logger.info(f"AssistantAgent initialized with {len(tools)} tools")
 
-    def generate_response(
-        self,
-        conversation_history: List[ChatMessage]
-    ) -> str:
-        """
-        生成助手响应
 
-        参数:
-            conversation_history: 对话历史消息列表
-
-        返回:
-            助手响应字符串，可能包含工具调用信息
-        """
-        logger.info("Generating assistant response")
-
-        # 构造提示
-        prompt = render_assistant_prompt(self.tools, conversation_history)
-
-        # 调用LLM生成响应
-        response = chat_completion(
-            prompt=prompt,
-            system_message="You are a helpful AI assistant with access to various tools. Use tools when appropriate to help the user.",
-            json_mode=False  # 让模型自由输出，可能包含工具调用
-        )
-
-        if not response or response.startswith("调用错误"):
-            logger.error(f"Failed to generate assistant response: {response}")
-            return "I'm sorry, I encountered an error. How can I help you?"  # 默认响应
-
-        logger.info(f"Generated assistant response: {response[:100]}...")
-        return response.strip()
 
     def parse_tool_calls(self, response: str) -> List[ToolCall]:
         """
@@ -324,35 +293,22 @@ if __name__ == "__main__":
     print("🔧 初始化AssistantAgent...")
     assistant_agent = AssistantAgent(mock_tools)
 
-    print("💭 生成助手响应...")
+    print("🔧 测试工具调用解析...")
     try:
-        response = assistant_agent.generate_response(mock_history)
-
-        print("✅ 生成成功！")
-        print(f"📝 响应内容: {response}")
+        # 测试解析功能
+        mock_response = '我来帮你搜索上海的意大利餐厅。{"tool_name": "search_restaurants", "arguments": {"city": "上海", "cuisine": "意大利菜"}}'
+        print(f"📝 测试响应: {mock_response}")
 
         # 解析工具调用
-        tool_calls = assistant_agent.parse_tool_calls(response)
+        tool_calls = assistant_agent.parse_tool_calls(mock_response)
         if tool_calls:
             print(f"🔧 检测到 {len(tool_calls)} 个工具调用:")
             for i, tool_call in enumerate(tool_calls, 1):
-                print(f"  {i}. {tool_call.tool_name}: {tool_call.arguments}")
+                print(f"  {i}. {tool_call.name}: {tool_call.arguments}")
         else:
             print("💬 纯文本响应，无工具调用")
 
     except Exception as e:
-        print(f"❌ 生成失败: {e}")
-
-        # 如果LLM调用失败，提供模拟结果
-        print("\n🔧 提供模拟助手响应:")
-        mock_response = '我来帮你搜索上海的意大利餐厅。{"tool_name": "search_restaurants", "arguments": {"city": "上海", "cuisine": "意大利菜"}}'
-        print(mock_response)
-
-        # 测试解析
-        tool_calls = assistant_agent.parse_tool_calls(mock_response)
-        if tool_calls:
-            print(f"🔧 解析出 {len(tool_calls)} 个工具调用:")
-            for tool_call in tool_calls:
-                print(f"  - {tool_call.name}: {tool_call.arguments}")
+        print(f"❌ 解析失败: {e}")
 
     print("\n✅ Assistant Agent 测试完成！")
