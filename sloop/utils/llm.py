@@ -7,7 +7,7 @@ LLM 调用封装工具
 import logging
 from typing import List, Dict, Any, Optional, Union
 import litellm
-from ..config import get_settings
+from sloop.config import get_settings
 
 # 设置日志
 logger = logging.getLogger(__name__)

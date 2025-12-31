@@ -6,9 +6,9 @@
 
 import logging
 from typing import List, Optional
-from ..models import Blueprint, ChatMessage
-from ..utils.llm import chat_completion
-from ..utils.template import render_user_prompt
+from sloop.models import Blueprint, ChatMessage
+from sloop.utils.llm import chat_completion
+from sloop.utils.template import render_user_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     print("🤖 User Agent 测试")
     print("=" * 50)
 
-    from ..models import Blueprint
+    from sloop.models import Blueprint
 
     # 创建模拟blueprint
     mock_blueprint = Blueprint(

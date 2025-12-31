@@ -8,9 +8,9 @@ import logging
 import json
 import re
 from typing import List, Optional, Dict, Any
-from ..models import ToolDefinition, ChatMessage, ToolCall
-from ..utils.llm import chat_completion
-from ..utils.template import (
+from sloop.models import ToolDefinition, ChatMessage, ToolCall
+from sloop.utils.llm import chat_completion
+from sloop.utils.template import (
     render_assistant_think_prompt,
     render_assistant_decide_prompt,
     render_tool_call_gen_prompt,
@@ -243,7 +243,7 @@ if __name__ == "__main__":
     print("🤖 Assistant Agent 测试")
     print("=" * 50)
 
-    from ..models import ToolDefinition, ChatMessage
+    from sloop.models import ToolDefinition, ChatMessage
 
     # 创建模拟工具
     mock_tools = [

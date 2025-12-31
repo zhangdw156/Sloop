@@ -8,7 +8,7 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
 
-from .schema import ChatMessage, ToolCall
+from sloop.models.schema import ChatMessage, ToolCall
 
 
 class EnvState(BaseModel):

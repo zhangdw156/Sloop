@@ -7,7 +7,7 @@ Sloop - 智能对话循环系统
 __version__ = "0.1.0"
 
 # 导出主要组件
-from . import config
-from . import models
-from . import engine
-from . import utils
+from sloop import config
+from sloop import models
+from sloop import engine
+from sloop import utils

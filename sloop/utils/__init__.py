@@ -4,7 +4,7 @@
 导出各种实用工具函数。
 """
 
-from .llm import completion
+from sloop.utils.llm import completion
 
 __all__ = [
     "completion",

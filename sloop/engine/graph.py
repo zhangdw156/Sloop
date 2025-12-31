@@ -10,7 +10,7 @@ import random
 from typing import List, Dict, Set, Tuple, Optional
 import networkx as nx
 
-from ..models import ToolDefinition
+from sloop.models import ToolDefinition
 
 
 class ToolGraphBuilder:

@@ -12,9 +12,9 @@ from typing import Optional, List
 import typer
 from tqdm import tqdm
 
-from ..engine import BlueprintGenerator
-from ..engine.pda import ConversationPDA
-from ..models import ToolDefinition, ChatMessage, ToolCall
+from sloop.engine import BlueprintGenerator
+from sloop.engine.pda import ConversationPDA
+from sloop.models import ToolDefinition, ChatMessage, ToolCall
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)

@@ -10,8 +10,8 @@ import logging
 from typing import Optional, List
 from transitions import Machine
 
-from ..models import ConversationContext, Blueprint, ChatMessage, ToolCall, ToolDefinition
-from ..agents import UserAgent, AssistantAgent, ServiceAgent
+from sloop.models import ConversationContext, Blueprint, ChatMessage, ToolCall, ToolDefinition
+from sloop.agents import UserAgent, AssistantAgent, ServiceAgent
 
 # 设置日志
 logger = logging.getLogger(__name__)

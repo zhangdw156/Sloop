@@ -7,9 +7,9 @@
 import logging
 import json
 from typing import Dict, Any, Optional
-from ..models import ToolCall, Blueprint, EnvState
-from ..utils.llm import chat_completion
-from ..utils.template import render_service_prompt
+from sloop.models import ToolCall, Blueprint, EnvState
+from sloop.utils.llm import chat_completion
+from sloop.utils.template import render_service_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -117,7 +117,7 @@ if __name__ == "__main__":
     print("🔧 Service Agent 测试")
     print("=" * 50)
 
-    from ..models import ToolCall, Blueprint, EnvState
+    from sloop.models import ToolCall, Blueprint, EnvState
 
     # 创建模拟工具调用
     mock_tool_call = ToolCall(

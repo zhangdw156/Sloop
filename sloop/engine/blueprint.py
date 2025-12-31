@@ -7,10 +7,10 @@
 import json
 import logging
 from typing import List, Optional
-from ..models import Blueprint, ToolDefinition
-from .graph import ToolGraphBuilder
-from ..utils.template import render_planner_prompt
-from ..utils.llm import chat_completion
+from sloop.models import Blueprint, ToolDefinition
+from sloop.engine.graph import ToolGraphBuilder
+from sloop.utils.template import render_planner_prompt
+from sloop.utils.llm import chat_completion
 
 logger = logging.getLogger(__name__)
 
