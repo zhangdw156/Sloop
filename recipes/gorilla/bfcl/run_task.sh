@@ -62,7 +62,7 @@ log "Running BFCL Evaluate..."
 
 bfcl evaluate \
   --model "$MODEL_NAME" \
-  --test-category "$EVAL_CATEGORY" \
+  --test-category "$TEST_CATEGORY" \
   --partial-eval
 
 # ================= 5. 结果归档 =================

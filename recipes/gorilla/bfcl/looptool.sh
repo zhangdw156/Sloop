@@ -19,8 +19,7 @@ export MODEL_NAME="Qwen/Qwen3-8B-FC"
 export LOCAL_MODEL_PATH="/dfs/data/models/Qwen3-8B"
 
 # 4. 评测配置
-export TEST_CATEGORY="multi_turn"          # generate 阶段用的
-export EVAL_CATEGORY="multi_turn_base"     # evaluate 阶段用的
+export TEST_CATEGORY="multi_turn"
 export THREADS=32
 export GPU_MEM_UTIL=0.9
 
