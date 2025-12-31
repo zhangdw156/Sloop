@@ -1,0 +1,12 @@
+基于以下思考过程，判断是否需要调用工具来完成用户的请求。
+
+## 思考过程
+{{ thought }}
+
+## 可用工具
+{% for tool in tools %}
+- {{ tool.name }}: {{ tool.description }}
+{% endfor %}
+
+## 指令
+只回答"YES"或"NO"：是否需要调用工具？

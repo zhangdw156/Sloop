@@ -17,6 +17,9 @@ dependencies = [
     "crewai>=0.70.0",
     "networkx>=3.0",
     "matplotlib>=3.5.0",
+    "transitions>=0.9.0",
+    "litellm>=1.40.0",
+    "jinja2>=3.1.0",
 ]
 
 [project.optional-dependencies]
@@ -54,6 +57,9 @@ preview = true
 line-ending = "auto"
 # 缩进使用 4 个空格
 indent-style = "space"
+
+[tool.hatch.build.targets.wheel]
+packages = ["sloop"]
 
 [tool.pytest.ini_options]
 markers = [

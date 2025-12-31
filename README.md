@@ -1,262 +1,110 @@
-<h1 align="center"> <img src="./assets/logo.png" width="270" style="vertical-align:middle;"/><br>Sloop: A Self-Evolving Framework for LLM Tool Calls</a></h1>
+# Sloop
 
-<p align="center">
-  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
-  <img src="https://img.shields.io/badge/Python-3.9+-blue.svg" alt="Python 3.9+">
-</p>
+**Sloop** 是一个基于下推自动机 (Pushdown Automaton, PDA) 的多轮工具调用 (Tool-Use) 数据生成框架。它通过模拟 User、Assistant 和 Service 三方的交互，自动生成高质量、逻辑严密的对话数据，用于训练和评估大语言模型的工具调用能力。
 
-<p align="center">
-  <a href="#%EF%B8%8F-overview">Overview</a> •
-  <a href="#-installation">Installation</a> •
-  <a href="#-usage">Usage</a> •
-  <a href="#-future-work">Future Work</a> •
-  <a href="#-acknowledgement">Acknowledgement</a>
-</p>
+## ✨ 核心特性
 
-<h5 align="center"> If you like our project, please give us a star ⭐ on GitHub for the latest update.</h5>
+- **PDA 驱动引擎**: 摒弃传统的有限状态机 (FSM)，采用下推自动机 (PDA) 管理对话状态。利用栈结构处理嵌套的工具调用和复杂的对话流转，状态管理更加灵活强大。
+- **多智能体模拟 (Multi-Agent Simulation)**:
+  - **User Agent**: 基于意图 (Intent) 和蓝图 (Blueprint) 模拟用户行为。
+  - **Assistant Agent**: 模拟被测模型，执行思考 (Think)、决策 (Decide) 和工具调用 (Tool Call)。
+  - **Service Agent**: 模拟真实 API 服务，维护环境状态 (Environment State)，返回执行结果。
+- **智能蓝图生成 (Blueprint Generation)**: 结合工具图谱 (Tool Graph) 分析和 LLM 的想象力，自动生成合理的对话意图和任务蓝图。
+- **工具图谱构建**: 使用 NetworkX 构建参数级的工具依赖图，确保生成的工具调用序列符合逻辑依赖。
+- **全异步/流式支持**: 核心组件设计支持异步操作（具体实现视 LLM 客户端而定）。
 
-## 📣 Latest News
-- **[December, 2025]**: 🚀 Sloop is released! The core framework and `gen` command are now available.
+## 🛠️ 安装指南
 
-## 💡 Overview
+本项目推荐使用 [uv](https://github.com/astral-sh/uv) 进行依赖管理和环境配置。
 
-Sloop is an open-source framework inspired by LoopTool, designed to close the data-training loop for robust Large Language Model (LLM) tool calls. Our goal is to create a fully automated, model-aware system that iteratively refines both data and models to overcome the limitations of static data pipelines.
+### 前置要求
 
-Sloop follows a strong-weak model (Teacher-Student) closed-loop paradigm:
-- **Strong Model (Teacher API)**: Used for `gen` (generating high-quality initial data) and `optimize` (executing JGLV label correction and EDDE error-driven expansion).
-- **Weak Model (Student API)**: The target model to be optimized. Used for `probe` (executing Greedy Capability Probing to identify boundary cases).
+- Python >= 3.12
+- uv (可选，但推荐)
 
-### ✨ The New Sloop Framework (v0.2.0)
+### 使用 uv 安装 (推荐)
 
-**基于CrewAI的分层多智能体架构**：
-
-```
-高层编排Agent (CrewAI)
-├── API分析专家      - 分析API结构
-├── 场景规划师       - 设计场景和用户画像
-├── 对话协调器       - 协调对话生成
-└── 质量评估师       - 评估数据质量
-
-低层对话Agent (核心角色)
-├── User Agent       - 模拟用户行为
-├── Assistant Agent  - 生成回复和工具调用
-└── Service Agent    - 模拟API执行结果
-```
-
-**核心创新**：
-- **分层Agent架构**: 高层编排vs低层执行的清晰分工
-- **用户画像系统**: 7种用户类型，支持多样化对话生成
-- **智能API结构化**: 树形/图形组织，支持游走采样
-- **多轮对话控制**: 指定目标轮数，生成高质量长对话
-- **CrewAI集成**: 专业多Agent协作框架
-
-**Key Features:**
-- **Hierarchical Agent System**: 分层设计，实现复杂任务编排
-- **User Profile Engine**: 7种用户画像，生成真实对话行为
-- **Intelligent Sampling**: 树游走/图连通采样，构造合理API组合
-- **Multi-turn Control**: 精确控制对话轮数（±40%偏差）
-- **Production Ready**: 完整的CLI工具，支持大规模数据生成
-
-## 🔧 Installation
-
-### Environment Setup
 ```bash
-# Create a new environment using uv (recommended)
-uv venv
+# 克隆项目
+git clone https://github.com/your-org/Sloop.git
+cd Sloop
+
+# 同步依赖环境
+uv sync
+
+# 激活虚拟环境
 source .venv/bin/activate
-
-# Install dependencies
-uv pip install -e .
 ```
 
-## 🛠️ Usage
+### 使用 pip 安装
 
-Sloop provides a comprehensive CLI interface with multiple commands for data generation and analysis.
-
-### 1. Configure Your Environment
-Create a `.env` file in the project root based on `.env.example`:
 ```bash
-# 强模型配置 (必需) - 用于数据生成
-SLOOP_STRONG_API_KEY=your_strong_api_key_here
-SLOOP_STRONG_BASE_URL=https://api.strongmodel.com/v1
-SLOOP_STRONG_MODEL_NAME=gpt-4o
-
-# 弱模型配置 (可选) - 用于能力探测
-SLOOP_WEAK_API_KEY=your_weak_api_key_here
-SLOOP_WEAK_BASE_URL=https://api.weakmodel.com/v1
-SLOOP_WEAK_MODEL_NAME=gpt-3.5-turbo
-
-# 系统配置
-SLOOP_VERBOSE=true
+pip install .
 ```
 
-**配置说明**:
-- `SLOOP_STRONG_*`: 强模型配置，用于生成高质量数据（必需）
-- `SLOOP_WEAK_*`: 弱模型配置，用于能力探测（可选）
-- `SLOOP_VERBOSE`: 是否启用详细输出（默认true）
+## 🚀 快速开始
 
-### 2. Prepare Your Service Definitions
-Create a `services.json` file with your API definitions:
-```json
-[
-  {
-    "name": "get_weather",
-    "description": "获取指定城市的天气信息",
-    "parameters": {
-      "city": "string",
-      "unit": "string"
-    },
-    "category": "weather"
-  },
-  {
-    "name": "search_restaurants",
-    "description": "搜索餐厅",
-    "parameters": {
-      "city": "string",
-      "cuisine_type": "string"
-    },
-    "category": "travel"
-  }
-]
-```
+### 1. 配置环境变量
 
-### 3. Analyze Your APIs
-Before generating data, analyze your API structure:
+复制示例配置文件并填入你的 LLM API 密钥：
+
 ```bash
-# 分析API结构和类别
-uv run sloop analyze --services services.json
-```
-
-### 4. Generate Training Data
-Use the `gen` command with CrewAI-powered multi-agent generation:
-```bash
-# 基本用法：生成10个对话
-uv run sloop gen --services services.json --output dataset.json
-
-# 高级用法：自定义参数
-uv run sloop gen \
-  --services services.json \
-  --output dataset.json \
-  --num-conversations 50 \
-  --apis-per-conversation 3 \
-  --sampling-strategy balanced \
-  --structure-type tree \
-  --verbose
-```
-
-**参数说明**:
-- `--num-conversations`: 生成**对话样本**的数量，每样本包含多轮完整对话 (默认10)
-- `--apis-per-conversation`: 每个对话样本使用的API数量 (默认3)
-- `--target-turns`: 目标对话轮数，允许±40%偏差 (默认10，范围3-50)
-- `--sampling-strategy`: API采样策略 (random/balanced/connected/tree_walk)
-- `--structure-type`: API组织方式 (tree/graph/auto)
-
-**新增功能**:
-- 🎭 **用户画像系统**: 7种不同用户类型（细心、粗心、表达不清、好奇、技术、商务、新手）
-- 🧠 **智能采样**: 支持树游走和图连通采样，构造合理的API序列
-- 🔄 **对话轮数控制**: 可指定目标轮数，生成高质量多轮对话
-- 📊 **复杂场景**: 根据用户画像和采样API生成多样化场景
-
-### 5. Validate Generated Data
-Check the quality of your generated dataset:
-```bash
-# 验证数据集格式和质量
-uv run sloop validate --dataset dataset.json
-```
-
-### Example Workflow
-```bash
-# 1. 设置环境
 cp .env.example .env
-# 编辑.env文件设置API密钥
-
-# 2. 分析API结构
-uv run sloop analyze --services services.json
-
-# 3. 生成高质量多轮对话数据
-uv run sloop gen \
-  --services services.json \
-  --output dataset.json \
-  --num-conversations 100 \
-  --target-turns 10 \
-  --apis-per-conversation 3 \
-  --sampling-strategy tree_walk \
-  --structure-type tree
-
-# 4. 验证生成的数据质量
-uv run sloop validate --dataset dataset.json
 ```
 
-### Advanced Usage Examples
+编辑 `.env` 文件：
 
-#### 生成特定用户类型的对话
+```ini
+OPENAI_API_KEY=your_api_key_here
+MODEL_NAME=gpt-4o-mini  # 或其他兼容 OpenAI 接口的模型
+# OPENAI_API_BASE=...   # 如果使用自定义端点
+```
+
+### 2. 运行生成命令
+
+使用 `sloop` 命令行工具生成数据：
+
 ```bash
-# 生成技术型用户的对话（关注API细节和错误处理）
-uv run sloop gen --services services.json --output tech_dataset.json --user-type technical
+# 查看帮助
+sloop --help
 
-# 生成新手用户的对话（基础问题，需要详细指导）
-uv run sloop gen --services services.json --output novice_dataset.json --user-type novice
+# 运行主程序 (具体子命令请参考 help)
+sloop
 ```
 
-#### 使用图结构进行复杂采样
+*(注：当前 CLI 入口位于 `sloop/cli/main.py`，具体命令参数请以实际帮助信息为准)*
+
+## 📂 项目结构
+
+```text
+sloop/
+├── agents/             # 智能体模拟器
+│   ├── user.py         # 用户模拟
+│   ├── assistant.py    # 助手模拟
+│   └── service.py      # 服务/环境模拟
+├── engine/             # 核心引擎
+│   ├── pda.py          # 下推自动机 (PDA) 实现
+│   ├── blueprint.py    # 蓝图生成器
+│   └── graph.py        # 工具图谱构建
+├── models/             # 数据模型 (Pydantic)
+│   ├── schema.py       # 基础数据结构
+│   ├── state.py        # 状态管理
+│   └── blueprint.py    # 蓝图定义
+├── utils/              # 工具函数
+│   ├── llm.py          # LLM 调用封装
+│   └── template.py     # Prompt 模板
+├── templates/          # Jinja2 模板文件
+└── cli/                # 命令行接口
+```
+
+## 🤝 贡献
+
+欢迎提交 Pull Request 或 Issue！在提交代码前，请确保通过了 lint 检查：
+
 ```bash
-# 使用图结构和连通采样，生成相关性强的API组合
-uv run sloop gen \
-  --services services.json \
-  --output connected_dataset.json \
-  --sampling-strategy connected \
-  --structure-type graph \
-  --relationships api_relationships.json
+uv run ruff check .
 ```
 
-#### 生成超长对话进行深度测试
-```bash
-# 生成15-25轮的长对话，测试复杂场景
-uv run sloop gen \
-  --services services.json \
-  --output long_conversations.json \
-  --target-turns 20 \
-  --num-conversations 50
-```
+## 📄 许可证
 
-### Output Format
-Generated conversations follow this structure:
-```json
-[
-  {
-    "id": "conv_0001",
-    "problem": "用户的问题描述",
-    "apis_used": ["api1", "api2"],
-    "conversation": [
-      {"role": "user", "content": "用户查询"},
-      {"role": "assistant", "content": "助手回复和工具调用"},
-      {"role": "tool", "content": "工具执行结果"},
-      {"role": "assistant", "content": "最终回复"}
-    ],
-    "label": {
-      "tool_call": {"name": "api_name", "arguments": {...}},
-      "thought_process": "推理过程"
-    },
-    "quality_score": 0.85
-  }
-]
-```
-
-## 🚧 Future Work
-
-The following features are planned for future releases:
-- **`probe` Command**: Implement Greedy Capability Probing (GCP) to use the weak model and identify boundary cases.
-- **`optimize` Command**: Implement Judgement-Guided Label Verification (JGLV) and Error-Driven Data Expansion (EDDE) using the strong model to refine the dataset.
-- **Iterative Loop**: Fully close the loop by using the output of `probe` and `optimize` to generate new training data and retrain the weak model.
-
-## 🙏 Acknowledgement
-We are inspired by the excellent work of:
-- [LoopTool](https://github.com/zhuiguang-ning/LoopTool)
-
-## 📄 License
-
-This project is released under the [MIT License](LICENSE).
-
-## 📞 Contact
-
-For any questions or feedback, please reach out to us.
+[License Name]
