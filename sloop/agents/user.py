@@ -80,8 +80,8 @@ class UserAgent:
 # ==================== 测试代码 ====================
 
 if __name__ == "__main__":
-    print("🤖 User Agent 测试")
-    print("=" * 50)
+    logger.info("🤖 User Agent 测试")
+    logger.info("=" * 50)
 
     from sloop.models import Blueprint
 
@@ -100,32 +100,32 @@ if __name__ == "__main__":
         ChatMessage(role="user", content="我想找一家餐厅吃饭"),
     ]
 
-    print("📋 测试数据:")
-    print(f"  意图: {mock_blueprint.intent}")
-    print(f"  历史消息数: {len(mock_history)}")
-    print()
+    logger.info("📋 测试数据:")
+    logger.info(f"  意图: {mock_blueprint.intent}")
+    logger.info(f"  历史消息数: {len(mock_history)}")
+    logger.info("")
 
     # 初始化用户智能体
-    print("🔧 初始化UserAgent...")
+    logger.info("🔧 初始化UserAgent...")
     user_agent = UserAgent()
 
-    print("💬 生成用户消息...")
+    logger.info("💬 生成用户消息...")
     try:
         message = user_agent.generate_message(mock_blueprint, mock_history)
 
-        print("✅ 生成成功！")
-        print(f"📝 消息内容: {message}")
+        logger.info("✅ 生成成功！")
+        logger.info(f"📝 消息内容: {message}")
 
         if user_agent.is_task_complete(message):
-            print("🎯 任务已完成")
+            logger.info("🎯 任务已完成")
         else:
-            print("🔄 任务继续")
+            logger.info("🔄 任务继续")
 
     except Exception as e:
-        print(f"❌ 生成失败: {e}")
+        logger.error(f"❌ 生成失败: {e}")
 
         # 如果LLM调用失败，提供模拟结果
-        print("\n🔧 提供模拟用户消息:")
-        print("我想在市中心找一家中餐厅。")
+        logger.info("\n🔧 提供模拟用户消息:")
+        logger.info("我想在市中心找一家中餐厅。")
 
-    print("\n✅ User Agent 测试完成！")
+    logger.info("\n✅ User Agent 测试完成！")

@@ -240,8 +240,8 @@ class AssistantAgent:
 # ==================== 测试代码 ====================
 
 if __name__ == "__main__":
-    print("🤖 Assistant Agent 测试")
-    print("=" * 50)
+    logger.info("🤖 Assistant Agent 测试")
+    logger.info("=" * 50)
 
     from sloop.models import ToolDefinition, ChatMessage
 
@@ -282,33 +282,33 @@ if __name__ == "__main__":
         ChatMessage(role="user", content="市中心就可以，适合4个人"),
     ]
 
-    print("📋 测试数据:")
-    print(f"  可用工具数: {len(mock_tools)}")
+    logger.info("📋 测试数据:")
+    logger.info(f"  可用工具数: {len(mock_tools)}")
     for tool in mock_tools:
-        print(f"    - {tool.name}: {tool.description}")
-    print(f"  对话历史: {len(mock_history)} 条消息")
-    print()
+        logger.info(f"    - {tool.name}: {tool.description}")
+    logger.info(f"  对话历史: {len(mock_history)} 条消息")
+    logger.info("")
 
     # 初始化助手智能体
-    print("🔧 初始化AssistantAgent...")
+    logger.info("🔧 初始化AssistantAgent...")
     assistant_agent = AssistantAgent(mock_tools)
 
-    print("🔧 测试工具调用解析...")
+    logger.info("🔧 测试工具调用解析...")
     try:
         # 测试解析功能
         mock_response = '我来帮你搜索上海的意大利餐厅。{"tool_name": "search_restaurants", "arguments": {"city": "上海", "cuisine": "意大利菜"}}'
-        print(f"📝 测试响应: {mock_response}")
+        logger.info(f"📝 测试响应: {mock_response}")
 
         # 解析工具调用
         tool_calls = assistant_agent.parse_tool_calls(mock_response)
         if tool_calls:
-            print(f"🔧 检测到 {len(tool_calls)} 个工具调用:")
+            logger.info(f"🔧 检测到 {len(tool_calls)} 个工具调用:")
             for i, tool_call in enumerate(tool_calls, 1):
-                print(f"  {i}. {tool_call.name}: {tool_call.arguments}")
+                logger.info(f"  {i}. {tool_call.name}: {tool_call.arguments}")
         else:
-            print("💬 纯文本响应，无工具调用")
+            logger.info("💬 纯文本响应，无工具调用")
 
     except Exception as e:
-        print(f"❌ 解析失败: {e}")
+        logger.error(f"❌ 解析失败: {e}")
 
-    print("\n✅ Assistant Agent 测试完成！")
+    logger.info("\n✅ Assistant Agent 测试完成！")

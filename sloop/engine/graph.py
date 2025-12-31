@@ -11,6 +11,7 @@ from typing import List, Dict, Set, Tuple, Optional
 import networkx as nx
 
 from sloop.models import ToolDefinition
+from sloop.utils.logger import logger
 
 
 class ToolGraphBuilder:
@@ -315,7 +316,7 @@ class ToolGraphBuilder:
             output_path: 输出图片路径
         """
         if self.graph is None:
-            print("图尚未构建")
+            logger.info("图尚未构建")
             return
 
         try:
@@ -341,12 +342,12 @@ class ToolGraphBuilder:
             plt.savefig(output_path, dpi=300, bbox_inches='tight')
             plt.close()
 
-            print(f"✅ 图可视化已保存到: {output_path}")
+            logger.info(f"✅ 图可视化已保存到: {output_path}")
 
         except ImportError:
-            print("❌ 需要安装matplotlib才能可视化图谱")
+            logger.error("❌ 需要安装matplotlib才能可视化图谱")
         except Exception as e:
-            print(f"❌ 可视化失败: {e}")
+            logger.error(f"❌ 可视化失败: {e}")
 
 
 # 注意：测试代码已移至 tests/test_graph.py

@@ -60,11 +60,11 @@ class Settings:
     def validate(self) -> bool:
         """验证配置是否有效"""
         if not self.openai_api_key:
-            print("❌ 错误: 未配置 OPENAI_API_KEY")
+            logger.error("❌ 错误: 未配置 OPENAI_API_KEY")
             return False
 
         if self.temperature < 0.0 or self.temperature > 2.0:
-            print("❌ 错误: TEMPERATURE 必须在 0.0-2.0 之间")
+            logger.error("❌ 错误: TEMPERATURE 必须在 0.0-2.0 之间")
             return False
 
         return True
@@ -98,22 +98,22 @@ def reload_settings() -> Settings:
 
 
 if __name__ == "__main__":
-    print("🔧 配置验证")
-    print("=" * 50)
+    logger.info("🔧 配置验证")
+    logger.info("=" * 50)
 
     # 验证配置
     if settings.validate():
-        print("✅ 配置验证通过")
-        print("\n📋 当前配置:")
+        logger.info("✅ 配置验证通过")
+        logger.info("\n📋 当前配置:")
         safe_config = settings.get_safe_display()
         for key, value in safe_config.items():
-            print(f"  {key}: {value}")
+            logger.info(f"  {key}: {value}")
     else:
-        print("❌ 配置验证失败")
-        print("\n请检查以下环境变量:")
-        print("  - OPENAI_API_KEY: 必需")
-        print("  - MODEL_NAME: 可选，默认 gpt-4o-mini")
-        print("  - OPENAI_API_BASE: 可选")
-        print("  - TEMPERATURE: 可选，默认 0.7")
-        print("  - MAX_TOKENS: 可选，默认 4096")
-        print("  - TIMEOUT: 可选，默认 60")
+        logger.error("❌ 配置验证失败")
+        logger.info("\n请检查以下环境变量:")
+        logger.info("  - OPENAI_API_KEY: 必需")
+        logger.info("  - MODEL_NAME: 可选，默认 gpt-4o-mini")
+        logger.info("  - OPENAI_API_BASE: 可选")
+        logger.info("  - TEMPERATURE: 可选，默认 0.7")
+        logger.info("  - MAX_TOKENS: 可选，默认 4096")
+        logger.info("  - TIMEOUT: 可选，默认 60")

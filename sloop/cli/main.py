@@ -15,10 +15,7 @@ from tqdm import tqdm
 from sloop.engine import BlueprintGenerator
 from sloop.engine.pda import ConversationPDA
 from sloop.models import ToolDefinition, ChatMessage, ToolCall
-
-# 设置日志
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from sloop.utils.logger import logger
 
 app = typer.Typer()
 

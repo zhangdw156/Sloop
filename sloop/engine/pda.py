@@ -151,7 +151,7 @@ class ConversationPDA:
         """进入用户消息生成状态"""
         logger.info("👤 [USER_GEN] 用户消息生成")
         self.user_turn_count += 1
-        print(f"👤 [USER_GEN] 用户轮次 {self.user_turn_count}")
+        logger.info(f"👤 [USER_GEN] 用户轮次 {self.user_turn_count}")
 
         # 清空上一轮的缓冲区
         self.context.clear_buffers()
@@ -167,14 +167,14 @@ class ConversationPDA:
         if should_stop:
             # 剥离停止标记，保留干净的消息内容
             user_message_content = user_message_content.replace("###STOP###", "").strip()
-            print("   ✅ 用户表示任务完成")
+            logger.info("   ✅ 用户表示任务完成")
 
         # 如果消息内容不为空，始终添加到对话历史
         if user_message_content:
             # 创建消息对象并添加到上下文
             user_message = ChatMessage(role="user", content=user_message_content)
             self.context.add_message(user_message)
-            print(f"   💬 用户: {user_message.content}")
+            logger.info(f"   💬 用户: {user_message.content}")
 
         # 如果需要停止，则标记完成并结束对话
         if should_stop:
@@ -188,8 +188,8 @@ class ConversationPDA:
     def on_enter_assistant_think(self):
         """进入助手思考状态 - 生成 CoT"""
         logger.info("🤖 [ASSISTANT_THINK] 助手正在生成思考过程")
-        print(f"🤖 [ASSISTANT_THINK] 助手正在生成思考过程 (CoT)...")
-        print(f"   📚 当前栈状态: {[frame['type'] for frame in self.context.stack]}")
+        logger.info(f"🤖 [ASSISTANT_THINK] 助手正在生成思考过程 (CoT)...")
+        logger.info(f"   📚 当前栈状态: {[frame['type'] for frame in self.context.stack]}")
 
         # 生成栈上下文提示
         context_hint = self._generate_context_hint()
@@ -199,7 +199,7 @@ class ConversationPDA:
 
         # 存储到上下文缓冲区
         self.context.current_thought = thought_content
-        print(f"   💭 思考过程: {thought_content[:100]}...")
+        logger.info(f"   💭 思考过程: {thought_content[:100]}...")
 
         # 触发到决策状态
         self.thought_generated()
@@ -207,7 +207,7 @@ class ConversationPDA:
     def on_enter_assistant_decide(self):
         """进入助手决策状态 - 基于思考决定下一步"""
         logger.info("🤖 [ASSISTANT_DECIDE] 助手正在决策")
-        print(f"🤖 [ASSISTANT_DECIDE] 基于思考过程进行决策...")
+        logger.info(f"🤖 [ASSISTANT_DECIDE] 基于思考过程进行决策...")
 
         # 检查栈顶是否为WAITING_FOR_TOOLS，如果是则根据决策进行POP操作
         stack_top = self.context.peek_context()
@@ -220,21 +220,21 @@ class ConversationPDA:
             if was_waiting:
                 # 任务进展：POP旧的WAITING帧，为新的工具调用让路
                 popped = self.context.pop_context()
-                print(f"   📚 POP 栈: {popped['type']} - 任务进展，继续调用工具")
-            print("   🔧 决策: 需要调用工具")
+                logger.info(f"   📚 POP 栈: {popped['type']} - 任务进展，继续调用工具")
+            logger.info("   🔧 决策: 需要调用工具")
             self.decide_tool_call()
         else:
             if was_waiting:
                 # 子任务完成：POP WAITING帧
                 popped = self.context.pop_context()
-                print(f"   📚 POP 栈: {popped['type']} - 子任务完成")
-            print("   💬 决策: 直接回复")
+                logger.info(f"   📚 POP 栈: {popped['type']} - 子任务完成")
+            logger.info("   💬 决策: 直接回复")
             self.decide_reply()
 
     def on_enter_tool_call_gen(self):
         """进入工具调用生成状态 - 生成具体的工具调用参数"""
         logger.info("🔧 [TOOL_CALL_GEN] 生成工具调用参数")
-        print(f"🔧 [TOOL_CALL_GEN] 基于思考过程生成工具调用参数...")
+        logger.info(f"🔧 [TOOL_CALL_GEN] 基于思考过程生成工具调用参数...")
 
         # 基于思考过程生成工具调用
         tool_calls = self.assistant_agent.generate_tool_calls(self.context.current_thought, self.tools)
@@ -248,7 +248,7 @@ class ConversationPDA:
                 "intent": self._extract_intent_from_thought(self.context.current_thought),
                 "nested_level": nested_level
             })
-            print(f"   📚 PUSH 栈: WAITING_FOR_TOOLS - 工具: {tool_names}")
+            logger.info(f"   📚 PUSH 栈: WAITING_FOR_TOOLS - 工具: {tool_names}")
 
             # 为每个工具调用创建独立的 tool_call 消息（扁平化格式）
             for tool_call in tool_calls:
@@ -264,25 +264,25 @@ class ConversationPDA:
 
             # 同时存储到pending列表供后续执行
             self.context.pending_tool_calls.extend(tool_calls)
-            print(f"   📝 生成 {len(tool_calls)} 个工具调用消息")
+            logger.info(f"   📝 生成 {len(tool_calls)} 个工具调用消息")
 
             # 触发工具执行
             self.tool_calls_generated()
         else:
-            print("   📝 没有生成工具调用，直接进入回复生成")
+            logger.info("   📝 没有生成工具调用，直接进入回复生成")
             # 如果没有工具调用，直接进入回复生成状态
             self.skip_tools_reply()
 
     def on_enter_tool_exec(self):
         """进入工具执行状态"""
         logger.info("🛠️ [TOOL_EXEC] 正在执行工具")
-        print(f"🛠️ [TOOL_EXEC] 执行工具调用...")
+        logger.info(f"🛠️ [TOOL_EXEC] 执行工具调用...")
 
         # 处理所有pending的工具调用
         while self.context.pending_tool_calls:
             tool_call = self.context.pending_tool_calls.pop(0)
 
-            print(f"   🔧 执行工具: {tool_call.name}")
+            logger.info(f"   🔧 执行工具: {tool_call.name}")
 
             # 调用服务智能体执行工具
             execution_result = self.service_agent.execute_tool(
@@ -297,7 +297,7 @@ class ConversationPDA:
                     self.context.env_state,
                     execution_result["state_updates"]
                 )
-                print(f"   📊 状态更新: {execution_result['state_updates']}")
+                logger.info(f"   📊 状态更新: {execution_result['state_updates']}")
 
             # 创建工具消息
             tool_message = ChatMessage(
@@ -307,7 +307,7 @@ class ConversationPDA:
             )
             self.context.add_message(tool_message)
 
-            print(f"   ✅ 工具执行结果: {execution_result['response']}")
+            logger.info(f"   ✅ 工具执行结果: {execution_result['response']}")
 
         # 返回到助手思考（ReAct闭环）
         self.tools_executed()
@@ -315,7 +315,7 @@ class ConversationPDA:
     def on_enter_assistant_reply_gen(self):
         """进入助手回复生成状态 - 生成最终回复文本"""
         logger.info("🤖 [ASSISTANT_REPLY_GEN] 生成最终回复")
-        print(f"🤖 [ASSISTANT_REPLY_GEN] 基于思考过程生成最终回复...")
+        logger.info(f"🤖 [ASSISTANT_REPLY_GEN] 基于思考过程生成最终回复...")
 
         # 基于思考过程生成最终回复
         reply_content = self.assistant_agent.generate_reply(self.context.current_thought, self.context.messages)
@@ -330,7 +330,7 @@ class ConversationPDA:
         )
         self.context.add_message(assistant_message)
 
-        print(f"   💬 助手回复: {full_content[:100]}...")
+        logger.info(f"   💬 助手回复: {full_content[:100]}...")
 
         # 触发到评估状态
         self.reply_generated()
@@ -338,11 +338,11 @@ class ConversationPDA:
     def on_enter_evaluation(self):
         """进入评估状态"""
         logger.info("📊 [EVALUATION] 评估对话状态")
-        print(f"📊 [EVALUATION] 评估对话状态...")
+        logger.info(f"📊 [EVALUATION] 评估对话状态...")
 
         # 如果已经完成，不要重复处理
         if self.context.is_completed:
-            print("   ✅ 对话已完成，跳过评估")
+            logger.info("   ✅ 对话已完成，跳过评估")
             return
 
         self.context.increment_turn()
@@ -354,27 +354,27 @@ class ConversationPDA:
         )
 
         if should_finish:
-            print("   🏁 满足结束条件，完成对话")
+            logger.info("   🏁 满足结束条件，完成对话")
             self.finish_dialogue()
             return  # 立即返回，避免后续逻辑
         else:
-            print("   🔄 继续下一轮对话")
+            logger.info("   🔄 继续下一轮对话")
             self.continue_dialogue()
 
     def on_enter_finish(self):
         """进入结束状态"""
         logger.info("✅ [FINISH] 对话完成")
-        print(f"✅ [FINISH] 对话 {self.conversation_id} 完成")
-        print(f"   📈 总轮次: {self.context.turn_count}")
-        print(f"   📝 消息数量: {len(self.context.messages)}")
-        print(f"   🎯 最终状态: {self.context.env_state.state}")
+        logger.info(f"✅ [FINISH] 对话 {self.conversation_id} 完成")
+        logger.info(f"   📈 总轮次: {self.context.turn_count}")
+        logger.info(f"   📝 消息数量: {len(self.context.messages)}")
+        logger.info(f"   🎯 最终状态: {self.context.env_state.state}")
 
 
 
     def run(self):
         """运行完整的对话循环（同步版本，立即执行所有状态转换）"""
         logger.info("🚀 开始运行对话循环")
-        print("🚀 开始运行对话循环...")
+        logger.info("🚀 开始运行对话循环...")
 
         # 在占位符实现中，所有状态转换都是同步的
         # 状态机已经在初始化时启动(on_enter_init会调用start_conversation)
@@ -388,10 +388,10 @@ class ConversationPDA:
 
         if self.current_state == PDAStates.FINISH:
             logger.info("🎉 对话循环运行完成")
-            print("🎉 对话循环运行完成")
+            logger.info("🎉 对话循环运行完成")
         else:
             logger.warning(f"⚠️ 对话循环未在{max_wait}步内完成，当前状态: {self.current_state}")
-            print(f"⚠️ 对话循环未在{max_wait}步内完成，当前状态: {self.current_state}")
+            logger.warning(f"⚠️ 对话循环未在{max_wait}步内完成，当前状态: {self.current_state}")
 
     # 注意：current_state 由 transitions 库自动设置，无需 property
 
@@ -447,13 +447,13 @@ if __name__ == "__main__":
     loop = ConversationPDA(test_blueprint, test_tools, "test_conv_001")
 
     # 运行对话
-    print("=" * 50)
-    print("🎬 开始PDA测试")
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("🎬 开始PDA测试")
+    logger.info("=" * 50)
 
     loop.run()
 
-    print("=" * 50)
-    print("📊 最终状态:")
-    print(loop.get_status())
-    print("=" * 50)
+    logger.info("=" * 50)
+    logger.info("📊 最终状态:")
+    logger.info(loop.get_status())
+    logger.info("=" * 50)

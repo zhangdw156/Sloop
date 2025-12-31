@@ -224,8 +224,8 @@ class BlueprintGenerator:
 # ==================== 测试代码 ====================
 
 if __name__ == "__main__":
-    print("🔧 Blueprint Generator 测试")
-    print("=" * 50)
+    logger.info("🔧 Blueprint Generator 测试")
+    logger.info("=" * 50)
 
     # 创建模拟工具数据
     mock_tools = [
@@ -265,42 +265,42 @@ if __name__ == "__main__":
         )
     ]
 
-    print("📋 模拟工具数据:")
+    logger.info("📋 模拟工具数据:")
     for tool in mock_tools:
-        print(f"  - {tool.name}: {tool.description}")
-    print()
+        logger.info(f"  - {tool.name}: {tool.description}")
+    logger.info("")
 
     # 初始化生成器
-    print("🔧 初始化BlueprintGenerator...")
+    logger.info("🔧 初始化BlueprintGenerator...")
     generator = BlueprintGenerator(mock_tools)
 
-    print("📊 图谱统计:")
+    logger.info("📊 图谱统计:")
     stats = generator.graph_builder.get_graph_stats()
-    print(f"  节点数量: {stats['nodes']}")
-    print(f"  边数量: {stats['edges']}")
-    print()
+    logger.info(f"  节点数量: {stats['nodes']}")
+    logger.info(f"  边数量: {stats['edges']}")
+    logger.info("")
 
     # 生成蓝图
-    print("🎯 生成Blueprint...")
+    logger.info("🎯 生成Blueprint...")
     try:
         blueprint = generator.generate(chain_length=2)
 
-        print("✅ 生成成功！")
-        print("\n📋 Blueprint详情:")
-        print(f"  意图: {blueprint.intent}")
-        print(f"  必需工具: {blueprint.required_tools}")
-        print(f"  真实工具链: {blueprint.ground_truth}")
-        print(f"  初始状态: {blueprint.initial_state}")
-        print(f"  期望状态: {blueprint.expected_state}")
+        logger.info("✅ 生成成功！")
+        logger.info("\n📋 Blueprint详情:")
+        logger.info(f"  意图: {blueprint.intent}")
+        logger.info(f"  必需工具: {blueprint.required_tools}")
+        logger.info(f"  真实工具链: {blueprint.ground_truth}")
+        logger.info(f"  初始状态: {blueprint.initial_state}")
+        logger.info(f"  期望状态: {blueprint.expected_state}")
 
-        print("\n📄 完整JSON:")
-        print(blueprint.model_dump_json(indent=2))
+        logger.info("\n📄 完整JSON:")
+        logger.info(blueprint.model_dump_json(indent=2))
 
     except Exception as e:
-        print(f"❌ 生成失败: {e}")
+        logger.error(f"❌ 生成失败: {e}")
 
         # 如果LLM调用失败，提供模拟结果
-        print("\n🔧 提供模拟Blueprint作为示例:")
+        logger.info("\n🔧 提供模拟Blueprint作为示例:")
         mock_blueprint = Blueprint(
             intent="查找餐厅并点餐",
             required_tools=["find_restaurants", "get_menu"],
@@ -308,6 +308,6 @@ if __name__ == "__main__":
             initial_state={"restaurant_found": False, "menu_loaded": False},
             expected_state={"restaurant_found": True, "menu_loaded": True}
         )
-        print(mock_blueprint.model_dump_json(indent=2))
+        logger.info(mock_blueprint.model_dump_json(indent=2))
 
-    print("\n✅ Blueprint Generator 测试完成！")
+    logger.info("\n✅ Blueprint Generator 测试完成！")

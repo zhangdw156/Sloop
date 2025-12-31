@@ -166,27 +166,27 @@ def get_supported_models() -> List[str]:
 
 
 if __name__ == "__main__":
-    print("🔧 LLM 配置和调用测试")
-    print("=" * 50)
+    logger.info("🔧 LLM 配置和调用测试")
+    logger.info("=" * 50)
 
     # 测试配置验证
-    print("📋 配置状态:")
+    logger.info("📋 配置状态:")
     settings = get_settings()
     if settings.validate():
-        print("✅ 配置验证通过")
+        logger.info("✅ 配置验证通过")
         safe_config = settings.get_safe_display()
         for key, value in safe_config.items():
-            print(f"  {key}: {value}")
+            logger.info(f"  {key}: {value}")
     else:
-        print("❌ 配置验证失败")
-        print("\n请设置以下环境变量:")
-        print("  OPENAI_API_KEY=your_api_key_here")
-        print("  MODEL_NAME=gpt-4o-mini  # 可选")
-        print("  OPENAI_API_BASE=https://api.openai.com/v1  # 可选")
-        print("  TEMPERATURE=0.7  # 可选")
+        logger.error("❌ 配置验证失败")
+        logger.info("\n请设置以下环境变量:")
+        logger.info("  OPENAI_API_KEY=your_api_key_here")
+        logger.info("  MODEL_NAME=gpt-4o-mini  # 可选")
+        logger.info("  OPENAI_API_BASE=https://api.openai.com/v1  # 可选")
+        logger.info("  TEMPERATURE=0.7  # 可选")
         exit(1)
 
-    print("\n🧪 简单调用测试:")
+    logger.info("\n🧪 简单调用测试:")
 
     # 测试简单调用（如果配置了有效的API key）
     if settings.openai_api_key and len(settings.openai_api_key) > 10:  # 简单的key验证
@@ -197,22 +197,22 @@ if __name__ == "__main__":
             )
 
             if response and not response.startswith("调用错误"):
-                print("✅ LLM调用成功")
-                print(f"响应预览: {response[:100]}...")
+                logger.info("✅ LLM调用成功")
+                logger.info(f"响应预览: {response[:100]}...")
             else:
-                print("⚠️ LLM调用失败或无响应")
-                print(f"响应: {response}")
+                logger.warning("⚠️ LLM调用失败或无响应")
+                logger.warning(f"响应: {response}")
 
         except Exception as e:
-            print(f"❌ 测试调用失败: {e}")
+            logger.error(f"❌ 测试调用失败: {e}")
     else:
-        print("ℹ️ 未配置有效的API Key，跳过实际调用测试")
+        logger.info("ℹ️ 未配置有效的API Key，跳过实际调用测试")
 
-    print("\n📚 支持的模型示例:")
+    logger.info("\n📚 支持的模型示例:")
     models = get_supported_models()
     for i, model in enumerate(models[:5], 1):  # 只显示前5个
-        print(f"  {i}. {model}")
+        logger.info(f"  {i}. {model}")
     if len(models) > 5:
-        print(f"  ... 还有 {len(models) - 5} 个模型")
+        logger.info(f"  ... 还有 {len(models) - 5} 个模型")
 
-    print("\n✅ LLM工具测试完成")
+    logger.info("\n✅ LLM工具测试完成")
