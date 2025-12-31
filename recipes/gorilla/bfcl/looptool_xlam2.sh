@@ -1,4 +1,5 @@
 #!/bin/bash
+# -*- coding: utf-8 -*-
 
 # ================= 0. 路径定位 =================
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -22,7 +23,7 @@ export LOCAL_MODEL_PATH="/dfs/data/models/Qwen3-8B"
 # 4. LoRA 配置
 export ENABLE_LORA="true"
 export MAX_LORA_RANK=128
-export LORA_MODULES="bfclv3=/dfs/data/work/Sloop/checkpoints/swift-qwen3-looptool-.v1.1766635255394-20251225_1201/v0-20251225-120127/checkpoint-86"
+export LORA_MODULES="bfclv3=/dfs/data/work/Sloop/checkpoints/swift-qwen3-looptool_xlam2-v2-20251225_1913/v0-20251225-191401/checkpoint-106"
 
 # 5. 评测参数
 export TEST_CATEGORY="multi_turn"

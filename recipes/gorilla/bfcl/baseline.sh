@@ -1,4 +1,5 @@
 #!/bin/bash
+# -*- coding: utf-8 -*-
 
 # ================= 0. 路径定位 =================
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -11,7 +12,7 @@ export VENV_ACTIVATE="/dfs/data/uv-venv/gorilla/bin/activate"
 
 # 2. 项目与输出
 export PROJECT_ROOT="/dfs/data/work/gorilla/berkeley-function-call-leaderboard"
-export OUTPUT_DIR_NAME="lootool" 
+export OUTPUT_DIR_NAME="baseline" 
 # 拼接最终的产物路径，传递给 Layer 2 使用
 export ARTIFACT_DIR="/dfs/data/work/Sloop/gorilla_bfcl_results/$OUTPUT_DIR_NAME"
 
@@ -20,9 +21,9 @@ export MODEL_NAME="Qwen/Qwen3-8B-FC"
 export LOCAL_MODEL_PATH="/dfs/data/models/Qwen3-8B"
 
 # 4. LoRA 配置
-export ENABLE_LORA="true"
-export MAX_LORA_RANK=128
-export LORA_MODULES="bfclv3=/dfs/data/work/Sloop/checkpoints/swift-qwen3-looptool-.v1.1766635255394-20251225_1201/v0-20251225-120127/checkpoint-86"
+# export ENABLE_LORA="true"
+# export MAX_LORA_RANK=128
+# export LORA_MODULES=""
 
 # 5. 评测参数
 export TEST_CATEGORY="multi_turn"
