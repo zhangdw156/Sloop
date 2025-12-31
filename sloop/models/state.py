@@ -1,7 +1,7 @@
 """
 状态数据模型：环境状态和对话上下文
 
-用于有状态服务模拟和FSM状态传递。
+用于有状态服务模拟和PDA状态传递。
 """
 
 from typing import Dict, List, Any, Optional
@@ -66,9 +66,9 @@ class EnvState(BaseModel):
 
 class ConversationContext(BaseModel):
     """
-    对话上下文：用于FSM传递上下文信息
+    对话上下文：用于PDA传递上下文信息
 
-    包含对话历史、轮次计数、当前状态等。
+    包含对话历史、轮次计数、当前状态和栈管理等。
     """
     conversation_id: str = Field(..., description="对话唯一标识")
     blueprint_id: Optional[str] = Field(None, description="关联的蓝图ID")

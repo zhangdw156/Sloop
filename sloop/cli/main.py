@@ -13,7 +13,7 @@ import typer
 from tqdm import tqdm
 
 from ..engine import BlueprintGenerator
-from ..engine.fsm import ConversationLoop
+from ..engine.pda import ConversationPDA
 from ..models import ToolDefinition, ChatMessage, ToolCall
 
 # 设置日志
@@ -142,7 +142,7 @@ def generate(
 
                 # 创建对话循环（只传入active_tools，防止Context溢出）
                 conversation_id = f"conv_{i+1:04d}"
-                loop = ConversationLoop(blueprint, active_tools, conversation_id, max_turns=max_turns)
+                loop = ConversationPDA(blueprint, active_tools, conversation_id, max_turns=max_turns)
 
                 # 运行对话
                 loop.run()

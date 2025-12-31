@@ -1,7 +1,7 @@
 """
-有限状态机 (FSM) 核心引擎
+下推自动机 (PDA) 核心引擎
 
-实现对话生成的核心循环逻辑，使用 transitions 库管理状态流转。
+实现对话生成的核心循环逻辑，使用 transitions 库管理状态流转，支持栈操作。
 """
 
 import json
@@ -17,8 +17,8 @@ from ..agents import UserAgent, AssistantAgent, ServiceAgent
 logger = logging.getLogger(__name__)
 
 # 状态常量定义
-class FSMStates:
-    """FSM 状态常量 - 细粒度状态管理"""
+class PDAStates:
+    """PDA 状态常量 - 细粒度状态管理"""
     USER_GEN = "user_gen"
     ASSISTANT_THINK = "assistant_think"
     ASSISTANT_DECIDE = "assistant_decide"
@@ -29,12 +29,12 @@ class FSMStates:
     FINISH = "finish"
 
 
-class ConversationLoop:
+class ConversationPDA:
     """
-    对话循环状态机
+    对话循环下推自动机
 
     管理完整的对话生成流程，从初始化到结束。
-    使用 transitions.Machine 实现状态流转。
+    使用 transitions.Machine 实现状态流转，支持栈操作。
     """
 
     def __init__(self, blueprint: Blueprint, tools: List[ToolDefinition], conversation_id: str = None, max_turns: int = 20):
@@ -77,48 +77,48 @@ class ConversationLoop:
         # 手动触发初始状态的回调（transitions不会自动调用）
         self.on_enter_user_gen()
 
-        logger.info(f"🎬 ConversationLoop initialized: {self.conversation_id}")
+        logger.info(f"🎬 ConversationPDA initialized: {self.conversation_id}")
 
     def _setup_state_machine(self):
         """设置状态机"""
         # 定义状态
         states = [
-            FSMStates.USER_GEN,
-            FSMStates.ASSISTANT_THINK,
-            FSMStates.ASSISTANT_DECIDE,
-            FSMStates.TOOL_CALL_GEN,
-            FSMStates.TOOL_EXEC,
-            FSMStates.ASSISTANT_REPLY_GEN,
-            FSMStates.EVALUATION,
-            FSMStates.FINISH
+            PDAStates.USER_GEN,
+            PDAStates.ASSISTANT_THINK,
+            PDAStates.ASSISTANT_DECIDE,
+            PDAStates.TOOL_CALL_GEN,
+            PDAStates.TOOL_EXEC,
+            PDAStates.ASSISTANT_REPLY_GEN,
+            PDAStates.EVALUATION,
+            PDAStates.FINISH
         ]
 
         # 定义状态机
         self.machine = Machine(
             model=self,
             states=states,
-            initial=FSMStates.USER_GEN,
+            initial=PDAStates.USER_GEN,
             model_attribute='current_state'
         )
 
         # 定义状态转换
-        self.machine.add_transition('user_generated', FSMStates.USER_GEN, FSMStates.ASSISTANT_THINK)
-        self.machine.add_transition('thought_generated', FSMStates.ASSISTANT_THINK, FSMStates.ASSISTANT_DECIDE)
-        self.machine.add_transition('decide_tool_call', FSMStates.ASSISTANT_DECIDE, FSMStates.TOOL_CALL_GEN)
-        self.machine.add_transition('decide_reply', FSMStates.ASSISTANT_DECIDE, FSMStates.ASSISTANT_REPLY_GEN)
-        self.machine.add_transition('tool_calls_generated', FSMStates.TOOL_CALL_GEN, FSMStates.TOOL_EXEC)
-        self.machine.add_transition('skip_tools_reply', FSMStates.TOOL_CALL_GEN, FSMStates.ASSISTANT_REPLY_GEN)  # 没有工具调用时直接回复
-        self.machine.add_transition('tools_executed', FSMStates.TOOL_EXEC, FSMStates.ASSISTANT_THINK)  # ReAct 闭环
-        self.machine.add_transition('reply_generated', FSMStates.ASSISTANT_REPLY_GEN, FSMStates.EVALUATION)
-        self.machine.add_transition('continue_dialogue', FSMStates.EVALUATION, FSMStates.USER_GEN)
-        self.machine.add_transition('finish_dialogue', FSMStates.EVALUATION, FSMStates.FINISH)
+        self.machine.add_transition('user_generated', PDAStates.USER_GEN, PDAStates.ASSISTANT_THINK)
+        self.machine.add_transition('thought_generated', PDAStates.ASSISTANT_THINK, PDAStates.ASSISTANT_DECIDE)
+        self.machine.add_transition('decide_tool_call', PDAStates.ASSISTANT_DECIDE, PDAStates.TOOL_CALL_GEN)
+        self.machine.add_transition('decide_reply', PDAStates.ASSISTANT_DECIDE, PDAStates.ASSISTANT_REPLY_GEN)
+        self.machine.add_transition('tool_calls_generated', PDAStates.TOOL_CALL_GEN, PDAStates.TOOL_EXEC)
+        self.machine.add_transition('skip_tools_reply', PDAStates.TOOL_CALL_GEN, PDAStates.ASSISTANT_REPLY_GEN)  # 没有工具调用时直接回复
+        self.machine.add_transition('tools_executed', PDAStates.TOOL_EXEC, PDAStates.ASSISTANT_THINK)  # ReAct 闭环
+        self.machine.add_transition('reply_generated', PDAStates.ASSISTANT_REPLY_GEN, PDAStates.EVALUATION)
+        self.machine.add_transition('continue_dialogue', PDAStates.EVALUATION, PDAStates.USER_GEN)
+        self.machine.add_transition('finish_dialogue', PDAStates.EVALUATION, PDAStates.FINISH)
         # 允许从任何状态直接结束对话
-        self.machine.add_transition('finish_dialogue', FSMStates.USER_GEN, FSMStates.FINISH)
-        self.machine.add_transition('finish_dialogue', FSMStates.ASSISTANT_THINK, FSMStates.FINISH)
-        self.machine.add_transition('finish_dialogue', FSMStates.ASSISTANT_DECIDE, FSMStates.FINISH)
-        self.machine.add_transition('finish_dialogue', FSMStates.TOOL_CALL_GEN, FSMStates.FINISH)
-        self.machine.add_transition('finish_dialogue', FSMStates.TOOL_EXEC, FSMStates.FINISH)
-        self.machine.add_transition('finish_dialogue', FSMStates.ASSISTANT_REPLY_GEN, FSMStates.FINISH)
+        self.machine.add_transition('finish_dialogue', PDAStates.USER_GEN, PDAStates.FINISH)
+        self.machine.add_transition('finish_dialogue', PDAStates.ASSISTANT_THINK, PDAStates.FINISH)
+        self.machine.add_transition('finish_dialogue', PDAStates.ASSISTANT_DECIDE, PDAStates.FINISH)
+        self.machine.add_transition('finish_dialogue', PDAStates.TOOL_CALL_GEN, PDAStates.FINISH)
+        self.machine.add_transition('finish_dialogue', PDAStates.TOOL_EXEC, PDAStates.FINISH)
+        self.machine.add_transition('finish_dialogue', PDAStates.ASSISTANT_REPLY_GEN, PDAStates.FINISH)
 
         # 注意：transitions库会自动绑定名为 on_enter_{state_name} 的方法作为状态进入回调
         # 无需手动绑定，以避免重复绑定导致的回调执行问题
@@ -383,10 +383,10 @@ class ConversationLoop:
         # 等待直到达到结束状态（最多等待100次，避免无限循环）
         max_wait = 100
         wait_count = 0
-        while self.current_state != FSMStates.FINISH and wait_count < max_wait:
+        while self.current_state != PDAStates.FINISH and wait_count < max_wait:
             wait_count += 1
 
-        if self.current_state == FSMStates.FINISH:
+        if self.current_state == PDAStates.FINISH:
             logger.info("🎉 对话循环运行完成")
             print("🎉 对话循环运行完成")
         else:
@@ -444,11 +444,11 @@ if __name__ == "__main__":
     )
 
     # 创建对话循环
-    loop = ConversationLoop(test_blueprint, test_tools, "test_conv_001")
+    loop = ConversationPDA(test_blueprint, test_tools, "test_conv_001")
 
     # 运行对话
     print("=" * 50)
-    print("🎬 开始FSM测试")
+    print("🎬 开始PDA测试")
     print("=" * 50)
 
     loop.run()
