@@ -5,43 +5,15 @@
 """
 
 import json
-
-# 自定义logger，用于测试日志记录
-import logging
-import os
 from unittest.mock import patch
 
-# import pytest  # 注释掉pytest，使用标准unittest
 from sloop.engine.blueprint import BlueprintGenerator
 from sloop.models.blueprint import Blueprint
 from sloop.models.schema import ToolDefinition
+from tests.utils import get_current_test_logger
 
-# 创建logs目录（如果不存在）
-test_log_dir = os.path.join(os.path.dirname(__file__), "logs")
-os.makedirs(test_log_dir, exist_ok=True)
-
-# 配置测试logger
-test_logger = logging.getLogger("test_blueprint")
-test_logger.setLevel(logging.DEBUG)
-
-# 文件handler
-log_file = os.path.join(test_log_dir, "test_blueprint.log")
-file_handler = logging.FileHandler(log_file, encoding="utf-8")
-file_handler.setLevel(logging.DEBUG)
-file_formatter = logging.Formatter(
-    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
-file_handler.setFormatter(file_formatter)
-
-# 控制台handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-console_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(console_formatter)
-
-# 添加handlers
-test_logger.addHandler(file_handler)
-test_logger.addHandler(console_handler)
+# 获取当前测试文件的日志器
+test_logger = get_current_test_logger()
 
 
 def get_mock_tools():
