@@ -160,13 +160,8 @@ class BlueprintGenerator:
             raise ValueError("缺少有效的intent字段")
         validated["intent"] = data["intent"].strip()
 
-        # 验证required_tools（可以是采样的链或LLM建议的链）
-        if "required_tools" in data and isinstance(data["required_tools"], list):
-            validated["required_tools"] = data["required_tools"]
-        else:
-            validated["required_tools"] = expected_chain
-
-        # 强制设置ground_truth为采样的链
+        # 强制设置required_tools和ground_truth为采样的链
+        validated["required_tools"] = expected_chain
         validated["ground_truth"] = expected_chain
 
         # 验证initial_state
@@ -176,12 +171,21 @@ class BlueprintGenerator:
         else:
             validated["initial_state"] = data["initial_state"]
 
-        # 验证expected_state
+        # 验证expected_state，确保键值对足够简单
         if "expected_state" not in data or not isinstance(data["expected_state"], dict):
             logger.warning("缺少expected_state，使用默认值")
             validated["expected_state"] = {}
         else:
-            validated["expected_state"] = data["expected_state"]
+            # 简化expected_state，只保留布尔值和简单类型
+            simplified_state = {}
+            for key, value in data["expected_state"].items():
+                if isinstance(value, bool):
+                    simplified_state[key] = value
+                elif isinstance(value, (str, int, float)) and len(str(value)) < 50:
+                    simplified_state[key] = value
+                else:
+                    logger.warning(f"简化expected_state: 跳过复杂值 {key}: {value}")
+            validated["expected_state"] = simplified_state
 
         return validated
 
