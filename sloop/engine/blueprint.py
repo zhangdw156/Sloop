@@ -179,9 +179,7 @@ class BlueprintGenerator:
             # 简化expected_state，只保留布尔值和简单类型
             simplified_state = {}
             for key, value in data["expected_state"].items():
-                if isinstance(value, bool):
-                    simplified_state[key] = value
-                elif isinstance(value, (str, int, float)) and len(str(value)) < 50:
+                if isinstance(value, bool) or isinstance(value, (str, int, float)) and len(str(value)) < 50:
                     simplified_state[key] = value
                 else:
                     logger.warning(f"简化expected_state: 跳过复杂值 {key}: {value}")
