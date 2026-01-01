@@ -14,72 +14,6 @@ from sloop.utils.logger import logger
 # 设置日志
 
 
-def _get_mock_response(messages: List[Dict[str, Any]], json_mode: bool = False) -> str:
-    """
-    生成模拟LLM响应用于测试
-
-    参数:
-        messages: 消息列表
-        json_mode: 是否为JSON模式
-
-    返回:
-        模拟响应字符串
-    """
-    if not messages:
-        return "模拟响应：空消息列表"
-
-    # 获取最后一条用户消息
-    last_user_msg = None
-    for msg in reversed(messages):
-        if msg.get("role") == "user":
-            last_user_msg = msg.get("content", "")
-            break
-
-    if not last_user_msg:
-        return "模拟响应：未找到用户消息"
-
-    # 根据消息内容生成不同的模拟响应
-    content_lower = last_user_msg.lower()
-
-    if json_mode:
-        # JSON模式响应
-        if "blueprint" in content_lower or "工具链" in content_lower:
-            return """{
-  "intent": "查询天气信息并验证准确性",
-  "required_tools": ["alerts_active_zone_zoneid_for_national_weather_service", "forecast_weather_api_for_weatherapi_com", "points_point_stations_for_national_weather_service"],
-  "reasoning": "用户想要获取天气预警、气象站数据和预报信息，需要多个工具协作",
-  "is_valid": true
-}"""
-        elif "tool_call" in content_lower or "工具调用" in content_lower:
-            return """{"tool_name": "forecast_weather_api_for_weatherapi_com", "parameters": {"location": "Beijing"}}"""
-        elif "decision" in content_lower or "决策" in content_lower:
-            return "true"
-        else:
-            return """{"response": "这是JSON格式的模拟响应", "status": "success"}"""
-
-    else:
-        # 普通文本响应
-        if "天气预警" in content_lower or "weather alert" in content_lower:
-            return "用户想要查询天气预警信息，需要检查是否有活跃的天气警报。"
-        elif "气象站" in content_lower or "weather station" in content_lower:
-            return "用户询问气象观测站信息，应该查找最近的观测站点。"
-        elif "天气预报" in content_lower or "forecast" in content_lower:
-            return "用户需要天气预报数据，可以调用天气API获取。"
-        elif "blueprint" in content_lower or "蓝图" in content_lower:
-            return """天气查询工作流：
-1. 检查当前区域是否有天气预警
-2. 查找最近的气象观测站
-3. 获取气象站点网格数据
-4. 获取逐小时天气预报
-5. 对比商业天气API验证准确性
-
-这个工具链可以形成完整的天气信息查询流程。"""
-        elif "回复" in content_lower or "response" in content_lower:
-            return "根据天气查询结果，北京市目前没有发布天气预警，天气状况良好。"
-        else:
-            return f'模拟响应：已收到您的消息"{last_user_msg[:50]}..."'
-
-
 def completion(
     messages: List[Dict[str, Any]], json_mode: bool = False, **kwargs
 ) -> str:
@@ -108,13 +42,11 @@ def completion(
         return f"配置错误: {error_msg}"
 
     try:
-        # 检查是否是测试模式或API key无效
-        if (
-            settings.openai_api_key in ["qwertiasagv", "", None]
-            or len(str(settings.openai_api_key)) < 10
-        ):
-            logger.warning("⚠️ 检测到无效API key，使用模拟响应进行测试")
-            return _get_mock_response(messages, json_mode)
+        # 检查API key是否有效
+        if not settings.openai_api_key or len(str(settings.openai_api_key)) < 10:
+            error_msg = "API key无效或未配置，请检查OPENAI_API_KEY环境变量"
+            logger.error(error_msg)
+            return f"配置错误: {error_msg}"
 
         # 准备调用参数
         call_kwargs = {
