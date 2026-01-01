@@ -96,7 +96,7 @@ class Settings:
 
     def get_llm_model_id(self) -> str:
         """获取 LLM 模型 ID，用于 litellm 调用"""
-        if self.llm_provider == "openai":
+        if self.llm_provider == "openai" and not self.openai_api_base:
             return self.llm_model
         return f"{self.llm_provider}/{self.llm_model}"
 
