@@ -59,7 +59,7 @@ class ToolGraphBuilder:
         """
         判断工具A是否是工具B的依赖
 
-        逻辑：如果B的必需参数名出现在A的描述中，则A -> B
+        逻辑：如果A的描述中提到的参数名出现在B的参数中，则A -> B
 
         参数:
             tool_a: 可能的依赖工具
@@ -68,14 +68,18 @@ class ToolGraphBuilder:
         返回:
             是否存在依赖关系
         """
-        # 获取B的必需参数名
-        required_params = self._get_required_params(tool_b)
-        if not required_params:
+        # 获取B的所有参数名
+        all_params_b = (
+            set(tool_b.parameters.properties.keys())
+            if tool_b.parameters.properties
+            else set()
+        )
+        if not all_params_b:
             return False
 
-        # 检查A的描述是否包含B的必需参数名
+        # 检查A的描述是否包含B的任何参数名
         description_a = tool_a.description.lower()
-        return any(param.lower() in description_a for param in required_params)
+        return any(param.lower() in description_a for param in all_params_b)
 
     def _get_required_params(self, tool: ToolDefinition) -> List[str]:
         """
