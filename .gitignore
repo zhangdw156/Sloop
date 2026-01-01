@@ -10,4 +10,5 @@ eval_results/
 outputs/
 logs/
 tmp/
+.cache/
 .DS_Store
