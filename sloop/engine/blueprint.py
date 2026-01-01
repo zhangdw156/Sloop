@@ -173,20 +173,20 @@ class BlueprintGenerator:
         logger.info(f"🎯 开始图谱采样 (目标长度: {chain_length})")
 
         # 1. 使用全局不放回采样选择起始工具
-        current_tool_name = self._select_diverse_start_node()
-        tool_chain = [current_tool_name]
+        start_tool_name = self._select_diverse_start_node()
+        tool_chain = [start_tool_name]
 
         # 2. 使用图谱的领域粘性逻辑继续采样
         remaining_length = chain_length - 1
         if remaining_length > 0:
-            # 获取图谱采样的后续链
+            # 获取图谱采样的后续链（从起始工具开始）
             extended_chain = self.graph_builder.sample_tool_chain(
-                min_length=remaining_length,
-                max_length=remaining_length
+                min_length=chain_length,  # 让图谱采样器自己处理起始节点
+                max_length=chain_length
             )
-            if extended_chain and len(extended_chain) > 1:
-                # 跳过第一个元素（因为我们已经选择了起始节点）
-                tool_chain.extend(extended_chain[1:])
+            if extended_chain:
+                # 替换我们的起始节点，使用图谱采样器的完整链
+                tool_chain = extended_chain
 
         logger.info(f"🎯 图谱采样完成，最终链条: {' -> '.join(tool_chain)}")
         return tool_chain
