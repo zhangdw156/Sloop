@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 requires-python = ">=3.12"
 name = "sloop"
-version = "0.1.1"
+dynamic = ["version"]
 dependencies = [
     "fastapi>=0.125.0",
     "openai>=1.55.0",
@@ -22,6 +22,9 @@ dependencies = [
     "jinja2>=3.1.0",
     "loguru>=0.7.3",
 ]
+
+[tool.hatch.version]
+path = "sloop/__init__.py"
 
 [project.optional-dependencies]
 dev = [
