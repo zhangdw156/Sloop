@@ -1,6 +1,13 @@
 import os
 
 from loguru import logger
+from tqdm import tqdm
+
+
+def tqdm_sink(msg):
+    """自定义 sink，使用 tqdm.write 输出日志，避免与进度条冲突"""
+    tqdm.write(str(msg), end="")
+
 
 # 确保 logs 目录存在
 log_dir = os.path.join(
@@ -13,7 +20,7 @@ logger.remove()
 
 # 添加控制台输出
 logger.add(
-    "sys.stderr",
+    tqdm_sink,
     level="INFO",
     format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
     colorize=True,
