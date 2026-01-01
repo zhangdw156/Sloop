@@ -185,6 +185,12 @@ class ToolRetrievalEngine:
         # 转换为 numpy 数组
         embeddings = np.array(all_embeddings, dtype=np.float32)
 
+        # 确保是 2 维数组
+        if embeddings.ndim == 1:
+            embeddings = embeddings.reshape(1, -1)
+        elif embeddings.ndim > 2:
+            embeddings = embeddings.reshape(embeddings.shape[0], -1)
+
         logger.info(f"Embeddings shape: {embeddings.shape}")
 
         # 构建 FAISS 索引
