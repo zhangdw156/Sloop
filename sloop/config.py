@@ -39,7 +39,7 @@ class Settings:
     temperature: float = 0.7
 
     # 系统配置
-    max_tokens: int = 4096
+    max_tokens: int = 2048
     timeout: int = 60
 
     def __post_init__(self):

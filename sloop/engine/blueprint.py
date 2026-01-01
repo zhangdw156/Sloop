@@ -35,6 +35,10 @@ class BlueprintGenerator:
         self.graph_builder = ToolGraphBuilder(tools)
         self.graph_builder.build()
 
+        # 获取并打印图谱统计信息
+        stats = self.graph_builder.get_graph_stats()
+        logger.info(f"📊 工具图谱构建完成:\n   - 节点数量: {stats['nodes']}\n   - 边数量: {stats['edges']}\n   - 起始节点 (入度为0): {stats['start_nodes']}\n   - 结束节点 (出度为0): {stats['end_nodes']}")
+
         logger.info(f"BlueprintGenerator initialized with {len(tools)} tools")
 
     def generate(self, chain_length: int = 3, max_retries: int = 3) -> Blueprint:
