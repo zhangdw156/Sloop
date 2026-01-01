@@ -49,7 +49,7 @@ def completion(
 
         # 准备调用参数
         call_kwargs = {
-            "model": settings.model_name,
+            "model": settings.get_llm_model_id(),
             "messages": messages,
             "temperature": settings.temperature,
             "max_tokens": settings.max_tokens,
@@ -65,8 +65,8 @@ def completion(
         if json_mode:
             # 对于OpenAI兼容的API
             if (
-                "gpt" in settings.model_name.lower()
-                or "openai" in settings.model_name.lower()
+                "gpt" in settings.llm_model.lower()
+                or "openai" in settings.llm_provider.lower()
             ):
                 call_kwargs["response_format"] = {"type": "json_object"}
             # 对于其他模型，在系统消息中添加JSON指令
@@ -80,7 +80,7 @@ def completion(
         # 合并用户提供的额外参数
         call_kwargs.update(kwargs)
 
-        logger.info(f"调用LLM: {settings.model_name}, 消息数量: {len(messages)}")
+        logger.info(f"调用LLM: {settings.get_llm_model_id()}, 消息数量: {len(messages)}")
 
         # 调用模型
         response = litellm.completion(**call_kwargs)

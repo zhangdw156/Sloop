@@ -6,10 +6,10 @@
 
 import logging
 import os
-from dataclasses import dataclass
 from typing import Optional
 
 from dotenv import load_dotenv
+from pydantic import BaseModel, Field, model_validator
 
 # 加载.env文件
 load_dotenv()
@@ -28,65 +28,38 @@ def _get_logger():
     return logging.getLogger(__name__)
 
 
-@dataclass
-class Settings:
+class Settings(BaseModel):
     """应用配置类"""
 
     # LLM配置
-    model_name: str = "gpt-4o-mini"
-    openai_api_key: Optional[str] = None
-    openai_api_base: Optional[str] = None
-    temperature: float = 0.7
+    llm_provider: str = Field(default="openai", env="LLM_PROVIDER")
+    llm_model: str = Field(default="gpt-4o-mini", validation_alias="MODEL_NAME")
+    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
+    openai_api_base: Optional[str] = Field(default=None, env="OPENAI_API_BASE")
+    temperature: float = Field(default=0.7, env="TEMPERATURE")
 
     # 系统配置
-    max_tokens: int = 2048
-    timeout: int = 60
+    max_tokens: int = Field(default=2048, env="MAX_TOKENS")
+    timeout: int = Field(default=60, env="TIMEOUT")
 
     # Embedding 配置
-    embedding_provider: str = "openai"
-    embedding_model: str = "text-embedding-3-small"
-    embedding_api_key: Optional[str] = None
-    embedding_base_url: Optional[str] = None
+    embedding_provider: str = Field(default="openai", env="EMBEDDING_PROVIDER")
+    embedding_model: str = Field(default="text-embedding-3-small", env="EMBEDDING_MODEL")
+    embedding_api_key: Optional[str] = Field(default=None, env="EMBEDDING_API_KEY")
+    embedding_base_url: Optional[str] = Field(default=None, env="EMBEDDING_BASE_URL")
 
-    def __post_init__(self):
-        """从环境变量初始化"""
-        # LLM配置
-        self.model_name = os.getenv("MODEL_NAME", self.model_name)
-        self.openai_api_key = os.getenv("OPENAI_API_KEY", self.openai_api_key)
-        self.openai_api_base = os.getenv("OPENAI_API_BASE", self.openai_api_base)
-
-        # 温度参数
-        try:
-            temp_str = os.getenv("TEMPERATURE")
-            if temp_str:
-                self.temperature = float(temp_str)
-        except (ValueError, TypeError):
-            pass  # 使用默认值
-
-        # 系统配置
-        try:
-            max_tokens_str = os.getenv("MAX_TOKENS")
-            if max_tokens_str:
-                self.max_tokens = int(max_tokens_str)
-        except (ValueError, TypeError):
-            pass
-
-        try:
-            timeout_str = os.getenv("TIMEOUT")
-            if timeout_str:
-                self.timeout = int(timeout_str)
-        except (ValueError, TypeError):
-            pass
-
-        # Embedding配置
-        self.embedding_provider = os.getenv("EMBEDDING_PROVIDER", self.embedding_provider)
-        self.embedding_model = os.getenv("EMBEDDING_MODEL", self.embedding_model)
-        self.embedding_api_key = os.getenv("EMBEDDING_API_KEY", self.embedding_api_key)
-        self.embedding_base_url = os.getenv("EMBEDDING_BASE_URL", self.embedding_base_url)
-
-        # 如果embedding_api_key为空，则复用openai_api_key
+    @model_validator(mode="after")
+    def set_defaults(self):
+        """设置默认值"""
         if not self.embedding_api_key:
             self.embedding_api_key = self.openai_api_key
+        return self
+
+    def get_llm_model_id(self) -> str:
+        """获取 LLM 模型 ID，用于 litellm 调用"""
+        if self.llm_provider == "openai":
+            return self.llm_model
+        return f"{self.llm_provider}/{self.llm_model}"
 
     def validate(self) -> bool:
         """验证配置是否有效"""
@@ -103,7 +76,8 @@ class Settings:
     def get_safe_display(self) -> dict:
         """获取安全的配置显示（隐藏敏感信息）"""
         return {
-            "model_name": self.model_name,
+            "llm_provider": self.llm_provider,
+            "llm_model": self.llm_model,
             "openai_api_key": f"{self.openai_api_key[:4]}***"
             if self.openai_api_key
             else "未设置",
@@ -150,7 +124,8 @@ if __name__ == "__main__":
         logger.error("❌ 配置验证失败")
         logger.info("\n请检查以下环境变量:")
         logger.info("  - OPENAI_API_KEY: 必需")
-        logger.info("  - MODEL_NAME: 可选，默认 gpt-4o-mini")
+        logger.info("  - LLM_PROVIDER: 可选，默认 openai")
+        logger.info("  - MODEL_NAME (或 LLM_MODEL): 可选，默认 gpt-4o-mini")
         logger.info("  - OPENAI_API_BASE: 可选")
         logger.info("  - TEMPERATURE: 可选，默认 0.7")
         logger.info("  - MAX_TOKENS: 可选，默认 4096")
