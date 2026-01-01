@@ -40,12 +40,15 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
+# PL 包含了 Pylint 的所有规则 (Convention, Error, Refactor, Warning)
 select = ["E", "W", "F", "I", "B", "C4", "ARG", "SIM", "PT", "PL"]
 ignore = [
-    "E501",    # 行太长（原有）
-    "PLR2004", # Magic value used in comparison (例如 temperature < 2.0，这种不想每次都定义常量的场景)
-    "PLW0603", # Using the global statement (由于你确实用了 global settings，暂时忽略)
+    "E501",    # 行太长
+    "PLR2004", # 在比较操作中使用了“魔法值 Magic value used in comparison
+    "PLW0603", # 使用了 global 语句 Using the global statement
+    "PLC0415", # 允许在函数/类内部进行 import (Import should be at the top-level of a file)
 ]
+
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 "tests/*" = ["E402"]

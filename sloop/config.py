@@ -4,6 +4,7 @@
 负责加载环境变量和配置参数，支持通过.env文件进行配置。
 """
 
+import logging
 import os
 from dataclasses import dataclass
 from typing import Optional
@@ -13,18 +14,18 @@ from dotenv import load_dotenv
 # 加载.env文件
 load_dotenv()
 
+# 延迟导入logger，避免循环导入
+try:
+    from sloop.utils.logger import logger
+except ImportError:
+    logger = None
+
 
 # 延迟导入logger，避免循环导入
 def _get_logger():
-    try:
-        from sloop.utils.logger import logger
-
+    if logger is not None:
         return logger
-    except ImportError:
-        # 如果无法导入，使用标准logging
-        import logging
-
-        return logging.getLogger(__name__)
+    return logging.getLogger(__name__)
 
 
 @dataclass

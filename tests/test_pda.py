@@ -86,21 +86,21 @@ def get_pda_with_mocked_agents():
     )
 
     # Mock 用户代理
-    pda.user_agent.generate_message = lambda blueprint, messages: "我想要查询天气"
-    pda.user_agent.is_task_complete = lambda message: False
+    pda.user_agent.generate_message = lambda _blueprint, _messages: "我想要查询天气"
+    pda.user_agent.is_task_complete = lambda _message: False
 
     # Mock 助手代理 - 决策不需要工具，直接回复
-    pda.assistant_agent.generate_thought = lambda messages, hint: (
+    pda.assistant_agent.generate_thought = lambda _messages, _hint: (
         "我已经有了足够的信息来回答用户的问题"
     )
-    pda.assistant_agent.decide_tool_use = lambda thought: False  # 不需要工具
-    pda.assistant_agent.generate_tool_calls = lambda thought, tools: []
-    pda.assistant_agent.generate_reply = lambda thought, messages: (
+    pda.assistant_agent.decide_tool_use = lambda _thought: False  # 不需要工具
+    pda.assistant_agent.generate_tool_calls = lambda _thought, _tools: []
+    pda.assistant_agent.generate_reply = lambda _thought, _messages: (
         "根据天气信息，我来回答您的问题"
     )
 
     # Mock 服务代理
-    pda.service_agent.execute_tool = lambda tool_call, env_state, blueprint: {
+    pda.service_agent.execute_tool = lambda _tool_call, _env_state, _blueprint: {
         "response": "天气晴朗，温度25度",
         "state_updates": {"weather_data": "sunny"},
     }
@@ -252,8 +252,8 @@ def test_on_enter_user_gen_task_complete():
     pda = get_pda_with_mocked_agents()
 
     # Mock任务完成
-    pda.user_agent.is_task_complete = lambda message: True
-    pda.user_agent.generate_message = lambda blueprint, messages: "任务完成了###STOP###"
+    pda.user_agent.is_task_complete = lambda _message: True
+    pda.user_agent.generate_message = lambda _blueprint, _messages: "任务完成了###STOP###"
 
     # 清除现有消息
     pda.context.messages.clear()
@@ -287,11 +287,11 @@ def test_on_enter_assistant_decide():
     pda.context.current_thought = "需要工具"
 
     # 决策需要工具
-    pda.assistant_agent.decide_tool_use = lambda thought: True
+    pda.assistant_agent.decide_tool_use = lambda _thought: True
     pda.on_enter_assistant_decide()
 
     # 决策不需要工具
-    pda.assistant_agent.decide_tool_use = lambda thought: False
+    pda.assistant_agent.decide_tool_use = lambda _thought: False
     pda.on_enter_assistant_decide()
 
     test_logger.info("✅ 助手决策测试通过")
@@ -309,7 +309,7 @@ def test_on_enter_tool_call_gen():
     mock_tool_call = MagicMock()
     mock_tool_call.name = "get_weather"
     mock_tool_call.arguments = {"location": "北京"}
-    pda.assistant_agent.generate_tool_calls = lambda thought, tools: [mock_tool_call]
+    pda.assistant_agent.generate_tool_calls = lambda _thought, _tools: [mock_tool_call]
 
     pda.on_enter_tool_call_gen()
 

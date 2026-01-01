@@ -9,7 +9,8 @@ import logging
 import os
 from unittest.mock import patch
 
-# import pytest  # 注释掉pytest，使用标准unittest
+import pytest  # 导入pytest以使用usefixtures
+
 # import networkx as nx  # 可能有循环导入问题
 from sloop.engine.graph import ToolGraphBuilder
 from sloop.models.schema import ToolDefinition
@@ -40,6 +41,13 @@ console_handler.setFormatter(console_formatter)
 # 添加handlers
 test_logger.addHandler(file_handler)
 test_logger.addHandler(console_handler)
+
+
+@pytest.fixture
+def patch_plt_savefig():
+    """Fixture to patch plt.savefig"""
+    with patch("sloop.engine.graph.plt.savefig"):
+        yield
 
 
 def get_mock_tools():
@@ -287,8 +295,8 @@ def test_get_graph_stats():
     test_logger.info("✅ 图统计测试通过")
 
 
-@patch("sloop.engine.graph.plt.savefig")
-def test_visualize_graph(mock_savefig):
+@pytest.mark.usefixtures("patch_plt_savefig")
+def test_visualize_graph():
     """测试图可视化"""
     test_logger.info("📈 测试图可视化")
     builder = get_builder()
