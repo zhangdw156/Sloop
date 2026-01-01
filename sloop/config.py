@@ -51,8 +51,12 @@ class Settings(BaseModel):
     @model_validator(mode="after")
     def set_defaults(self):
         """设置默认值"""
+        if not self.embedding_provider:
+            self.embedding_provider = self.llm_provider
         if not self.embedding_api_key:
             self.embedding_api_key = self.openai_api_key
+        if not self.embedding_base_url:
+            self.embedding_base_url = self.openai_api_base
         return self
 
     def get_llm_model_id(self) -> str:
