@@ -121,7 +121,7 @@ class AssistantAgent:
         # 调用LLM生成思考过程
         thought = chat_completion(
             prompt=prompt,
-            system_message="你是生成详细思考过程的推理AI。请保持逻辑性和全面性。",
+            system_message="",
             json_mode=False,
         )
 
@@ -150,7 +150,7 @@ class AssistantAgent:
         decision = (
             chat_completion(
                 prompt=prompt,
-                system_message="你是决策AI。只回答YES或NO。",
+                system_message="",
                 json_mode=False,
             )
             .strip()
@@ -181,7 +181,7 @@ class AssistantAgent:
 
         response = chat_completion(
             prompt=prompt,
-            system_message="你是工具调用AI。请生成有效的JSON格式工具调用。",
+            system_message="",
             json_mode=True,
         )
 
@@ -231,7 +231,7 @@ class AssistantAgent:
 
         reply = chat_completion(
             prompt=prompt,
-            system_message="你是乐于助人的AI助手。请生成自然、有帮助的回复。",
+            system_message="",
             json_mode=False,
         )
 

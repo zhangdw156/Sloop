@@ -91,7 +91,7 @@ class BlueprintGenerator:
                 # 4. 调用LLM生成蓝图
                 llm_response = chat_completion(
                     prompt=prompt,
-                    system_message="你是专家级AI数据集生成器。始终用有效的JSON格式响应。",
+                    system_message="",
                     json_mode=True,
                 )
 

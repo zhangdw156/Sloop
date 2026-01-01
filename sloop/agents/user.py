@@ -44,7 +44,7 @@ class UserAgent:
         # 调用LLM生成消息
         response = chat_completion(
             prompt=prompt,
-            system_message="You are a user in a conversation. Respond naturally and decide when the task is complete.",
+            system_message="",
             json_mode=False,
         )
 

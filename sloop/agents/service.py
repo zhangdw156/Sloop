@@ -47,7 +47,7 @@ class ServiceAgent:
         # 调用LLM生成服务响应
         response = chat_completion(
             prompt=prompt,
-            system_message="You are an API simulator. Generate realistic responses and state updates based on the tool call.",
+            system_message="",
             json_mode=True,
         )
 
