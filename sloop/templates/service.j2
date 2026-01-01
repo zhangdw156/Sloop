@@ -16,6 +16,11 @@
 意图: {{ blueprint.intent }}
 期望最终状态: {{ blueprint.expected_state | tojson }}
 
+## 状态一致性原则
+- 你的响应必须基于 `current_state` 中的数据。
+- 如果状态中有相关字段（如 `balance`），请使用该值，不要重新生成随机数。
+- 只有当执行了修改数据的操作（如 `pay_bill`）时，才在 `state_updates` 中更新状态。
+
 ## 任务
 1. 根据当前状态和对话历史模拟工具调用的执行
 2. 生成该工具会返回的**纯JSON数据**（模拟真实的API返回体）
