@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional
 
 import litellm
 
+from sloop.config import get_settings
 from sloop.utils.logger import logger
 
 # 设置日志
@@ -31,8 +32,6 @@ def completion(
     异常:
         各种LLM调用异常会被捕获并记录，但不抛出
     """
-    from sloop.config import get_settings
-
     settings = get_settings()
 
     # 验证配置
@@ -137,8 +136,6 @@ def validate_llm_config() -> bool:
     返回:
         配置是否有效
     """
-    from sloop.config import get_settings
-
     settings = get_settings()
     return settings.validate()
 
@@ -165,8 +162,6 @@ def get_supported_models() -> List[str]:
 
 
 if __name__ == "__main__":
-    from sloop.config import get_settings
-
     logger.info("🔧 LLM 配置和调用测试")
     logger.info("=" * 50)
 
