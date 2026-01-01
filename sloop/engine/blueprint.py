@@ -41,6 +41,15 @@ class BlueprintGenerator:
         stats = self.graph_builder.get_graph_stats()
         logger.info(f"📊 工具图谱构建完成:\n   - 节点数量: {stats['nodes']}\n   - 边数量: {stats['edges']}\n   - 起始节点 (入度为0): {stats['start_nodes']}\n   - 结束节点 (出度为0): {stats['end_nodes']}")
 
+        # 初始化全局不放回采样状态
+        self.all_start_nodes = self.graph_builder.get_start_nodes()
+        if not self.all_start_nodes:
+            # 如果没有入度为0的节点，使用所有节点
+            self.all_start_nodes = list(self.tool_map.keys())
+        self.used_start_nodes = set()
+
+        logger.info(f"📋 发现 {len(self.all_start_nodes)} 个起始节点")
+
         # 初始化 RAG 相关组件（如果启用）
         if self.mode == "rag":
             from sloop.engine.rag import ToolRetrievalEngine
@@ -60,6 +69,34 @@ class BlueprintGenerator:
 
         logger.info(f"BlueprintGenerator initialized with {len(tools)} tools (mode: {mode})")
 
+    def _select_diverse_start_node(self) -> str:
+        """
+        选择多样化的起始节点（全局不放回采样）
+
+        实现全局不放回采样策略，确保在批量生成时优先遍历所有未使用的起始工具。
+
+        返回:
+            选中的起始节点名称
+        """
+        # 计算当前未使用的起始节点
+        available = [node for node in self.all_start_nodes if node not in self.used_start_nodes]
+
+        # 重置机制：如果所有节点都已使用，重置状态
+        if not available:
+            logger.info(f"🔄 重置起始节点使用状态 (已遍历 {len(self.used_start_nodes)} 个节点)")
+            self.used_start_nodes.clear()
+            available = self.all_start_nodes.copy()
+
+        # 随机选择一个未使用的节点
+        import random
+        selected_node = random.choice(available)
+
+        # 记录使用状态
+        self.used_start_nodes.add(selected_node)
+
+        logger.info(f"🎯 选择起始节点: {selected_node} (剩余未使用: {len(available) - 1})")
+        return selected_node
+
     def _sample_rag_tool_chain(self, chain_length: int) -> List[str]:
         """
         使用 RAG 增强采样工具链
@@ -72,17 +109,10 @@ class BlueprintGenerator:
         """
         logger.info(f"🎯 开始 RAG 增强采样 (目标长度: {chain_length})")
 
-        # 1. 随机选择起始工具
-        start_nodes = self.graph_builder.get_start_nodes()
-        if not start_nodes:
-            logger.warning("No start nodes found, falling back to random selection")
-            start_nodes = list(self.tool_map.keys())
-
-        current_tool_name = start_nodes[0]  # 简化：选择第一个起始节点
+        # 1. 使用全局不放回采样选择起始工具
+        current_tool_name = self._select_diverse_start_node()
         tool_chain = [current_tool_name]
         current_tool = self.tool_map[current_tool_name]
-
-        logger.info(f"🎬 起始工具: {current_tool_name}")
 
         # 2. 循环采样直到达到目标长度或决定结束
         while len(tool_chain) < chain_length:
@@ -130,6 +160,37 @@ class BlueprintGenerator:
         logger.info(f"🎯 RAG 采样完成，最终链条: {' -> '.join(tool_chain)}")
         return tool_chain
 
+    def _sample_graph_tool_chain(self, chain_length: int) -> List[str]:
+        """
+        使用图谱采样工具链（带全局不放回起始节点）
+
+        参数:
+            chain_length: 目标链长度
+
+        返回:
+            采样得到的工具链
+        """
+        logger.info(f"🎯 开始图谱采样 (目标长度: {chain_length})")
+
+        # 1. 使用全局不放回采样选择起始工具
+        current_tool_name = self._select_diverse_start_node()
+        tool_chain = [current_tool_name]
+
+        # 2. 使用图谱的领域粘性逻辑继续采样
+        remaining_length = chain_length - 1
+        if remaining_length > 0:
+            # 获取图谱采样的后续链
+            extended_chain = self.graph_builder.sample_tool_chain(
+                min_length=remaining_length,
+                max_length=remaining_length
+            )
+            if extended_chain and len(extended_chain) > 1:
+                # 跳过第一个元素（因为我们已经选择了起始节点）
+                tool_chain.extend(extended_chain[1:])
+
+        logger.info(f"🎯 图谱采样完成，最终链条: {' -> '.join(tool_chain)}")
+        return tool_chain
+
     def generate(self, chain_length: int = 3, max_retries: int = 3) -> Blueprint:
         """
         生成对话蓝图，包含合理性验证和重试机制
@@ -153,9 +214,7 @@ class BlueprintGenerator:
                 if self.mode == "rag":
                     tool_chain = self._sample_rag_tool_chain(chain_length)
                 else:
-                    tool_chain = self.graph_builder.sample_tool_chain(
-                        min_length=max(1, chain_length - 1), max_length=chain_length
-                    )
+                    tool_chain = self._sample_graph_tool_chain(chain_length)
 
                 if not tool_chain:
                     logger.warning(
