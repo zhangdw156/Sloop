@@ -45,7 +45,7 @@ select = ["E", "W", "F", "I", "B", "C4", "ARG", "SIM", "PT", "PL"]
 ignore = [
     "E501",    # 行太长
     "PLR2004", # 在比较操作中使用了“魔法值 Magic value used in comparison
-    "PLW0603", # 使用了 global 语句 Using the global statement
+    "PLW0603", # 使用了 global 语句 uUsing the global statement
     "PLC0415", # 允许在函数/类内部进行 import (Import should be at the top-level of a file)
 ]
 
