@@ -10,6 +10,7 @@ from typing import List, Optional
 from sloop.config import get_settings
 from sloop.models import ToolDefinition
 from sloop.utils.llm import chat_completion
+from sloop.utils.logger import logger
 from sloop.utils.template import render_selector_prompt
 
 
@@ -82,8 +83,8 @@ class SelectorAgent:
 # ==================== 测试代码 ====================
 
 if __name__ == "__main__":
-    print("🎯 SelectorAgent 测试")
-    print("=" * 50)
+    logger.info("🎯 SelectorAgent 测试")
+    logger.info("=" * 50)
 
     # 创建模拟工具
     mock_candidates = [
@@ -123,30 +124,30 @@ if __name__ == "__main__":
         ),
     ]
 
-    print(f"📋 候选工具: {len(mock_candidates)} 个")
+    logger.info(f"📋 候选工具: {len(mock_candidates)} 个")
     for tool in mock_candidates:
-        print(f"  - {tool.name}: {tool.description}")
+        logger.info(f"  - {tool.name}: {tool.description}")
 
     # 初始化裁判智能体
-    print("\n🤖 初始化 SelectorAgent...")
+    logger.info("🤖 初始化 SelectorAgent...")
     selector = SelectorAgent()
 
     # 测试场景1: 已获取天气，推荐下一步
-    print("\n🧪 测试场景1: 当前链条 ['get_weather']")
+    logger.info("🧪 测试场景1: 当前链条 ['get_weather']")
     current_chain1 = ["get_weather"]
     result1 = selector.select_next_tool(current_chain1, mock_candidates)
-    print(f"🎯 选择结果: {result1}")
+    logger.info(f"🎯 选择结果: {result1}")
 
     # 测试场景2: 空链条
-    print("\n🧪 测试场景2: 当前链条 []")
+    logger.info("🧪 测试场景2: 当前链条 []")
     current_chain2 = []
     result2 = selector.select_next_tool(current_chain2, mock_candidates)
-    print(f"🎯 选择结果: {result2}")
+    logger.info(f"🎯 选择结果: {result2}")
 
     # 测试场景3: 已预订机票，可能结束
-    print("\n🧪 测试场景3: 当前链条 ['book_flight']")
+    logger.info("🧪 测试场景3: 当前链条 ['book_flight']")
     current_chain3 = ["book_flight"]
     result3 = selector.select_next_tool(current_chain3, mock_candidates)
-    print(f"🎯 选择结果: {result3}")
+    logger.info(f"🎯 选择结果: {result3}")
 
-    print("\n✅ SelectorAgent 测试完成！")
+    logger.info("✅ SelectorAgent 测试完成！")
