@@ -13,14 +13,17 @@ from dotenv import load_dotenv
 # 加载.env文件
 load_dotenv()
 
+
 # 延迟导入logger，避免循环导入
 def _get_logger():
     try:
         from sloop.utils.logger import logger
+
         return logger
     except ImportError:
         # 如果无法导入，使用标准logging
         import logging
+
         return logging.getLogger(__name__)
 
 

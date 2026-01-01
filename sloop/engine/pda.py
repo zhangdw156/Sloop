@@ -93,9 +93,13 @@ class ConversationPDA:
         if auto_start:
             # 手动触发初始状态的回调（transitions不会自动调用）
             self.on_enter_user_gen()
-            logger.info(f"🎬 ConversationPDA initialized and started: {self.conversation_id}")
+            logger.info(
+                f"🎬 ConversationPDA initialized and started: {self.conversation_id}"
+            )
         else:
-            logger.info(f"🎬 ConversationPDA initialized (auto_start=False): {self.conversation_id}")
+            logger.info(
+                f"🎬 ConversationPDA initialized (auto_start=False): {self.conversation_id}"
+            )
 
     def _setup_state_machine(self):
         """设置状态机"""

@@ -4,19 +4,15 @@
 迁移自 sloop/engine/pda.py 的测试代码，并添加单元测试。
 """
 
-import json
+# 自定义logger，用于测试日志记录
+import logging
 import os
 from unittest.mock import MagicMock, patch
 
 # import pytest  # 注释掉pytest，使用标准unittest
-
 from sloop.engine.pda import ConversationPDA
 from sloop.models.blueprint import Blueprint
 from sloop.models.schema import ToolDefinition
-from sloop.agents import UserAgent, AssistantAgent, ServiceAgent
-
-# 自定义logger，用于测试日志记录
-import logging
 
 # 创建logs目录（如果不存在）
 test_log_dir = os.path.join(os.path.dirname(__file__), "logs")
@@ -28,15 +24,17 @@ test_logger.setLevel(logging.DEBUG)
 
 # 文件handler
 log_file = os.path.join(test_log_dir, "test_pda.log")
-file_handler = logging.FileHandler(log_file, encoding='utf-8')
+file_handler = logging.FileHandler(log_file, encoding="utf-8")
 file_handler.setLevel(logging.DEBUG)
-file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 file_handler.setFormatter(file_formatter)
 
 # 控制台handler
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
-console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(console_formatter)
 
 # 添加handlers
@@ -83,22 +81,28 @@ def get_pda():
 def get_pda_with_mocked_agents():
     """创建PDA实例，并mock所有智能体方法"""
     # 使用auto_start=False创建PDA实例，不自动启动对话
-    pda = ConversationPDA(get_mock_blueprint(), get_mock_tools(), "test_conv_001", auto_start=False)
+    pda = ConversationPDA(
+        get_mock_blueprint(), get_mock_tools(), "test_conv_001", auto_start=False
+    )
 
     # Mock 用户代理
     pda.user_agent.generate_message = lambda blueprint, messages: "我想要查询天气"
     pda.user_agent.is_task_complete = lambda message: False
 
     # Mock 助手代理 - 决策不需要工具，直接回复
-    pda.assistant_agent.generate_thought = lambda messages, hint: "我已经有了足够的信息来回答用户的问题"
+    pda.assistant_agent.generate_thought = lambda messages, hint: (
+        "我已经有了足够的信息来回答用户的问题"
+    )
     pda.assistant_agent.decide_tool_use = lambda thought: False  # 不需要工具
     pda.assistant_agent.generate_tool_calls = lambda thought, tools: []
-    pda.assistant_agent.generate_reply = lambda thought, messages: "根据天气信息，我来回答您的问题"
+    pda.assistant_agent.generate_reply = lambda thought, messages: (
+        "根据天气信息，我来回答您的问题"
+    )
 
     # Mock 服务代理
     pda.service_agent.execute_tool = lambda tool_call, env_state, blueprint: {
         "response": "天气晴朗，温度25度",
-        "state_updates": {"weather_data": "sunny"}
+        "state_updates": {"weather_data": "sunny"},
     }
 
     # Mock 状态机事件触发方法，防止状态转换
@@ -137,22 +141,22 @@ def test_state_machine_setup():
     pda = get_pda_with_mocked_agents()
 
     # 检查状态机存在
-    assert hasattr(pda, 'machine')
+    assert hasattr(pda, "machine")
     assert pda.machine is not None
 
     # 检查初始状态
     assert pda.current_state == "user_gen"
 
     # 检查状态转换
-    assert hasattr(pda, 'user_generated')
-    assert hasattr(pda, 'thought_generated')
-    assert hasattr(pda, 'decide_tool_call')
-    assert hasattr(pda, 'decide_reply')
-    assert hasattr(pda, 'tool_calls_generated')
-    assert hasattr(pda, 'tools_executed')
-    assert hasattr(pda, 'reply_generated')
-    assert hasattr(pda, 'continue_dialogue')
-    assert hasattr(pda, 'finish_dialogue')
+    assert hasattr(pda, "user_generated")
+    assert hasattr(pda, "thought_generated")
+    assert hasattr(pda, "decide_tool_call")
+    assert hasattr(pda, "decide_reply")
+    assert hasattr(pda, "tool_calls_generated")
+    assert hasattr(pda, "tools_executed")
+    assert hasattr(pda, "reply_generated")
+    assert hasattr(pda, "continue_dialogue")
+    assert hasattr(pda, "finish_dialogue")
 
     test_logger.info("✅ 状态机设置测试通过")
 
@@ -185,11 +189,10 @@ def test_generate_context_hint():
     assert hint == ""
 
     # WAITING_FOR_TOOLS 帧
-    pda.context.push_context("WAITING_FOR_TOOLS", {
-        "tool_names": ["get_weather"],
-        "intent": "查询天气",
-        "nested_level": 0
-    })
+    pda.context.push_context(
+        "WAITING_FOR_TOOLS",
+        {"tool_names": ["get_weather"], "intent": "查询天气", "nested_level": 0},
+    )
     hint = pda._generate_context_hint()
     assert "等待工具结果" in hint
     assert "get_weather" in hint
@@ -411,6 +414,7 @@ def test_get_status():
 
 # ==================== 集成测试（迁移自原main方法） ====================
 
+
 def run_integration_test():
     """运行集成测试（原main方法逻辑）"""
     test_logger.info("🔧 ConversationPDA 集成测试")
@@ -454,26 +458,26 @@ def run_integration_test():
     test_logger.info(loop.get_status())
 
     # 手动触发一些状态转换进行测试
-    with patch('sloop.agents.user.UserAgent.generate_message') as mock_user:
+    with patch("sloop.agents.user.UserAgent.generate_message") as mock_user:
         mock_user.return_value = "我想要知道天气"
 
         loop.on_enter_user_gen()
         test_logger.info("📊 用户生成后状态:")
         test_logger.info(loop.get_status())
 
-    with patch('sloop.agents.assistant.AssistantAgent.generate_thought') as mock_think:
+    with patch("sloop.agents.assistant.AssistantAgent.generate_thought") as mock_think:
         mock_think.return_value = "需要获取天气信息"
 
         loop.on_enter_assistant_think()
         test_logger.info("📊 思考生成后状态:")
         test_logger.info(loop.get_status())
 
-    with patch('sloop.agents.assistant.AssistantAgent.decide_tool_use') as mock_decide:
+    with patch("sloop.agents.assistant.AssistantAgent.decide_tool_use") as mock_decide:
         mock_decide.return_value = False  # 不需要工具
 
         loop.on_enter_assistant_decide()
 
-    with patch('sloop.agents.assistant.AssistantAgent.generate_reply') as mock_reply:
+    with patch("sloop.agents.assistant.AssistantAgent.generate_reply") as mock_reply:
         mock_reply.return_value = "今天天气很好"
 
         loop.on_enter_assistant_reply_gen()

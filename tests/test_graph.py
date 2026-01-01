@@ -4,17 +4,15 @@
 为 sloop/engine/graph.py 的核心功能编写单元测试。
 """
 
+# 自定义logger，用于测试日志记录
+import logging
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 # import pytest  # 注释掉pytest，使用标准unittest
 # import networkx as nx  # 可能有循环导入问题
-
 from sloop.engine.graph import ToolGraphBuilder
 from sloop.models.schema import ToolDefinition
-
-# 自定义logger，用于测试日志记录
-import logging
 
 # 创建logs目录（如果不存在）
 test_log_dir = os.path.join(os.path.dirname(__file__), "logs")
@@ -26,15 +24,17 @@ test_logger.setLevel(logging.DEBUG)
 
 # 文件handler
 log_file = os.path.join(test_log_dir, "test_graph.log")
-file_handler = logging.FileHandler(log_file, encoding='utf-8')
+file_handler = logging.FileHandler(log_file, encoding="utf-8")
 file_handler.setLevel(logging.DEBUG)
-file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 file_handler.setFormatter(file_formatter)
 
 # 控制台handler
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
-console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(console_formatter)
 
 # 添加handlers
@@ -82,7 +82,9 @@ def get_mock_tools():
             description="Get weather information for a location",
             parameters={
                 "type": "object",
-                "properties": {"location": {"type": "string", "description": "Location"}},
+                "properties": {
+                    "location": {"type": "string", "description": "Location"}
+                },
                 "required": ["location"],
             },
         ),
@@ -119,8 +121,8 @@ def test_build_graph():
 
     # 检查图的基本属性（不使用networkx直接导入）
     assert graph is not None
-    assert hasattr(graph, 'nodes')
-    assert hasattr(graph, 'edges')
+    assert hasattr(graph, "nodes")
+    assert hasattr(graph, "edges")
 
     # 检查节点数量
     assert len(graph.nodes) == 4  # 4个工具
@@ -139,13 +141,19 @@ def test_dependency_analysis():
     builder = ToolGraphBuilder(mock_tools)
 
     # find_restaurants -> get_menu (get_menu需要restaurant_id，find_restaurants返回restaurant_id)
-    assert builder._has_dependency(mock_tools[0], mock_tools[1])  # find_restaurants -> get_menu
+    assert builder._has_dependency(
+        mock_tools[0], mock_tools[1]
+    )  # find_restaurants -> get_menu
 
     # find_restaurants -> order_food (order_food需要restaurant_id)
-    assert builder._has_dependency(mock_tools[0], mock_tools[2])  # find_restaurants -> order_food
+    assert builder._has_dependency(
+        mock_tools[0], mock_tools[2]
+    )  # find_restaurants -> order_food
 
     # get_menu -> order_food (order_food需要restaurant_id，get_menu使用restaurant_id)
-    assert builder._has_dependency(mock_tools[1], mock_tools[2])  # get_menu -> order_food
+    assert builder._has_dependency(
+        mock_tools[1], mock_tools[2]
+    )  # get_menu -> order_food
 
     # get_weather 不应该依赖其他工具
     assert not builder._has_dependency(mock_tools[3], mock_tools[0])
@@ -183,7 +191,7 @@ def test_sample_tool_chain():
     chains = []
 
     # 采样多次以测试随机性
-    for i in range(10):
+    for _i in range(10):
         chain = builder.sample_tool_chain(min_length=1, max_length=3)
         assert isinstance(chain, list)
         assert len(chain) >= 1
@@ -192,7 +200,7 @@ def test_sample_tool_chain():
         chains.append(chain)
 
     # 检查至少有一些不同的链（证明随机性）
-    unique_chains = set(tuple(chain) for chain in chains)
+    unique_chains = {tuple(chain) for chain in chains}
     assert len(unique_chains) > 1
 
     test_logger.info("✅ 工具链采样测试通过")
@@ -279,7 +287,7 @@ def test_get_graph_stats():
     test_logger.info("✅ 图统计测试通过")
 
 
-@patch('sloop.engine.graph.plt.savefig')
+@patch("sloop.engine.graph.plt.savefig")
 def test_visualize_graph(mock_savefig):
     """测试图可视化"""
     test_logger.info("📈 测试图可视化")
@@ -295,6 +303,7 @@ def test_visualize_graph(mock_savefig):
 
 
 # ==================== 集成测试 ====================
+
 
 def run_integration_test():
     """运行集成测试"""
@@ -344,7 +353,7 @@ def run_integration_test():
     # 初始化构建器
     test_logger.info("🔧 初始化ToolGraphBuilder...")
     builder = ToolGraphBuilder(test_tools)
-    graph = builder.build()
+    builder.build()
 
     test_logger.info("📊 图统计:")
     stats = builder.get_graph_stats()
@@ -358,7 +367,7 @@ def run_integration_test():
     test_logger.info("🎲 采样工具链...")
     for i in range(3):
         chain = builder.sample_tool_chain(min_length=2, max_length=3)
-        test_logger.info(f"  链 {i+1}: {' -> '.join(chain)}")
+        test_logger.info(f"  链 {i + 1}: {' -> '.join(chain)}")
 
     test_logger.info("")
     test_logger.info("✅ ToolGraphBuilder 集成测试完成！")

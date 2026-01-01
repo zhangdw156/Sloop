@@ -5,18 +5,16 @@
 """
 
 import json
-import os
-import tempfile
-from unittest.mock import MagicMock, patch
-
-# import pytest  # 注释掉pytest，使用标准unittest
-
-from sloop.engine.blueprint import BlueprintGenerator
-from sloop.models.blueprint import Blueprint
-from sloop.models.schema import ToolDefinition
 
 # 自定义logger，用于测试日志记录
 import logging
+import os
+from unittest.mock import patch
+
+# import pytest  # 注释掉pytest，使用标准unittest
+from sloop.engine.blueprint import BlueprintGenerator
+from sloop.models.blueprint import Blueprint
+from sloop.models.schema import ToolDefinition
 
 # 创建logs目录（如果不存在）
 test_log_dir = os.path.join(os.path.dirname(__file__), "logs")
@@ -28,15 +26,17 @@ test_logger.setLevel(logging.DEBUG)
 
 # 文件handler
 log_file = os.path.join(test_log_dir, "test_blueprint.log")
-file_handler = logging.FileHandler(log_file, encoding='utf-8')
+file_handler = logging.FileHandler(log_file, encoding="utf-8")
 file_handler.setLevel(logging.DEBUG)
-file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+file_formatter = logging.Formatter(
+    "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 file_handler.setFormatter(file_formatter)
 
 # 控制台handler
 console_handler = logging.StreamHandler()
 console_handler.setLevel(logging.INFO)
-console_formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+console_formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(console_formatter)
 
 # 添加handlers
@@ -100,7 +100,7 @@ def test_initialization():
     test_logger.info("✅ 初始化测试通过")
 
 
-@patch('sloop.engine.blueprint.chat_completion')
+@patch("sloop.engine.blueprint.chat_completion")
 def test_generate_success(mock_chat):
     """测试成功生成蓝图"""
     test_logger.info("🎯 测试蓝图生成成功场景")
@@ -110,7 +110,7 @@ def test_generate_success(mock_chat):
         "intent": "查找餐厅并点餐",
         "valid": True,
         "initial_state": {"restaurant_found": False, "menu_loaded": False},
-        "expected_state": {"restaurant_found": True, "menu_loaded": True}
+        "expected_state": {"restaurant_found": True, "menu_loaded": True},
     })
     mock_chat.return_value = mock_response
 
@@ -127,7 +127,7 @@ def test_generate_success(mock_chat):
     test_logger.info("✅ 成功生成测试通过")
 
 
-@patch('sloop.engine.blueprint.chat_completion')
+@patch("sloop.engine.blueprint.chat_completion")
 def test_generate_with_invalid_response(mock_chat):
     """测试处理无效LLM响应"""
     test_logger.info("❌ 测试处理无效LLM响应")
@@ -146,7 +146,7 @@ def test_generate_with_invalid_response(mock_chat):
     test_logger.info("✅ 无效响应处理测试通过")
 
 
-@patch('sloop.engine.blueprint.chat_completion')
+@patch("sloop.engine.blueprint.chat_completion")
 def test_generate_with_llm_error(mock_chat):
     """测试处理LLM调用错误"""
     test_logger.info("🚨 测试处理LLM调用错误")
@@ -169,12 +169,12 @@ def test_generate_multiple():
     """测试批量生成蓝图"""
     test_logger.info("📊 测试批量生成蓝图")
 
-    with patch('sloop.engine.blueprint.chat_completion') as mock_chat:
+    with patch("sloop.engine.blueprint.chat_completion") as mock_chat:
         mock_response = json.dumps({
             "intent": "测试意图",
             "valid": True,
             "initial_state": {},
-            "expected_state": {}
+            "expected_state": {},
         })
         mock_chat.return_value = mock_response
 
@@ -200,7 +200,7 @@ def test_validate_blueprint_data():
     valid_data = {
         "intent": "测试意图",
         "initial_state": {"key": "value"},
-        "expected_state": {"result": True}
+        "expected_state": {"result": True},
     }
     expected_chain = ["tool1", "tool2"]
 
@@ -236,6 +236,7 @@ def test_fallback_blueprint_generation():
 
 
 # ==================== 集成测试（迁移自原main方法） ====================
+
 
 def run_integration_test():
     """运行集成测试（原main方法逻辑）"""
@@ -296,12 +297,12 @@ def run_integration_test():
     # 生成蓝图（使用mock避免实际LLM调用）
     test_logger.info("🎯 生成Blueprint...")
     try:
-        with patch('sloop.engine.blueprint.chat_completion') as mock_chat:
+        with patch("sloop.engine.blueprint.chat_completion") as mock_chat:
             mock_response = json.dumps({
                 "intent": "查找餐厅并点餐",
                 "valid": True,
                 "initial_state": {"restaurant_found": False, "menu_loaded": False},
-                "expected_state": {"restaurant_found": True, "menu_loaded": True}
+                "expected_state": {"restaurant_found": True, "menu_loaded": True},
             })
             mock_chat.return_value = mock_response
 
