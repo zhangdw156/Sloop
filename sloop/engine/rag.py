@@ -85,15 +85,15 @@ class ToolRetrievalEngine:
             except Exception as e:
                 logger.error(f"Failed to save index: {e}")
 
-    def _get_embedding(self, text: str) -> List[float]:
+    def _get_embedding(self, text: str | List[str]) -> List[float] | List[List[float]]:
         """
         获取文本的向量表示
 
         参数:
-            text: 输入文本
+            text: 输入文本或文本列表
 
         返回:
-            向量列表
+            向量列表或向量列表的列表
         """
         import litellm
 
@@ -107,17 +107,22 @@ class ToolRetrievalEngine:
                     api_base=self.settings.embedding_base_url,
                 )
 
-                if response and response.data and len(response.data) > 0:
-                    return response.data[0].embedding
+                if response and response.data:
+                    if isinstance(text, str):
+                        # 单条输入
+                        if len(response.data) > 0:
+                            return response.data[0].embedding
+                    else:
+                        # 批量输入
+                        return [item.embedding for item in response.data]
 
             except Exception as e:
                 logger.warning(f"Embedding call failed (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     continue
 
-        # 返回零向量作为失败时的默认值
-        logger.error("Embedding call failed, returning zero vector")
-        return [0.0] * 1536  # OpenAI text-embedding-3-small 的维度
+        # 失败时抛出异常
+        raise RuntimeError("Embedding call failed after all retries")
 
     def build(self, tools: List[ToolDefinition], force: bool = False):
         """
@@ -154,9 +159,9 @@ class ToolRetrievalEngine:
         for i in tqdm(range(0, len(texts), batch_size), desc="Generating embeddings"):
             batch_texts = texts[i:i + batch_size]
 
-            for text in batch_texts:
-                embedding = self._get_embedding(text)
-                all_embeddings.append(embedding)
+            # 批量调用 embedding API
+            batch_embeddings = self._get_embedding(batch_texts)
+            all_embeddings.extend(batch_embeddings)
 
         # 转换为 numpy 数组
         embeddings = np.array(all_embeddings, dtype=np.float32)
