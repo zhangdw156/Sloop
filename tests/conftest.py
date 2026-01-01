@@ -2,9 +2,10 @@
 测试配置和fixtures
 """
 
-import pytest
 import json
-from pathlib import Path
+import os
+
+import pytest
 
 
 @pytest.fixture
@@ -15,25 +16,24 @@ def sample_apis():
             "name": "get_weather",
             "description": "获取指定城市的天气信息",
             "parameters": {"city": "string", "unit": "string"},
-            "category": "weather"
+            "category": "weather",
         },
         {
             "name": "search_restaurants",
             "description": "搜索餐厅",
             "parameters": {"city": "string", "cuisine": "string"},
-            "category": "travel"
-        }
+            "category": "travel",
+        },
     ]
 
 
 @pytest.fixture
 def sample_services_file(sample_apis):
     """创建临时sample_apis.json文件在tests目录下"""
-    import os
     test_dir = os.path.dirname(__file__)  # tests目录
     services_file = os.path.join(test_dir, "sample_services.json")
 
-    with open(services_file, 'w', encoding='utf-8') as f:
+    with open(services_file, "w", encoding="utf-8") as f:
         json.dump(sample_apis, f, ensure_ascii=False, indent=2)
 
     yield services_file

@@ -4,14 +4,13 @@
 模拟API服务执行，根据工具调用更新环境状态。
 """
 
-import logging
 import json
-from typing import Dict, Any, Optional
-from sloop.models import ToolCall, Blueprint, EnvState
-from sloop.utils.llm import chat_completion
-from sloop.utils.template import render_service_prompt
+from typing import Any, Dict
 
-logger = logging.getLogger(__name__)
+from sloop.models import Blueprint, EnvState, ToolCall
+from sloop.utils.llm import chat_completion
+from sloop.utils.logger import logger
+from sloop.utils.template import render_service_prompt
 
 
 class ServiceAgent:
@@ -27,10 +26,7 @@ class ServiceAgent:
         logger.info("ServiceAgent initialized")
 
     def execute_tool(
-        self,
-        tool_call: ToolCall,
-        current_state: EnvState,
-        blueprint: Blueprint
+        self, tool_call: ToolCall, current_state: EnvState, blueprint: Blueprint
     ) -> Dict[str, Any]:
         """
         执行工具调用
@@ -52,14 +48,14 @@ class ServiceAgent:
         response = chat_completion(
             prompt=prompt,
             system_message="You are an API simulator. Generate realistic responses and state updates based on the tool call.",
-            json_mode=True
+            json_mode=True,
         )
 
         if not response or response.startswith("调用错误"):
             logger.error(f"Failed to execute tool: {response}")
             return {
                 "response": f"Error executing {tool_call.name}",
-                "state_updates": {}
+                "state_updates": {},
             }
 
         try:
@@ -87,10 +83,12 @@ class ServiceAgent:
             logger.error(f"Failed to parse service response: {e}")
             return {
                 "response": f"Executed {tool_call.name} (response parsing failed)",
-                "state_updates": {}
+                "state_updates": {},
             }
 
-    def update_state(self, current_state: EnvState, state_updates: Dict[str, Any]) -> EnvState:
+    def update_state(
+        self, current_state: EnvState, state_updates: Dict[str, Any]
+    ) -> EnvState:
         """
         更新环境状态
 
@@ -117,12 +115,12 @@ if __name__ == "__main__":
     logger.info("🔧 Service Agent 测试")
     logger.info("=" * 50)
 
-    from sloop.models import ToolCall, Blueprint, EnvState
+    from sloop.models import Blueprint, EnvState, ToolCall
 
     # 创建模拟工具调用
     mock_tool_call = ToolCall(
         tool_name="search_restaurants",
-        arguments={"city": "Shanghai", "cuisine": "Italian"}
+        arguments={"city": "Shanghai", "cuisine": "Italian"},
     )
 
     # 创建模拟状态
@@ -130,7 +128,7 @@ if __name__ == "__main__":
         state={
             "restaurant_found": False,
             "menu_loaded": False,
-            "booking_confirmed": False
+            "booking_confirmed": False,
         }
     )
 
@@ -140,7 +138,7 @@ if __name__ == "__main__":
         required_tools=["search_restaurants", "book_restaurant"],
         ground_truth=["search_restaurants", "book_restaurant"],
         initial_state={"restaurant_found": False, "booking_confirmed": False},
-        expected_state={"restaurant_found": True, "booking_confirmed": True}
+        expected_state={"restaurant_found": True, "booking_confirmed": True},
     )
 
     logger.info("📋 测试数据:")
@@ -162,7 +160,7 @@ if __name__ == "__main__":
         logger.info(f"🔄 状态更新: {result['state_updates']}")
 
         # 应用状态更新
-        updated_state = service_agent.update_state(mock_state, result['state_updates'])
+        updated_state = service_agent.update_state(mock_state, result["state_updates"])
         logger.info(f"📊 更新后状态: {updated_state.model_dump()}")
 
     except Exception as e:
@@ -172,13 +170,15 @@ if __name__ == "__main__":
         logger.info("\n🔧 提供模拟服务响应:")
         mock_result = {
             "response": "Found 5 Italian restaurants in Shanghai",
-            "state_updates": {"restaurant_found": True}
+            "state_updates": {"restaurant_found": True},
         }
         logger.info(f"响应: {mock_result['response']}")
         logger.info(f"状态更新: {mock_result['state_updates']}")
 
         # 应用模拟更新
-        updated_state = service_agent.update_state(mock_state, mock_result['state_updates'])
+        updated_state = service_agent.update_state(
+            mock_state, mock_result["state_updates"]
+        )
         logger.info(f"更新后状态: {updated_state.model_dump()}")
 
     logger.info("\n✅ Service Agent 测试完成！")

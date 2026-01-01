@@ -5,6 +5,7 @@
 """
 
 import os
+
 from jinja2 import Template
 
 
@@ -72,13 +73,14 @@ def render_planner_prompt(tool_chain: list, tool_definitions: list) -> str:
         tool_dict = {
             "name": tool.name,
             "description": tool.description,
-            "parameters": tool.parameters.model_dump() if hasattr(tool.parameters, 'model_dump') else tool.parameters
+            "parameters": tool.parameters.model_dump()
+            if hasattr(tool.parameters, "model_dump")
+            else tool.parameters,
         }
         tool_definitions_dict.append(tool_dict)
 
     return template.render(
-        tool_chain=tool_chain,
-        tool_definitions=tool_definitions_dict
+        tool_chain=tool_chain, tool_definitions=tool_definitions_dict
     )
 
 
@@ -108,24 +110,15 @@ def render_user_prompt(intent: str, conversation_history: list) -> str:
     # 转换消息对象为字典格式（兼容对象和字典）
     history_dict = []
     for message in conversation_history:
-        if hasattr(message, 'role') and hasattr(message, 'content'):
+        if hasattr(message, "role") and hasattr(message, "content"):
             # 这是ChatMessage对象
-            msg_dict = {
-                "role": message.role,
-                "content": message.content
-            }
+            msg_dict = {"role": message.role, "content": message.content}
         else:
             # 这已经是字典了
             msg_dict = message
         history_dict.append(msg_dict)
 
-    return template.render(
-        intent=intent,
-        conversation_history=history_dict
-    )
-
-
-
+    return template.render(intent=intent, conversation_history=history_dict)
 
 
 def get_service_template():
@@ -138,7 +131,9 @@ def get_service_template():
     return _load_template("service")
 
 
-def render_service_prompt(tool_call, current_state, blueprint, conversation_history=None) -> str:
+def render_service_prompt(
+    tool_call, current_state, blueprint, conversation_history=None
+) -> str:
     """
     渲染服务智能体提示
 
@@ -154,33 +149,31 @@ def render_service_prompt(tool_call, current_state, blueprint, conversation_hist
     template = get_service_template()
 
     # 转换对象为字典格式（兼容对象和字典）
-    if hasattr(tool_call, 'name') and hasattr(tool_call, 'arguments'):
+    if hasattr(tool_call, "name") and hasattr(tool_call, "arguments"):
         # 这是ToolCall对象
-        tool_call_dict = {
-            "tool_name": tool_call.name,
-            "arguments": tool_call.arguments
-        }
+        tool_call_dict = {"tool_name": tool_call.name, "arguments": tool_call.arguments}
     else:
         # 这已经是字典了
         tool_call_dict = tool_call
 
-    state_dict = current_state.model_dump() if hasattr(current_state, 'model_dump') else current_state.__dict__
+    state_dict = (
+        current_state.model_dump()
+        if hasattr(current_state, "model_dump")
+        else current_state.__dict__
+    )
 
     blueprint_dict = {
         "intent": blueprint.intent,
-        "expected_state": blueprint.expected_state
+        "expected_state": blueprint.expected_state,
     }
 
     # 转换对话历史为字典格式
     history_dict = []
     if conversation_history:
         for message in conversation_history:
-            if hasattr(message, 'role') and hasattr(message, 'content'):
+            if hasattr(message, "role") and hasattr(message, "content"):
                 # 这是ChatMessage对象
-                msg_dict = {
-                    "role": message.role,
-                    "content": message.content
-                }
+                msg_dict = {"role": message.role, "content": message.content}
             else:
                 # 这已经是字典了
                 msg_dict = message
@@ -190,7 +183,7 @@ def render_service_prompt(tool_call, current_state, blueprint, conversation_hist
         tool_call=tool_call_dict,
         current_state=state_dict,
         blueprint=blueprint_dict,
-        conversation_history=history_dict
+        conversation_history=history_dict,
     )
 
 
@@ -204,7 +197,9 @@ def get_assistant_think_template():
     return _load_template("assistant_think")
 
 
-def render_assistant_think_prompt(conversation_history: list, context_hint: str = "") -> str:
+def render_assistant_think_prompt(
+    conversation_history: list, context_hint: str = ""
+) -> str:
     """
     渲染助手思考提示
 
@@ -220,10 +215,7 @@ def render_assistant_think_prompt(conversation_history: list, context_hint: str 
     # 转换消息对象为字典格式
     history_dict = []
     for message in conversation_history:
-        msg_dict = {
-            "role": message.role,
-            "content": message.content
-        }
+        msg_dict = {"role": message.role, "content": message.content}
         history_dict.append(msg_dict)
 
     return template.render(conversation_history=history_dict, context_hint=context_hint)
@@ -258,7 +250,9 @@ def render_assistant_decide_prompt(thought: str, tools: list) -> str:
         tool_dict = {
             "name": tool.name,
             "description": tool.description,
-            "parameters": tool.parameters.model_dump() if hasattr(tool.parameters, 'model_dump') else tool.parameters
+            "parameters": tool.parameters.model_dump()
+            if hasattr(tool.parameters, "model_dump")
+            else tool.parameters,
         }
         tools_dict.append(tool_dict)
 
@@ -294,7 +288,9 @@ def render_tool_call_gen_prompt(thought: str, tools: list) -> str:
         tool_dict = {
             "name": tool.name,
             "description": tool.description,
-            "parameters": tool.parameters.model_dump() if hasattr(tool.parameters, 'model_dump') else tool.parameters
+            "parameters": tool.parameters.model_dump()
+            if hasattr(tool.parameters, "model_dump")
+            else tool.parameters,
         }
         tools_dict.append(tool_dict)
 
@@ -327,10 +323,7 @@ def render_assistant_reply_prompt(thought: str, conversation_history: list) -> s
     # 转换消息对象为字典格式
     history_dict = []
     for message in conversation_history:
-        msg_dict = {
-            "role": message.role,
-            "content": message.content
-        }
+        msg_dict = {"role": message.role, "content": message.content}
         history_dict.append(msg_dict)
 
     return template.render(thought=thought, conversation_history=history_dict)

@@ -7,7 +7,10 @@
 import os
 from dataclasses import dataclass
 from typing import Optional
+
 from dotenv import load_dotenv
+
+from sloop.utils.logger import logger
 
 # 加载.env文件
 load_dotenv()
@@ -73,11 +76,13 @@ class Settings:
         """获取安全的配置显示（隐藏敏感信息）"""
         return {
             "model_name": self.model_name,
-            "openai_api_key": f"{self.openai_api_key[:4]}***" if self.openai_api_key else "未设置",
+            "openai_api_key": f"{self.openai_api_key[:4]}***"
+            if self.openai_api_key
+            else "未设置",
             "openai_api_base": self.openai_api_base or "默认",
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
-            "timeout": self.timeout
+            "timeout": self.timeout,
         }
 
 

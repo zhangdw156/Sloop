@@ -4,20 +4,19 @@
 模拟被测试的助手模型，根据工具定义和对话历史决定下一步行动。
 """
 
-import logging
 import json
 import re
-from typing import List, Optional, Dict, Any
-from sloop.models import ToolDefinition, ChatMessage, ToolCall
-from sloop.utils.llm import chat_completion
-from sloop.utils.template import (
-    render_assistant_think_prompt,
-    render_assistant_decide_prompt,
-    render_tool_call_gen_prompt,
-    render_assistant_reply_prompt
-)
+from typing import List
 
-logger = logging.getLogger(__name__)
+from sloop.models import ChatMessage, ToolCall, ToolDefinition
+from sloop.utils.llm import chat_completion
+from sloop.utils.logger import logger
+from sloop.utils.template import (
+    render_assistant_decide_prompt,
+    render_assistant_reply_prompt,
+    render_assistant_think_prompt,
+    render_tool_call_gen_prompt,
+)
 
 
 class AssistantAgent:
@@ -39,8 +38,6 @@ class AssistantAgent:
         self.tool_map = {tool.name: tool for tool in tools}
 
         logger.info(f"AssistantAgent initialized with {len(tools)} tools")
-
-
 
     def parse_tool_calls(self, response: str) -> List[ToolCall]:
         """
@@ -64,10 +61,7 @@ class AssistantAgent:
             try:
                 arguments = json.loads(args_str)
                 if tool_name in self.tool_map:
-                    tool_call = ToolCall(
-                        name=tool_name,
-                        arguments=arguments
-                    )
+                    tool_call = ToolCall(name=tool_name, arguments=arguments)
                     tool_calls.append(tool_call)
                     logger.info(f"Parsed tool call: {tool_name}")
             except json.JSONDecodeError:
@@ -84,14 +78,13 @@ class AssistantAgent:
                 try:
                     arguments = json.loads(args_str)
                     if tool_name in self.tool_map:
-                        tool_call = ToolCall(
-                            name=tool_name,
-                            arguments=arguments
-                        )
+                        tool_call = ToolCall(name=tool_name, arguments=arguments)
                         tool_calls.append(tool_call)
                         logger.info(f"Parsed function call: {tool_name}")
                 except json.JSONDecodeError:
-                    logger.warning(f"Failed to parse function call arguments: {args_str}")
+                    logger.warning(
+                        f"Failed to parse function call arguments: {args_str}"
+                    )
 
         return tool_calls
 
@@ -107,7 +100,9 @@ class AssistantAgent:
         """
         return len(self.parse_tool_calls(response)) > 0
 
-    def generate_thought(self, conversation_history: List[ChatMessage], context_hint: str = "") -> str:
+    def generate_thought(
+        self, conversation_history: List[ChatMessage], context_hint: str = ""
+    ) -> str:
         """
         生成助手思考过程 (Chain of Thought)
 
@@ -127,7 +122,7 @@ class AssistantAgent:
         thought = chat_completion(
             prompt=prompt,
             system_message="你是生成详细思考过程的推理AI。请保持逻辑性和全面性。",
-            json_mode=False
+            json_mode=False,
         )
 
         if not thought or thought.startswith("调用错误"):
@@ -152,17 +147,23 @@ class AssistantAgent:
         # 使用模板渲染提示
         prompt = render_assistant_decide_prompt(thought, self.tools)
 
-        decision = chat_completion(
-            prompt=prompt,
-            system_message="你是决策AI。只回答YES或NO。",
-            json_mode=False
-        ).strip().upper()
+        decision = (
+            chat_completion(
+                prompt=prompt,
+                system_message="你是决策AI。只回答YES或NO。",
+                json_mode=False,
+            )
+            .strip()
+            .upper()
+        )
 
-        needs_tools = decision.startswith('YES')
+        needs_tools = decision.startswith("YES")
         logger.info(f"Tool use decision: {needs_tools}")
         return needs_tools
 
-    def generate_tool_calls(self, thought: str, tools: List[ToolDefinition]) -> List[ToolCall]:
+    def generate_tool_calls(
+        self, thought: str, tools: List[ToolDefinition]
+    ) -> List[ToolCall]:
         """
         基于思考过程生成工具调用
 
@@ -181,7 +182,7 @@ class AssistantAgent:
         response = chat_completion(
             prompt=prompt,
             system_message="你是工具调用AI。请生成有效的JSON格式工具调用。",
-            json_mode=True
+            json_mode=True,
         )
 
         try:
@@ -191,12 +192,15 @@ class AssistantAgent:
 
             tool_calls = []
             for call_data in tool_calls_data:
-                if isinstance(call_data, dict) and 'name' in call_data and 'arguments' in call_data:
-                    tool_name = call_data['name']
+                if (
+                    isinstance(call_data, dict)
+                    and "name" in call_data
+                    and "arguments" in call_data
+                ):
+                    tool_name = call_data["name"]
                     if tool_name in self.tool_map:
                         tool_call = ToolCall(
-                            name=tool_name,
-                            arguments=call_data['arguments']
+                            name=tool_name, arguments=call_data["arguments"]
                         )
                         tool_calls.append(tool_call)
                         logger.info(f"Generated tool call: {tool_name}")
@@ -207,7 +211,9 @@ class AssistantAgent:
             logger.error(f"Failed to parse generated tool calls: {e}")
             return []
 
-    def generate_reply(self, thought: str, conversation_history: List[ChatMessage]) -> str:
+    def generate_reply(
+        self, thought: str, conversation_history: List[ChatMessage]
+    ) -> str:
         """
         基于思考过程生成最终回复
 
@@ -226,7 +232,7 @@ class AssistantAgent:
         reply = chat_completion(
             prompt=prompt,
             system_message="你是乐于助人的AI助手。请生成自然、有帮助的回复。",
-            json_mode=False
+            json_mode=False,
         )
 
         if not reply or reply.startswith("调用错误"):
@@ -243,7 +249,7 @@ if __name__ == "__main__":
     logger.info("🤖 Assistant Agent 测试")
     logger.info("=" * 50)
 
-    from sloop.models import ToolDefinition, ChatMessage
+    from sloop.models import ChatMessage, ToolDefinition
 
     # 创建模拟工具
     mock_tools = [
@@ -254,10 +260,10 @@ if __name__ == "__main__":
                 "type": "object",
                 "properties": {
                     "city": {"type": "string", "description": "City name"},
-                    "cuisine": {"type": "string", "description": "Type of cuisine"}
+                    "cuisine": {"type": "string", "description": "Type of cuisine"},
                 },
-                "required": ["city"]
-            }
+                "required": ["city"],
+            },
         ),
         ToolDefinition(
             name="book_restaurant",
@@ -268,17 +274,23 @@ if __name__ == "__main__":
                     "restaurant_id": {"type": "string", "description": "Restaurant ID"},
                     "date": {"type": "string", "description": "Booking date"},
                     "time": {"type": "string", "description": "Booking time"},
-                    "party_size": {"type": "integer", "description": "Number of people"}
+                    "party_size": {
+                        "type": "integer",
+                        "description": "Number of people",
+                    },
                 },
-                "required": ["restaurant_id", "date", "time"]
-            }
-        )
+                "required": ["restaurant_id", "date", "time"],
+            },
+        ),
     ]
 
     # 创建模拟对话历史
     mock_history = [
         ChatMessage(role="user", content="我想在上海找一家意大利餐厅吃饭"),
-        ChatMessage(role="assistant", content="我来帮你找上海的意大利餐厅。你想要什么样的价位或地点吗？"),
+        ChatMessage(
+            role="assistant",
+            content="我来帮你找上海的意大利餐厅。你想要什么样的价位或地点吗？",
+        ),
         ChatMessage(role="user", content="市中心就可以，适合4个人"),
     ]
 

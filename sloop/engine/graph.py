@@ -4,10 +4,10 @@
 实现工具之间的依赖关系分析和图谱构建，用于生成合理的工具调用链。
 """
 
-import json
-import os
 import random
-from typing import List, Dict, Set, Tuple, Optional
+from typing import Dict, List, Optional
+
+import matplotlib.pyplot as plt
 import networkx as nx
 
 from sloop.models import ToolDefinition
@@ -50,9 +50,8 @@ class ToolGraphBuilder:
         # 分析依赖关系并添加边
         for tool_a in self.tools:
             for tool_b in self.tools:
-                if tool_a.name != tool_b.name:
-                    if self._has_dependency(tool_a, tool_b):
-                        self.graph.add_edge(tool_a.name, tool_b.name)
+                if tool_a.name != tool_b.name and self._has_dependency(tool_a, tool_b):
+                    self.graph.add_edge(tool_a.name, tool_b.name)
 
         return self.graph
 
@@ -76,11 +75,7 @@ class ToolGraphBuilder:
 
         # 检查A的描述是否包含B的必需参数名
         description_a = tool_a.description.lower()
-        for param in required_params:
-            if param.lower() in description_a:
-                return True
-
-        return False
+        return any(param.lower() in description_a for param in required_params)
 
     def _get_required_params(self, tool: ToolDefinition) -> List[str]:
         """
@@ -93,7 +88,7 @@ class ToolGraphBuilder:
             必需参数名列表
         """
         required = []
-        if hasattr(tool.parameters, 'required') and tool.parameters.required:
+        if hasattr(tool.parameters, "required") and tool.parameters.required:
             required = tool.parameters.required
         return required
 
@@ -115,7 +110,9 @@ class ToolGraphBuilder:
             return []
 
         # 找到入度为0的节点（起始节点）
-        start_nodes = [node for node in self.graph.nodes if self.graph.in_degree(node) == 0]
+        start_nodes = [
+            node for node in self.graph.nodes if self.graph.in_degree(node) == 0
+        ]
 
         if not start_nodes:
             # 如果没有入度为0的节点，随机选择一个
@@ -142,33 +139,22 @@ class ToolGraphBuilder:
 
             # 按领域粘性对后继节点进行排序
             # 同领域或相关领域的节点优先级更高
-            scored_successors = []
+            scored_successors_with_random = []
             for successor in successors:
                 score = self._calculate_domain_stickiness(current_category, successor)
-                scored_successors.append((successor, score))
+                scored_successors_with_random.append((
+                    successor,
+                    score,
+                    random.random(),
+                ))
 
-            # 按分数降序排序，相同分数随机打乱
-            scored_successors.sort(key=lambda x: x[1], reverse=True)
-            # 对相同分数的项目随机排序
-            current_score = None
-            same_score_group = []
-            final_successors = []
-
-            for successor, score in scored_successors:
-                if current_score is None or score != current_score:
-                    if same_score_group:
-                        random.shuffle(same_score_group)
-                        final_successors.extend(same_score_group)
-                        same_score_group = []
-                    current_score = score
-                same_score_group.append(successor)
-
-            if same_score_group:
-                random.shuffle(same_score_group)
-                final_successors.extend(same_score_group)
+            # 按分数降序排序，然后按随机值降序排序以打破平局
+            scored_successors_with_random.sort(key=lambda x: (x[1], x[2]), reverse=True)
+            final_successors = [s[0] for s in scored_successors_with_random]
 
             # 按80%的概率选择高粘性节点，20%概率随机选择
-            if random.random() < 0.8 and final_successors:
+            HIGH_STICKINESS_PROB = 0.8
+            if random.random() < HIGH_STICKINESS_PROB and final_successors:
                 next_node = final_successors[0]  # 选择最相关的节点
             else:
                 next_node = random.choice(successors)  # 随机选择以保持多样性
@@ -202,15 +188,21 @@ class ToolGraphBuilder:
         if tool_name in self.tool_map:
             tool = self.tool_map[tool_name]
             # 从tool的额外字段中获取category
-            if hasattr(tool, 'category') and tool.category:
+            if hasattr(tool, "category") and tool.category:
                 return tool.category
             # 或者从model_extra中获取
-            if hasattr(tool, 'model_extra') and tool.model_extra and 'category' in tool.model_extra:
-                return tool.model_extra['category']
+            if (
+                hasattr(tool, "model_extra")
+                and tool.model_extra
+                and "category" in tool.model_extra
+            ):
+                return tool.model_extra["category"]
 
         return "general"
 
-    def _calculate_domain_stickiness(self, current_category: str, candidate_tool: str) -> float:
+    def _calculate_domain_stickiness(
+        self, current_category: str, candidate_tool: str
+    ) -> float:
         """
         计算领域粘性分数
 
@@ -251,45 +243,35 @@ class ToolGraphBuilder:
             "investment": ["finance", "business", "stock"],
             "stock": ["finance", "investment"],
             "banking": ["finance", "payment"],
-
             "travel": ["booking", "hotel", "flight", "transport"],
             "booking": ["travel", "hotel", "flight", "restaurant"],
             "hotel": ["travel", "booking"],
             "flight": ["travel", "booking", "transport"],
             "transport": ["travel", "flight"],
-
             "food": ["restaurant", "cooking", "delivery"],
             "restaurant": ["food", "booking"],
             "cooking": ["food", "recipe"],
             "delivery": ["food", "restaurant"],
-
             "music": ["audio", "entertainment"],
             "audio": ["music", "entertainment"],
             "entertainment": ["music", "audio", "game"],
-
             "game": ["entertainment", "gaming"],
             "gaming": ["game", "entertainment"],
-
             "health": ["medical", "fitness"],
             "medical": ["health", "doctor"],
             "fitness": ["health", "exercise"],
-
             "education": ["learning", "study"],
             "learning": ["education", "study"],
             "study": ["education", "learning"],
-
             "shopping": ["ecommerce", "retail"],
             "ecommerce": ["shopping", "retail"],
             "retail": ["shopping", "ecommerce"],
         }
 
         # 检查双向关系
-        if cat1 in related_categories and cat2 in related_categories[cat1]:
-            return True
-        if cat2 in related_categories and cat1 in related_categories[cat2]:
-            return True
-
-        return False
+        return (cat1 in related_categories and cat2 in related_categories[cat1]) or (
+            cat2 in related_categories and cat1 in related_categories[cat2]
+        )
 
     def get_graph_stats(self) -> Dict:
         """
@@ -304,8 +286,12 @@ class ToolGraphBuilder:
         return {
             "nodes": len(self.graph.nodes),
             "edges": len(self.graph.edges),
-            "start_nodes": len([n for n in self.graph.nodes if self.graph.in_degree(n) == 0]),
-            "end_nodes": len([n for n in self.graph.nodes if self.graph.out_degree(n) == 0])
+            "start_nodes": len([
+                n for n in self.graph.nodes if self.graph.in_degree(n) == 0
+            ]),
+            "end_nodes": len([
+                n for n in self.graph.nodes if self.graph.out_degree(n) == 0
+            ]),
         }
 
     def visualize_graph(self, output_path: str = "tool_graph.png"):
@@ -320,26 +306,28 @@ class ToolGraphBuilder:
             return
 
         try:
-            import matplotlib.pyplot as plt
-
             plt.figure(figsize=(12, 8))
 
             # 计算节点位置
             pos = nx.spring_layout(self.graph, k=2, iterations=50)
 
             # 绘制节点
-            nx.draw_networkx_nodes(self.graph, pos, node_size=2000, node_color='lightblue', alpha=0.7)
+            nx.draw_networkx_nodes(
+                self.graph, pos, node_size=2000, node_color="lightblue", alpha=0.7
+            )
 
             # 绘制边
-            nx.draw_networkx_edges(self.graph, pos, arrows=True, arrowsize=20, alpha=0.6)
+            nx.draw_networkx_edges(
+                self.graph, pos, arrows=True, arrowsize=20, alpha=0.6
+            )
 
             # 绘制标签
-            nx.draw_networkx_labels(self.graph, pos, font_size=10, font_weight='bold')
+            nx.draw_networkx_labels(self.graph, pos, font_size=10, font_weight="bold")
 
             plt.title("Tool Dependency Graph", fontsize=16)
-            plt.axis('off')
+            plt.axis("off")
             plt.tight_layout()
-            plt.savefig(output_path, dpi=300, bbox_inches='tight')
+            plt.savefig(output_path, dpi=300, bbox_inches="tight")
             plt.close()
 
             logger.info(f"✅ 图可视化已保存到: {output_path}")

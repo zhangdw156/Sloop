@@ -6,19 +6,26 @@
 
 import json
 import random
-import logging
-from typing import Optional, List
+from typing import List
+
 from transitions import Machine
 
-from sloop.models import ConversationContext, Blueprint, ChatMessage, ToolCall, ToolDefinition
-from sloop.agents import UserAgent, AssistantAgent, ServiceAgent
+from sloop.agents import AssistantAgent, ServiceAgent, UserAgent
+from sloop.models import (
+    Blueprint,
+    ChatMessage,
+    ConversationContext,
+    ToolDefinition,
+)
+from sloop.utils.logger import logger
 
 # 设置日志
-logger = logging.getLogger(__name__)
+
 
 # 状态常量定义
 class PDAStates:
     """PDA 状态常量 - 细粒度状态管理"""
+
     USER_GEN = "user_gen"
     ASSISTANT_THINK = "assistant_think"
     ASSISTANT_DECIDE = "assistant_decide"
@@ -37,7 +44,13 @@ class ConversationPDA:
     使用 transitions.Machine 实现状态流转，支持栈操作。
     """
 
-    def __init__(self, blueprint: Blueprint, tools: List[ToolDefinition], conversation_id: str = None, max_turns: int = 20):
+    def __init__(
+        self,
+        blueprint: Blueprint,
+        tools: List[ToolDefinition],
+        conversation_id: str = None,
+        max_turns: int = 20,
+    ):
         """
         初始化对话循环
 
@@ -59,10 +72,10 @@ class ConversationPDA:
         # 初始化对话上下文
         self.context = ConversationContext(
             conversation_id=self.conversation_id,
-            blueprint_id=getattr(blueprint, 'id', None),
+            blueprint_id=getattr(blueprint, "id", None),
             initial_state=blueprint.initial_state.copy(),
             current_user_intent=blueprint.intent,
-            max_turns=max_turns
+            max_turns=max_turns,
         )
 
         # 初始化环境状态
@@ -90,7 +103,7 @@ class ConversationPDA:
             PDAStates.TOOL_EXEC,
             PDAStates.ASSISTANT_REPLY_GEN,
             PDAStates.EVALUATION,
-            PDAStates.FINISH
+            PDAStates.FINISH,
         ]
 
         # 定义状态机
@@ -98,27 +111,59 @@ class ConversationPDA:
             model=self,
             states=states,
             initial=PDAStates.USER_GEN,
-            model_attribute='current_state'
+            model_attribute="current_state",
         )
 
         # 定义状态转换
-        self.machine.add_transition('user_generated', PDAStates.USER_GEN, PDAStates.ASSISTANT_THINK)
-        self.machine.add_transition('thought_generated', PDAStates.ASSISTANT_THINK, PDAStates.ASSISTANT_DECIDE)
-        self.machine.add_transition('decide_tool_call', PDAStates.ASSISTANT_DECIDE, PDAStates.TOOL_CALL_GEN)
-        self.machine.add_transition('decide_reply', PDAStates.ASSISTANT_DECIDE, PDAStates.ASSISTANT_REPLY_GEN)
-        self.machine.add_transition('tool_calls_generated', PDAStates.TOOL_CALL_GEN, PDAStates.TOOL_EXEC)
-        self.machine.add_transition('skip_tools_reply', PDAStates.TOOL_CALL_GEN, PDAStates.ASSISTANT_REPLY_GEN)  # 没有工具调用时直接回复
-        self.machine.add_transition('tools_executed', PDAStates.TOOL_EXEC, PDAStates.ASSISTANT_THINK)  # ReAct 闭环
-        self.machine.add_transition('reply_generated', PDAStates.ASSISTANT_REPLY_GEN, PDAStates.EVALUATION)
-        self.machine.add_transition('continue_dialogue', PDAStates.EVALUATION, PDAStates.USER_GEN)
-        self.machine.add_transition('finish_dialogue', PDAStates.EVALUATION, PDAStates.FINISH)
+        self.machine.add_transition(
+            "user_generated", PDAStates.USER_GEN, PDAStates.ASSISTANT_THINK
+        )
+        self.machine.add_transition(
+            "thought_generated", PDAStates.ASSISTANT_THINK, PDAStates.ASSISTANT_DECIDE
+        )
+        self.machine.add_transition(
+            "decide_tool_call", PDAStates.ASSISTANT_DECIDE, PDAStates.TOOL_CALL_GEN
+        )
+        self.machine.add_transition(
+            "decide_reply", PDAStates.ASSISTANT_DECIDE, PDAStates.ASSISTANT_REPLY_GEN
+        )
+        self.machine.add_transition(
+            "tool_calls_generated", PDAStates.TOOL_CALL_GEN, PDAStates.TOOL_EXEC
+        )
+        self.machine.add_transition(
+            "skip_tools_reply", PDAStates.TOOL_CALL_GEN, PDAStates.ASSISTANT_REPLY_GEN
+        )  # 没有工具调用时直接回复
+        self.machine.add_transition(
+            "tools_executed", PDAStates.TOOL_EXEC, PDAStates.ASSISTANT_THINK
+        )  # ReAct 闭环
+        self.machine.add_transition(
+            "reply_generated", PDAStates.ASSISTANT_REPLY_GEN, PDAStates.EVALUATION
+        )
+        self.machine.add_transition(
+            "continue_dialogue", PDAStates.EVALUATION, PDAStates.USER_GEN
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.EVALUATION, PDAStates.FINISH
+        )
         # 允许从任何状态直接结束对话
-        self.machine.add_transition('finish_dialogue', PDAStates.USER_GEN, PDAStates.FINISH)
-        self.machine.add_transition('finish_dialogue', PDAStates.ASSISTANT_THINK, PDAStates.FINISH)
-        self.machine.add_transition('finish_dialogue', PDAStates.ASSISTANT_DECIDE, PDAStates.FINISH)
-        self.machine.add_transition('finish_dialogue', PDAStates.TOOL_CALL_GEN, PDAStates.FINISH)
-        self.machine.add_transition('finish_dialogue', PDAStates.TOOL_EXEC, PDAStates.FINISH)
-        self.machine.add_transition('finish_dialogue', PDAStates.ASSISTANT_REPLY_GEN, PDAStates.FINISH)
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.USER_GEN, PDAStates.FINISH
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.ASSISTANT_THINK, PDAStates.FINISH
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.ASSISTANT_DECIDE, PDAStates.FINISH
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.TOOL_CALL_GEN, PDAStates.FINISH
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.TOOL_EXEC, PDAStates.FINISH
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.ASSISTANT_REPLY_GEN, PDAStates.FINISH
+        )
 
         # 注意：transitions库会自动绑定名为 on_enter_{state_name} 的方法作为状态进入回调
         # 无需手动绑定，以避免重复绑定导致的回调执行问题
@@ -158,15 +203,16 @@ class ConversationPDA:
 
         # 调用用户智能体生成消息
         user_message_content = self.user_agent.generate_message(
-            self.blueprint,
-            self.context.messages
+            self.blueprint, self.context.messages
         )
 
         # 检查是否任务完成，并处理停止标记
         should_stop = self.user_agent.is_task_complete(user_message_content)
         if should_stop:
             # 剥离停止标记，保留干净的消息内容
-            user_message_content = user_message_content.replace("###STOP###", "").strip()
+            user_message_content = user_message_content.replace(
+                "###STOP###", ""
+            ).strip()
             logger.info("   ✅ 用户表示任务完成")
 
         # 如果消息内容不为空，始终添加到对话历史
@@ -188,14 +234,18 @@ class ConversationPDA:
     def on_enter_assistant_think(self):
         """进入助手思考状态 - 生成 CoT"""
         logger.info("🤖 [ASSISTANT_THINK] 助手正在生成思考过程")
-        logger.info(f"🤖 [ASSISTANT_THINK] 助手正在生成思考过程 (CoT)...")
-        logger.info(f"   📚 当前栈状态: {[frame['type'] for frame in self.context.stack]}")
+        logger.info("🤖 [ASSISTANT_THINK] 助手正在生成思考过程 (CoT)...")
+        logger.info(
+            f"   📚 当前栈状态: {[frame['type'] for frame in self.context.stack]}"
+        )
 
         # 生成栈上下文提示
         context_hint = self._generate_context_hint()
 
         # 调用助手智能体生成思考过程
-        thought_content = self.assistant_agent.generate_thought(self.context.messages, context_hint)
+        thought_content = self.assistant_agent.generate_thought(
+            self.context.messages, context_hint
+        )
 
         # 存储到上下文缓冲区
         self.context.current_thought = thought_content
@@ -207,7 +257,7 @@ class ConversationPDA:
     def on_enter_assistant_decide(self):
         """进入助手决策状态 - 基于思考决定下一步"""
         logger.info("🤖 [ASSISTANT_DECIDE] 助手正在决策")
-        logger.info(f"🤖 [ASSISTANT_DECIDE] 基于思考过程进行决策...")
+        logger.info("🤖 [ASSISTANT_DECIDE] 基于思考过程进行决策...")
 
         # 检查栈顶是否为WAITING_FOR_TOOLS，如果是则根据决策进行POP操作
         stack_top = self.context.peek_context()
@@ -234,31 +284,38 @@ class ConversationPDA:
     def on_enter_tool_call_gen(self):
         """进入工具调用生成状态 - 生成具体的工具调用参数"""
         logger.info("🔧 [TOOL_CALL_GEN] 生成工具调用参数")
-        logger.info(f"🔧 [TOOL_CALL_GEN] 基于思考过程生成工具调用参数...")
+        logger.info("🔧 [TOOL_CALL_GEN] 基于思考过程生成工具调用参数...")
 
         # 基于思考过程生成工具调用
-        tool_calls = self.assistant_agent.generate_tool_calls(self.context.current_thought, self.tools)
+        tool_calls = self.assistant_agent.generate_tool_calls(
+            self.context.current_thought, self.tools
+        )
 
         if tool_calls:
             # PUSH 等待工具结果的上下文帧
             tool_names = [tc.name for tc in tool_calls]
             nested_level = self.context.get_stack_depth()
-            self.context.push_context("WAITING_FOR_TOOLS", {
-                "tool_names": tool_names,
-                "intent": self._extract_intent_from_thought(self.context.current_thought),
-                "nested_level": nested_level
-            })
+            self.context.push_context(
+                "WAITING_FOR_TOOLS",
+                {
+                    "tool_names": tool_names,
+                    "intent": self._extract_intent_from_thought(
+                        self.context.current_thought
+                    ),
+                    "nested_level": nested_level,
+                },
+            )
             logger.info(f"   📚 PUSH 栈: WAITING_FOR_TOOLS - 工具: {tool_names}")
 
             # 为每个工具调用创建独立的 tool_call 消息（扁平化格式）
             for tool_call in tool_calls:
                 tool_call_data = {
                     "name": tool_call.name,
-                    "arguments": tool_call.arguments
+                    "arguments": tool_call.arguments,
                 }
                 tool_call_message = ChatMessage(
                     role="tool_call",
-                    content=json.dumps(tool_call_data, ensure_ascii=False)
+                    content=json.dumps(tool_call_data, ensure_ascii=False),
                 )
                 self.context.add_message(tool_call_message)
 
@@ -276,7 +333,7 @@ class ConversationPDA:
     def on_enter_tool_exec(self):
         """进入工具执行状态"""
         logger.info("🛠️ [TOOL_EXEC] 正在执行工具")
-        logger.info(f"🛠️ [TOOL_EXEC] 执行工具调用...")
+        logger.info("🛠️ [TOOL_EXEC] 执行工具调用...")
 
         # 处理所有pending的工具调用
         while self.context.pending_tool_calls:
@@ -286,16 +343,13 @@ class ConversationPDA:
 
             # 调用服务智能体执行工具
             execution_result = self.service_agent.execute_tool(
-                tool_call,
-                self.context.env_state,
-                self.blueprint
+                tool_call, self.context.env_state, self.blueprint
             )
 
             # 更新环境状态
             if execution_result["state_updates"]:
                 self.service_agent.update_state(
-                    self.context.env_state,
-                    execution_result["state_updates"]
+                    self.context.env_state, execution_result["state_updates"]
                 )
                 logger.info(f"   📊 状态更新: {execution_result['state_updates']}")
 
@@ -303,7 +357,7 @@ class ConversationPDA:
             tool_message = ChatMessage(
                 role="tool",
                 content=execution_result["response"],
-                tool_call_id=f"call_{random.randint(1000, 9999)}"
+                tool_call_id=f"call_{random.randint(1000, 9999)}",
             )
             self.context.add_message(tool_message)
 
@@ -315,19 +369,20 @@ class ConversationPDA:
     def on_enter_assistant_reply_gen(self):
         """进入助手回复生成状态 - 生成最终回复文本"""
         logger.info("🤖 [ASSISTANT_REPLY_GEN] 生成最终回复")
-        logger.info(f"🤖 [ASSISTANT_REPLY_GEN] 基于思考过程生成最终回复...")
+        logger.info("🤖 [ASSISTANT_REPLY_GEN] 基于思考过程生成最终回复...")
 
         # 基于思考过程生成最终回复
-        reply_content = self.assistant_agent.generate_reply(self.context.current_thought, self.context.messages)
+        reply_content = self.assistant_agent.generate_reply(
+            self.context.current_thought, self.context.messages
+        )
 
         # 将思考过程和回复拼接为完整内容（用于训练数据格式）
-        full_content = f"<think>\n{self.context.current_thought}\n</think>\n\n{reply_content}"
+        full_content = (
+            f"<think>\n{self.context.current_thought}\n</think>\n\n{reply_content}"
+        )
 
         # 创建助手消息（包含思考和回复）
-        assistant_message = ChatMessage(
-            role="assistant",
-            content=full_content
-        )
+        assistant_message = ChatMessage(role="assistant", content=full_content)
         self.context.add_message(assistant_message)
 
         logger.info(f"   💬 助手回复: {full_content[:100]}...")
@@ -338,7 +393,7 @@ class ConversationPDA:
     def on_enter_evaluation(self):
         """进入评估状态"""
         logger.info("📊 [EVALUATION] 评估对话状态")
-        logger.info(f"📊 [EVALUATION] 评估对话状态...")
+        logger.info("📊 [EVALUATION] 评估对话状态...")
 
         # 如果已经完成，不要重复处理
         if self.context.is_completed:
@@ -349,8 +404,8 @@ class ConversationPDA:
 
         # 评估结束条件（移除随机结束逻辑，确保对话充分展开）
         should_finish = (
-            self.context.turn_count >= self.context.max_turns or
-            self.context.env_state.validate_transition(self.blueprint.expected_state)
+            self.context.turn_count >= self.context.max_turns
+            or self.context.env_state.validate_transition(self.blueprint.expected_state)
         )
 
         if should_finish:
@@ -368,8 +423,6 @@ class ConversationPDA:
         logger.info(f"   📈 总轮次: {self.context.turn_count}")
         logger.info(f"   📝 消息数量: {len(self.context.messages)}")
         logger.info(f"   🎯 最终状态: {self.context.env_state.state}")
-
-
 
     def run(self):
         """运行完整的对话循环（同步版本，立即执行所有状态转换）"""
@@ -390,8 +443,12 @@ class ConversationPDA:
             logger.info("🎉 对话循环运行完成")
             logger.info("🎉 对话循环运行完成")
         else:
-            logger.warning(f"⚠️ 对话循环未在{max_wait}步内完成，当前状态: {self.current_state}")
-            logger.warning(f"⚠️ 对话循环未在{max_wait}步内完成，当前状态: {self.current_state}")
+            logger.warning(
+                f"⚠️ 对话循环未在{max_wait}步内完成，当前状态: {self.current_state}"
+            )
+            logger.warning(
+                f"⚠️ 对话循环未在{max_wait}步内完成，当前状态: {self.current_state}"
+            )
 
     # 注意：current_state 由 transitions 库自动设置，无需 property
 
@@ -402,7 +459,7 @@ class ConversationPDA:
             "current_state": self.current_state,
             "turn_count": self.context.turn_count,
             "is_completed": self.context.is_completed,
-            "message_count": len(self.context.messages)
+            "message_count": len(self.context.messages),
         }
 
 
@@ -410,7 +467,6 @@ class ConversationPDA:
 
 if __name__ == "__main__":
     # 配置日志
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     # 创建测试工具
     test_tools = [
@@ -420,18 +476,14 @@ if __name__ == "__main__":
             parameters={
                 "type": "object",
                 "properties": {"location": {"type": "string"}},
-                "required": ["location"]
-            }
+                "required": ["location"],
+            },
         ),
         ToolDefinition(
             name="get_location",
             description="Get user location",
-            parameters={
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-        )
+            parameters={"type": "object", "properties": {}, "required": []},
+        ),
     ]
 
     # 创建测试蓝图
@@ -440,7 +492,7 @@ if __name__ == "__main__":
         required_tools=["get_weather", "get_location"],
         ground_truth=["get_weather"],
         initial_state={"weather_data": None},
-        expected_state={"weather_data": "sunny"}
+        expected_state={"weather_data": "sunny"},
     )
 
     # 创建对话循环

@@ -4,8 +4,9 @@
 用于有状态服务模拟和PDA状态传递。
 """
 
-from typing import Dict, List, Any, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
+
 from pydantic import BaseModel, Field
 
 from sloop.models.schema import ChatMessage, ToolCall
@@ -17,8 +18,11 @@ class EnvState(BaseModel):
 
     模拟真实API的状态变更，避免LLM产生逻辑幻觉。
     """
+
     state: Dict[str, Any] = Field(default_factory=dict, description="当前环境状态字典")
-    history: List[Dict[str, Any]] = Field(default_factory=list, description="状态变更历史记录")
+    history: List[Dict[str, Any]] = Field(
+        default_factory=list, description="状态变更历史记录"
+    )
 
     def get(self, key: str, default: Any = None) -> Any:
         """获取状态值"""
@@ -35,7 +39,7 @@ class EnvState(BaseModel):
             "key": key,
             "old_value": old_value,
             "new_value": value,
-            "action": "set"
+            "action": "set",
         })
 
     def update(self, updates: Dict[str, Any]) -> None:
@@ -70,28 +74,44 @@ class ConversationContext(BaseModel):
 
     包含对话历史、轮次计数、当前状态和栈管理等。
     """
+
     conversation_id: str = Field(..., description="对话唯一标识")
     blueprint_id: Optional[str] = Field(None, description="关联的蓝图ID")
 
-    messages: List[ChatMessage] = Field(default_factory=list, description="对话消息历史")
+    messages: List[ChatMessage] = Field(
+        default_factory=list, description="对话消息历史"
+    )
     turn_count: int = Field(default=0, description="当前对话轮次")
 
     env_state: EnvState = Field(default_factory=EnvState, description="当前环境状态")
-    initial_state: Dict[str, Any] = Field(default_factory=dict, description="初始环境状态快照")
+    initial_state: Dict[str, Any] = Field(
+        default_factory=dict, description="初始环境状态快照"
+    )
 
     current_user_intent: Optional[str] = Field(None, description="当前用户意图")
-    pending_tool_calls: List[ToolCall] = Field(default_factory=list, description="待处理的工具调用")
-    current_thought: Optional[str] = Field(None, description="当前 Assistant 的思考过程 (CoT) 缓冲区")
-    scratchpad: Dict[str, Any] = Field(default_factory=dict, description="状态机流转过程中的临时变量存储")
+    pending_tool_calls: List[ToolCall] = Field(
+        default_factory=list, description="待处理的工具调用"
+    )
+    current_thought: Optional[str] = Field(
+        None, description="当前 Assistant 的思考过程 (CoT) 缓冲区"
+    )
+    scratchpad: Dict[str, Any] = Field(
+        default_factory=dict, description="状态机流转过程中的临时变量存储"
+    )
 
     # PDA Stack: 用于实现Pushdown Automaton，支持嵌套工具调用和上下文管理
-    stack: List[Dict[str, Any]] = Field(default_factory=lambda: [{"type": "ROOT", "data": {}}], description="对话栈，用于跟踪待处理的任务上下文")
+    stack: List[Dict[str, Any]] = Field(
+        default_factory=lambda: [{"type": "ROOT", "data": {}}],
+        description="对话栈，用于跟踪待处理的任务上下文",
+    )
 
     max_turns: int = Field(default=10, description="最大对话轮次限制")
     is_completed: bool = Field(default=False, description="对话是否完成")
 
     created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
-    updated_at: datetime = Field(default_factory=datetime.now, description="最后更新时间")
+    updated_at: datetime = Field(
+        default_factory=datetime.now, description="最后更新时间"
+    )
 
     def add_message(self, message: ChatMessage) -> None:
         """添加消息到对话历史"""

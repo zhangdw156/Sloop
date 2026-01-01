@@ -5,14 +5,13 @@
 """
 
 import json
-import logging
-from typing import List, Optional
-from sloop.models import Blueprint, ToolDefinition
-from sloop.engine.graph import ToolGraphBuilder
-from sloop.utils.template import render_planner_prompt
-from sloop.utils.llm import chat_completion
+from typing import List
 
-logger = logging.getLogger(__name__)
+from sloop.engine.graph import ToolGraphBuilder
+from sloop.models import Blueprint, ToolDefinition
+from sloop.utils.llm import chat_completion
+from sloop.utils.logger import logger
+from sloop.utils.template import render_planner_prompt
 
 
 class BlueprintGenerator:
@@ -49,7 +48,9 @@ class BlueprintGenerator:
         返回:
             生成的对话蓝图
         """
-        logger.info(f"Generating blueprint with chain length {chain_length}, max_retries {max_retries}")
+        logger.info(
+            f"Generating blueprint with chain length {chain_length}, max_retries {max_retries}"
+        )
 
         for attempt in range(max_retries):
             try:
@@ -57,12 +58,13 @@ class BlueprintGenerator:
 
                 # 1. 从图谱中采样工具链
                 tool_chain = self.graph_builder.sample_tool_chain(
-                    min_length=max(1, chain_length - 1),
-                    max_length=chain_length
+                    min_length=max(1, chain_length - 1), max_length=chain_length
                 )
 
                 if not tool_chain:
-                    logger.warning(f"Attempt {attempt + 1}: Failed to sample tool chain, retrying...")
+                    logger.warning(
+                        f"Attempt {attempt + 1}: Failed to sample tool chain, retrying..."
+                    )
                     continue
 
                 logger.info(f"Sampled tool chain: {tool_chain}")
@@ -76,7 +78,9 @@ class BlueprintGenerator:
                         logger.warning(f"Tool {tool_name} not found in tool map")
 
                 if not tool_definitions:
-                    logger.warning(f"Attempt {attempt + 1}: No valid tool definitions found, retrying...")
+                    logger.warning(
+                        f"Attempt {attempt + 1}: No valid tool definitions found, retrying..."
+                    )
                     continue
 
                 # 3. 构造和发送提示
@@ -88,34 +92,44 @@ class BlueprintGenerator:
                 llm_response = chat_completion(
                     prompt=prompt,
                     system_message="你是专家级AI数据集生成器。始终用有效的JSON格式响应。",
-                    json_mode=True
+                    json_mode=True,
                 )
 
                 if not llm_response or llm_response.startswith("调用错误"):
-                    logger.warning(f"Attempt {attempt + 1}: LLM call failed: {llm_response}, retrying...")
+                    logger.warning(
+                        f"Attempt {attempt + 1}: LLM call failed: {llm_response}, retrying..."
+                    )
                     continue
 
                 # 5. 解析和验证响应
                 try:
                     blueprint_data = json.loads(llm_response)
                     logger.info("Successfully parsed LLM response")
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Attempt {attempt + 1}: Failed to parse LLM response as JSON: {llm_response}, retrying...")
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Attempt {attempt + 1}: Failed to parse LLM response as JSON: {llm_response}, retrying..."
+                    )
                     continue
 
                 # 6. 检查蓝图合理性
                 if not blueprint_data.get("valid", True):
                     reason = blueprint_data.get("reason", "Unknown reason")
-                    logger.warning(f"Attempt {attempt + 1}: Blueprint marked as invalid: {reason}, retrying...")
+                    logger.warning(
+                        f"Attempt {attempt + 1}: Blueprint marked as invalid: {reason}, retrying..."
+                    )
                     continue
 
                 # 7. 验证和修正数据
-                validated_data = self._validate_blueprint_data(blueprint_data, tool_chain)
+                validated_data = self._validate_blueprint_data(
+                    blueprint_data, tool_chain
+                )
 
                 # 8. 创建Blueprint对象
                 blueprint = Blueprint(**validated_data)
 
-                logger.info(f"Successfully generated valid blueprint: {blueprint.intent}")
+                logger.info(
+                    f"Successfully generated valid blueprint: {blueprint.intent}"
+                )
                 return blueprint
 
             except Exception as e:
@@ -123,7 +137,9 @@ class BlueprintGenerator:
                 continue
 
         # 所有重试都失败了，返回一个简单的默认蓝图
-        logger.error(f"All {max_retries} attempts failed, generating fallback blueprint")
+        logger.error(
+            f"All {max_retries} attempts failed, generating fallback blueprint"
+        )
         return self._generate_fallback_blueprint(tool_chain)
 
     def _validate_blueprint_data(self, data: dict, expected_chain: List[str]) -> dict:
@@ -182,7 +198,7 @@ class BlueprintGenerator:
         logger.info("Generating fallback blueprint")
 
         # 构建简单的intent
-        tool_names = [name for name in tool_chain]  # 直接使用工具名
+        tool_names = list(tool_chain)  # 直接使用工具名
         intent = f"执行工具链: {' -> '.join(tool_names)}"
 
         # 简单的状态
@@ -194,10 +210,12 @@ class BlueprintGenerator:
             required_tools=tool_chain,
             ground_truth=tool_chain,
             initial_state=initial_state,
-            expected_state=expected_state
+            expected_state=expected_state,
         )
 
-    def generate_multiple(self, count: int = 5, chain_length: int = 3) -> List[Blueprint]:
+    def generate_multiple(
+        self, count: int = 5, chain_length: int = 3
+    ) -> List[Blueprint]:
         """
         生成多个蓝图
 
@@ -213,9 +231,9 @@ class BlueprintGenerator:
             try:
                 blueprint = self.generate(chain_length)
                 blueprints.append(blueprint)
-                logger.info(f"Generated blueprint {i+1}/{count}: {blueprint.intent}")
+                logger.info(f"Generated blueprint {i + 1}/{count}: {blueprint.intent}")
             except Exception as e:
-                logger.error(f"Failed to generate blueprint {i+1}: {e}")
+                logger.error(f"Failed to generate blueprint {i + 1}: {e}")
                 continue
 
         return blueprints
@@ -234,11 +252,9 @@ if __name__ == "__main__":
             description="Find restaurants and return restaurant_id",
             parameters={
                 "type": "object",
-                "properties": {
-                    "city": {"type": "string", "description": "City name"}
-                },
-                "required": ["city"]
-            }
+                "properties": {"city": {"type": "string", "description": "City name"}},
+                "required": ["city"],
+            },
         ),
         ToolDefinition(
             name="get_menu",
@@ -248,8 +264,8 @@ if __name__ == "__main__":
                 "properties": {
                     "restaurant_id": {"type": "string", "description": "Restaurant ID"}
                 },
-                "required": ["restaurant_id"]
-            }
+                "required": ["restaurant_id"],
+            },
         ),
         ToolDefinition(
             name="order_food",
@@ -258,11 +274,11 @@ if __name__ == "__main__":
                 "type": "object",
                 "properties": {
                     "dish_id": {"type": "string", "description": "Dish ID"},
-                    "restaurant_id": {"type": "string", "description": "Restaurant ID"}
+                    "restaurant_id": {"type": "string", "description": "Restaurant ID"},
                 },
-                "required": ["dish_id"]
-            }
-        )
+                "required": ["dish_id"],
+            },
+        ),
     ]
 
     logger.info("📋 模拟工具数据:")
@@ -306,7 +322,7 @@ if __name__ == "__main__":
             required_tools=["find_restaurants", "get_menu"],
             ground_truth=["find_restaurants", "get_menu"],
             initial_state={"restaurant_found": False, "menu_loaded": False},
-            expected_state={"restaurant_found": True, "menu_loaded": True}
+            expected_state={"restaurant_found": True, "menu_loaded": True},
         )
         logger.info(mock_blueprint.model_dump_json(indent=2))
 

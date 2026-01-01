@@ -34,19 +34,18 @@ dev = [
 [project.scripts]
 sloop = "sloop.cli.main:app"
 
-[tool.uv]
-dev-dependencies = [
-    "pytest>=7.0.0",
-    "pytest-asyncio",
-    "pytest-mock",
-    "annotated-doc",
-    "pre-commit>=4.5.1",
-    "ruff>=0.14.10",
+[tool.ruff]
+extend-exclude = [
+    "playground/",
 ]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "C4", "ARG", "SIM", "PT", "PL"]
-ignore = ["E501"]
+ignore = [
+    "E501",    # 行太长（原有）
+    "PLR2004", # Magic value used in comparison (例如 temperature < 2.0，这种不想每次都定义常量的场景)
+    "PLW0603", # Using the global statement (由于你确实用了 global settings，暂时忽略)
+]
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401", "F403"]
 "tests/*" = ["E402"]
@@ -71,4 +70,12 @@ markers = [
 eval = [
     "bfcl-eval==2025.10.27.1",
     "evalscope>=1.4.0",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio",
+    "pytest-mock",
+    "annotated-doc",
+    "pre-commit>=4.5.1",
+    "ruff>=0.14.10",
 ]

@@ -2,8 +2,10 @@
 测试 ToolGraphBuilder 功能
 """
 
-import pytest
 import os
+
+import pytest
+
 from sloop.engine import ToolGraphBuilder
 from sloop.models import ToolDefinition
 
@@ -23,8 +25,8 @@ class TestToolGraphBuilder:
                     "properties": {
                         "city": {"type": "string", "description": "City name"}
                     },
-                    "required": ["city"]
-                }
+                    "required": ["city"],
+                },
             ),
             ToolDefinition(
                 name="get_menu",
@@ -32,10 +34,13 @@ class TestToolGraphBuilder:
                 parameters={
                     "type": "object",
                     "properties": {
-                        "restaurant_id": {"type": "string", "description": "Restaurant ID"}
+                        "restaurant_id": {
+                            "type": "string",
+                            "description": "Restaurant ID",
+                        }
                     },
-                    "required": ["restaurant_id"]
-                }
+                    "required": ["restaurant_id"],
+                },
             ),
             ToolDefinition(
                 name="order_food",
@@ -44,11 +49,14 @@ class TestToolGraphBuilder:
                     "type": "object",
                     "properties": {
                         "dish_id": {"type": "string", "description": "Dish ID"},
-                        "restaurant_id": {"type": "string", "description": "Restaurant ID"}
+                        "restaurant_id": {
+                            "type": "string",
+                            "description": "Restaurant ID",
+                        },
                     },
-                    "required": ["dish_id"]
-                }
-            )
+                    "required": ["dish_id"],
+                },
+            ),
         ]
 
     def test_build_graph(self, mock_tools):
@@ -81,7 +89,7 @@ class TestToolGraphBuilder:
     def test_sample_tool_chain(self, mock_tools):
         """测试工具链采样"""
         builder = ToolGraphBuilder(mock_tools)
-        graph = builder.build()
+        builder.build()
 
         # 测试采样
         chain = builder.sample_tool_chain(min_length=1, max_length=3)
@@ -116,8 +124,8 @@ class TestToolGraphBuilder:
                 parameters={
                     "type": "object",
                     "properties": {"param": {"type": "string"}},
-                    "required": ["param"]
-                }
+                    "required": ["param"],
+                },
             )
         ]
 
@@ -133,7 +141,7 @@ class TestToolGraphBuilder:
     def test_graph_stats(self, mock_tools):
         """测试图统计功能"""
         builder = ToolGraphBuilder(mock_tools)
-        graph = builder.build()
+        builder.build()
 
         stats = builder.get_graph_stats()
 
@@ -144,7 +152,7 @@ class TestToolGraphBuilder:
 
         assert stats["nodes"] == 3
         assert stats["start_nodes"] >= 1  # 至少有一个起始节点
-        assert stats["end_nodes"] >= 1    # 至少有一个结束节点
+        assert stats["end_nodes"] >= 1  # 至少有一个结束节点
 
 
 def test_real_data_file_exists():
@@ -171,11 +179,9 @@ if __name__ == "__main__":
             description="Find restaurants and return restaurant_id",
             parameters={
                 "type": "object",
-                "properties": {
-                    "city": {"type": "string", "description": "City name"}
-                },
-                "required": ["city"]
-            }
+                "properties": {"city": {"type": "string", "description": "City name"}},
+                "required": ["city"],
+            },
         ),
         ToolDefinition(
             name="get_menu",
@@ -185,8 +191,8 @@ if __name__ == "__main__":
                 "properties": {
                     "restaurant_id": {"type": "string", "description": "Restaurant ID"}
                 },
-                "required": ["restaurant_id"]
-            }
+                "required": ["restaurant_id"],
+            },
         ),
         ToolDefinition(
             name="order_food",
@@ -195,11 +201,11 @@ if __name__ == "__main__":
                 "type": "object",
                 "properties": {
                     "dish_id": {"type": "string", "description": "Dish ID"},
-                    "restaurant_id": {"type": "string", "description": "Restaurant ID"}
+                    "restaurant_id": {"type": "string", "description": "Restaurant ID"},
                 },
-                "required": ["dish_id"]
-            }
-        )
+                "required": ["dish_id"],
+            },
+        ),
     ]
 
     print("📋 模拟工具数据:")
@@ -229,7 +235,7 @@ if __name__ == "__main__":
     print("🎲 随机采样工具链:")
     for i in range(3):
         chain = builder.sample_tool_chain(min_length=2, max_length=4)
-        print(f"  链 {i+1}: {' -> '.join(chain) if chain else '无'}")
+        print(f"  链 {i + 1}: {' -> '.join(chain) if chain else '无'}")
     print()
 
     # 可选：真实数据统计（简化版，避免加载大文件）

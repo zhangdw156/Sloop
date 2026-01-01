@@ -4,7 +4,8 @@
 包含用户意图、必需工具、执行路径和状态定义。
 """
 
-from typing import Dict, List, Any
+from typing import Any, Dict, List
+
 from pydantic import BaseModel, Field
 
 
@@ -14,9 +15,12 @@ class Blueprint(BaseModel):
 
     在正式对话前先生成蓝图，确保多轮对话有明确的终点和逻辑一致性。
     """
+
     intent: str = Field(..., description="用户的高层意图描述")
     required_tools: List[str] = Field(..., description="必须使用的工具名称列表")
-    ground_truth: List[str] = Field(..., description="预期的正确调用序列（工具名称列表）")
+    ground_truth: List[str] = Field(
+        ..., description="预期的正确调用序列（工具名称列表）"
+    )
     initial_state: Dict[str, Any] = Field(..., description="环境初始状态字典")
     expected_state: Dict[str, Any] = Field(..., description="结束时期望状态字典")
 

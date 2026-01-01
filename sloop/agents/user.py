@@ -4,13 +4,12 @@
 模拟用户行为，根据blueprint的意图和对话历史生成下一条用户消息。
 """
 
-import logging
-from typing import List, Optional
+from typing import List
+
 from sloop.models import Blueprint, ChatMessage
 from sloop.utils.llm import chat_completion
+from sloop.utils.logger import logger
 from sloop.utils.template import render_user_prompt
-
-logger = logging.getLogger(__name__)
 
 
 class UserAgent:
@@ -25,9 +24,7 @@ class UserAgent:
         logger.info("UserAgent initialized")
 
     def generate_message(
-        self,
-        blueprint: Blueprint,
-        conversation_history: List[ChatMessage]
+        self, blueprint: Blueprint, conversation_history: List[ChatMessage]
     ) -> str:
         """
         生成用户消息
@@ -48,7 +45,7 @@ class UserAgent:
         response = chat_completion(
             prompt=prompt,
             system_message="You are a user in a conversation. Respond naturally and decide when the task is complete.",
-            json_mode=False
+            json_mode=False,
         )
 
         if not response or response.startswith("调用错误"):
@@ -91,7 +88,7 @@ if __name__ == "__main__":
         required_tools=["find_restaurants", "get_menu"],
         ground_truth=["find_restaurants", "get_menu"],
         initial_state={"restaurant_found": False},
-        expected_state={"restaurant_found": True, "menu_loaded": True}
+        expected_state={"restaurant_found": True, "menu_loaded": True},
     )
 
     # 创建模拟对话历史

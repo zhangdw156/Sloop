@@ -30,25 +30,25 @@ def process_files(src_root, dst_root, extensions):
     # rglob('*') 实现递归遍历
     for file_path in src_path.rglob("*"):
         if file_path.is_file() and file_path.suffix.lower() in extensions:
-                # 计算相对路径，用于在目标目录重建结构
-                # 例如：src/utils/helper.py -> utils/helper.py
-                rel_path = file_path.relative_to(src_path)
+            # 计算相对路径，用于在目标目录重建结构
+            # 例如：src/utils/helper.py -> utils/helper.py
+            rel_path = file_path.relative_to(src_path)
 
-                # 构造目标文件路径，追加 .txt 后缀
-                # 结果：dist/utils/helper.py.txt
-                new_filename = f"{file_path.name}.txt"
-                dest_file_path = dst_path / rel_path.parent / new_filename
+            # 构造目标文件路径，追加 .txt 后缀
+            # 结果：dist/utils/helper.py.txt
+            new_filename = f"{file_path.name}.txt"
+            dest_file_path = dst_path / rel_path.parent / new_filename
 
-                # 确保目标子目录存在
-                dest_file_path.parent.mkdir(parents=True, exist_ok=True)
+            # 确保目标子目录存在
+            dest_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-                try:
-                    # 复制文件
-                    shutil.copy2(file_path, dest_file_path)
-                    print(f"✅ 已复制: {rel_path} -> {new_filename}")
-                    count += 1
-                except Exception as e:
-                    print(f"❌ 复制失败 {file_path}: {e}")
+            try:
+                # 复制文件
+                shutil.copy2(file_path, dest_file_path)
+                print(f"✅ 已复制: {rel_path} -> {new_filename}")
+                count += 1
+            except Exception as e:
+                print(f"❌ 复制失败 {file_path}: {e}")
 
     print(f"\n🎉 处理完成！共复制并重命名了 {count} 个文件。")
     print(f"📁 请查看: {dst_path}")
