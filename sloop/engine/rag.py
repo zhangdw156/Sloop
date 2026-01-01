@@ -15,6 +15,7 @@ from tqdm import tqdm
 
 from sloop.config import get_settings
 from sloop.models import ToolDefinition
+from sloop.utils.logger import logger
 
 
 class ToolRetrievalEngine:
@@ -59,14 +60,14 @@ class ToolRetrievalEngine:
                 with open(self.names_path, 'r', encoding='utf-8') as f:
                     self.tool_names = json.load(f)
 
-                print(f"✅ 加载索引成功: {len(self.tool_names)} 个工具")
+                logger.info(f"Loaded index successfully: {len(self.tool_names)} tools")
 
             except Exception as e:
-                print(f"⚠️ 加载索引失败: {e}")
+                logger.warning(f"Failed to load index: {e}")
                 self.index = None
                 self.tool_names = []
         else:
-            print("ℹ️ 未找到现有索引文件")
+            logger.info("No existing index files found")
 
     def _save_index(self):
         """保存索引到磁盘"""
@@ -79,10 +80,10 @@ class ToolRetrievalEngine:
                 with open(self.names_path, 'w', encoding='utf-8') as f:
                     json.dump(self.tool_names, f, ensure_ascii=False, indent=2)
 
-                print(f"💾 索引保存成功: {self.index_path}, {self.names_path}")
+                logger.info(f"Index saved successfully: {self.index_path}, {self.names_path}")
 
             except Exception as e:
-                print(f"❌ 保存索引失败: {e}")
+                logger.error(f"Failed to save index: {e}")
 
     def _get_embedding(self, text: str) -> List[float]:
         """
@@ -110,12 +111,12 @@ class ToolRetrievalEngine:
                     return response.data[0].embedding
 
             except Exception as e:
-                print(f"⚠️ Embedding 调用失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                logger.warning(f"Embedding call failed (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     continue
 
         # 返回零向量作为失败时的默认值
-        print("❌ Embedding 调用失败，返回零向量")
+        logger.error("Embedding call failed, returning zero vector")
         return [0.0] * 1536  # OpenAI text-embedding-3-small 的维度
 
     def build(self, tools: List[ToolDefinition], force: bool = False):
@@ -128,10 +129,10 @@ class ToolRetrievalEngine:
         """
         # 检查是否需要跳过构建
         if not force and self.index is not None and self.tool_names:
-            print("ℹ️ 索引已存在，跳过构建 (使用 force=True 强制重建)")
+            logger.info("Index already exists, skipping build (use force=True to rebuild)")
             return
 
-        print(f"🔨 开始构建索引: {len(tools)} 个工具")
+        logger.info(f"Starting to build index: {len(tools)} tools")
 
         # 准备数据
         texts = []
@@ -144,13 +145,13 @@ class ToolRetrievalEngine:
             texts.append(text)
             self.tool_names.append(tool.name)
 
-        print("📝 正在生成向量...")
+        logger.info("Generating embeddings...")
 
         # 批量生成向量（分批处理，避免 API 限制）
         batch_size = 10
         all_embeddings = []
 
-        for i in tqdm(range(0, len(texts), batch_size), desc="生成向量"):
+        for i in tqdm(range(0, len(texts), batch_size), desc="Generating embeddings"):
             batch_texts = texts[i:i + batch_size]
 
             for text in batch_texts:
@@ -160,14 +161,14 @@ class ToolRetrievalEngine:
         # 转换为 numpy 数组
         embeddings = np.array(all_embeddings, dtype=np.float32)
 
-        print(f"📊 向量维度: {embeddings.shape}")
+        logger.info(f"Embeddings shape: {embeddings.shape}")
 
         # 构建 FAISS 索引
         dimension = embeddings.shape[1]
         self.index = faiss.IndexFlatL2(dimension)
         self.index.add(embeddings)
 
-        print(f"✅ 索引构建完成: {len(self.tool_names)} 个工具")
+        logger.info(f"Index build completed: {len(self.tool_names)} tools")
 
         # 保存索引
         self._save_index()
@@ -184,7 +185,7 @@ class ToolRetrievalEngine:
             相似工具名称列表
         """
         if self.index is None or not self.tool_names:
-            print("❌ 索引未构建，无法搜索")
+            logger.error("Index not built, cannot search")
             return []
 
         # 构造查询文本
