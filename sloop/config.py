@@ -6,10 +6,10 @@
 
 import logging
 import os
+from dataclasses import dataclass
 from typing import Optional
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 # 加载.env文件
 load_dotenv()
@@ -28,38 +28,71 @@ def _get_logger():
     return logging.getLogger(__name__)
 
 
-class Settings(BaseModel):
+@dataclass
+class Settings:
     """应用配置类"""
 
-    model_config = ConfigDict(env_file='.env', env_prefix='')
-
     # LLM配置
-    llm_provider: str = Field(default="openai", env="LLM_PROVIDER")
-    llm_model: str = Field(default="gpt-4o-mini", validation_alias="MODEL_NAME")
-    openai_api_key: Optional[str] = Field(default=None, env="API_KEY")
-    openai_api_base: Optional[str] = Field(default=None, env="API_BASE")
-    temperature: float = Field(default=0.7, env="TEMPERATURE")
+    llm_provider: str = "openai"
+    llm_model: str = "gpt-4o-mini"
+    openai_api_key: Optional[str] = None
+    openai_api_base: Optional[str] = None
+    temperature: float = 0.7
 
     # 系统配置
-    max_tokens: int = Field(default=2048, env="MAX_TOKENS")
-    timeout: int = Field(default=60, env="TIMEOUT")
+    max_tokens: int = 2048
+    timeout: int = 60
 
     # Embedding 配置
-    embedding_provider: str = Field(default="openai", env="EMBEDDING_PROVIDER")
-    embedding_model: str = Field(default="text-embedding-3-small", env="EMBEDDING_MODEL")
-    embedding_api_key: Optional[str] = Field(default=None, env="EMBEDDING_API_KEY")
-    embedding_base_url: Optional[str] = Field(default=None, env="EMBEDDING_API_BASE")
+    embedding_provider: str = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_api_key: Optional[str] = None
+    embedding_base_url: Optional[str] = None
 
-    @model_validator(mode="after")
-    def set_defaults(self):
-        """设置默认值"""
+    def __post_init__(self):
+        """从环境变量初始化"""
+        # LLM配置
+        self.llm_provider = os.getenv("LLM_PROVIDER", self.llm_provider)
+        self.llm_model = os.getenv("MODEL_NAME", self.llm_model)
+        self.openai_api_key = os.getenv("API_KEY", self.openai_api_key)
+        self.openai_api_base = os.getenv("API_BASE", self.openai_api_base)
+
+        # 温度参数
+        try:
+            temp_str = os.getenv("TEMPERATURE")
+            if temp_str:
+                self.temperature = float(temp_str)
+        except (ValueError, TypeError):
+            pass  # 使用默认值
+
+        # 系统配置
+        try:
+            max_tokens_str = os.getenv("MAX_TOKENS")
+            if max_tokens_str:
+                self.max_tokens = int(max_tokens_str)
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            timeout_str = os.getenv("TIMEOUT")
+            if timeout_str:
+                self.timeout = int(timeout_str)
+        except (ValueError, TypeError):
+            pass
+
+        # Embedding配置
+        self.embedding_provider = os.getenv("EMBEDDING_PROVIDER", self.embedding_provider)
+        self.embedding_model = os.getenv("EMBEDDING_MODEL", self.embedding_model)
+        self.embedding_api_key = os.getenv("EMBEDDING_API_KEY", self.embedding_api_key)
+        self.embedding_base_url = os.getenv("EMBEDDING_API_BASE", self.embedding_base_url)
+
+        # 如果embedding参数未设置，则复用llm参数
         if not self.embedding_provider:
             self.embedding_provider = self.llm_provider
         if not self.embedding_api_key:
             self.embedding_api_key = self.openai_api_key
         if not self.embedding_base_url:
             self.embedding_base_url = self.openai_api_base
-        return self
 
     def get_llm_model_id(self) -> str:
         """获取 LLM 模型 ID，用于 litellm 调用"""
@@ -136,7 +169,7 @@ if __name__ == "__main__":
         logger.info("  - TEMPERATURE: 可选，默认 0.7")
         logger.info("  - MAX_TOKENS: 可选，默认 4096")
         logger.info("  - TIMEOUT: 可选，默认 60")
-        logger.info("  - EMBEDDING_PROVIDER: 可选，默认 openai")
+        logger.info("  - EMBEDDING_PROVIDER: 可选，默认复用 LLM_PROVIDER")
         logger.info("  - EMBEDDING_MODEL: 可选，默认 text-embedding-3-small")
-        logger.info("  - EMBEDDING_API_KEY: 可选，默认复用 OPENAI_API_KEY")
-        logger.info("  - EMBEDDING_BASE_URL: 可选")
+        logger.info("  - EMBEDDING_API_KEY: 可选，默认复用 API_KEY")
+        logger.info("  - EMBEDDING_API_BASE: 可选，默认复用 API_BASE")
