@@ -62,19 +62,10 @@ indent-style = "space"
 packages = ["sloop"]
 
 [tool.hatch.build.targets.sdist]
-exclude = [
-    "evals/",
-    "pipelines/",
-    "playground/",
-    "recipes/",
-    "serve/",
-    "tests/",
-    "utils/",
-    ".env.example",
-    ".gitignore",
-    ".pre-commit-config.yaml",
-    ".python-version",
-    "uv.lock",
+include = [
+    "sloop/",
+    "README.md",
+    "pyproject.toml",
 ]
 
 [tool.pytest.ini_options]
