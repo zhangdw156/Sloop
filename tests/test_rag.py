@@ -36,24 +36,21 @@ class TestToolRetrievalEngine:
     @pytest.fixture
     def mock_embedding(self, mocker):
         """
-        Mock litellm.embedding，防止真实 API 调用
+        Mock _get_embedding 方法，防止真实 API 调用
         """
         # 创建一个假的 embedding 向量 (假设维度 1024)
         fake_vector = [0.1] * 1024
-        
-        # 模拟 litellm.embedding 的返回值结构
-        mock_response = MagicMock()
-        mock_item = MagicMock()
-        mock_item.embedding = fake_vector
-        # 针对 list 输入的返回
-        mock_response.data = [mock_item] 
-        
-        # Patch 掉 sloop.engine.rag 模块里的 litellm
-        # 注意：这里要 patch 你的代码里 import litellm 的那个位置
-        # 如果你的 rag.py 里是在方法内部 import litellm，则需要 patch 'sys.modules' 或者调整策略
-        # 假设 rag.py 头部 import 了 litellm，或者方法内 import
-        # 最稳妥的方法是 patch 你的类方法 _get_embedding
-        return mocker.patch.object(ToolRetrievalEngine, '_get_embedding', return_value=[fake_vector])
+
+        def mock_get_embedding(text):
+            """Mock _get_embedding 方法"""
+            if isinstance(text, str):
+                # 单条输入，返回单个向量
+                return fake_vector
+            else:
+                # 批量输入，返回向量列表
+                return [fake_vector] * len(text)
+
+        return mocker.patch.object(ToolRetrievalEngine, '_get_embedding', side_effect=mock_get_embedding)
 
     def test_build_and_search(self, temp_cache_dir, mock_tools, mock_embedding):
         """测试构建和搜索 (使用 Mock)"""
