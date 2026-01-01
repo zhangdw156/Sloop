@@ -233,7 +233,7 @@ def test_on_enter_user_gen():
     pda.user_turn_count = 0
 
     # 调用状态回调
-    pda.on_enter_user_gen()
+    pda._process_user_gen()
 
     # 检查用户轮数
     assert pda.user_turn_count == 1
@@ -261,7 +261,7 @@ def test_on_enter_user_gen_task_complete():
     pda.context.messages.clear()
     pda.user_turn_count = 0
 
-    pda.on_enter_user_gen()
+    pda._process_user_gen()
 
     assert pda.context.is_completed
 
@@ -273,7 +273,7 @@ def test_on_enter_assistant_think():
     test_logger.info("🤖 测试助手思考状态")
     pda = get_pda_with_mocked_agents()
 
-    pda.on_enter_assistant_think()
+    pda._process_assistant_think()
 
     assert pda.context.current_thought == "我已经有了足够的信息来回答用户的问题"
 
@@ -290,11 +290,11 @@ def test_on_enter_assistant_decide():
 
     # 决策需要工具
     pda.assistant_agent.decide_tool_use = lambda _thought: True
-    pda.on_enter_assistant_decide()
+    pda._process_assistant_decide()
 
     # 决策不需要工具
     pda.assistant_agent.decide_tool_use = lambda _thought: False
-    pda.on_enter_assistant_decide()
+    pda._process_assistant_decide()
 
     test_logger.info("✅ 助手决策测试通过")
 
@@ -313,7 +313,7 @@ def test_on_enter_tool_call_gen():
     mock_tool_call.arguments = {"location": "北京"}
     pda.assistant_agent.generate_tool_calls = lambda _thought, _tools: [mock_tool_call]
 
-    pda.on_enter_tool_call_gen()
+    pda._process_tool_call_gen()
 
     # 检查工具调用是否添加到pending和消息
     assert len(pda.context.pending_tool_calls) == 1
@@ -337,7 +337,7 @@ def test_on_enter_tool_exec():
     mock_tool_call.name = "get_weather"
     pda.context.pending_tool_calls.append(mock_tool_call)
 
-    pda.on_enter_tool_exec()
+    pda._process_tool_exec()
 
     # 检查工具调用是否被处理
     assert len(pda.context.pending_tool_calls) == 0
@@ -356,7 +356,7 @@ def test_on_enter_assistant_reply_gen():
     # 设置当前思考
     pda.context.current_thought = "天气很好"
 
-    pda.on_enter_assistant_reply_gen()
+    pda._process_assistant_reply_gen()
 
     # 检查消息是否添加
     assert len(pda.context.messages) >= 1  # 至少有助手消息
@@ -375,12 +375,12 @@ def test_on_enter_evaluation():
 
     # 正常继续
     pda.context.turn_count = 0
-    pda.on_enter_evaluation()
+    pda._process_evaluation()
     # 应该继续对话
 
     # 达到最大轮数
     pda.context.turn_count = 20
-    pda.on_enter_evaluation()
+    pda._process_evaluation()
     # 应该结束对话
 
     test_logger.info("✅ 评估状态测试通过")
@@ -465,30 +465,30 @@ def run_integration_test():
     with patch("sloop.agents.user.UserAgent.generate_message") as mock_user:
         mock_user.return_value = "我想要知道天气"
 
-        loop.on_enter_user_gen()
+        loop._process_user_gen()
         test_logger.info("📊 用户生成后状态:")
         test_logger.info(loop.get_status())
 
     with patch("sloop.agents.assistant.AssistantAgent.generate_thought") as mock_think:
         mock_think.return_value = "需要获取天气信息"
 
-        loop.on_enter_assistant_think()
+        loop._process_assistant_think()
         test_logger.info("📊 思考生成后状态:")
         test_logger.info(loop.get_status())
 
     with patch("sloop.agents.assistant.AssistantAgent.decide_tool_use") as mock_decide:
         mock_decide.return_value = False  # 不需要工具
 
-        loop.on_enter_assistant_decide()
+        loop._process_assistant_decide()
 
     with patch("sloop.agents.assistant.AssistantAgent.generate_reply") as mock_reply:
         mock_reply.return_value = "今天天气很好"
 
-        loop.on_enter_assistant_reply_gen()
+        loop._process_assistant_reply_gen()
         test_logger.info("📊 回复生成后状态:")
         test_logger.info(loop.get_status())
 
-    loop.on_enter_evaluation()
+    loop._process_evaluation()
     loop.on_enter_finish()
 
     test_logger.info("=" * 50)
