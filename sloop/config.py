@@ -34,8 +34,8 @@ class Settings(BaseModel):
     # LLM配置
     llm_provider: str = Field(default="openai", env="LLM_PROVIDER")
     llm_model: str = Field(default="gpt-4o-mini", validation_alias="MODEL_NAME")
-    openai_api_key: Optional[str] = Field(default=None, env="OPENAI_API_KEY")
-    openai_api_base: Optional[str] = Field(default=None, env="OPENAI_API_BASE")
+    openai_api_key: Optional[str] = Field(default=None, env="API_KEY")
+    openai_api_base: Optional[str] = Field(default=None, env="API_BASE")
     temperature: float = Field(default=0.7, env="TEMPERATURE")
 
     # 系统配置
@@ -46,7 +46,7 @@ class Settings(BaseModel):
     embedding_provider: str = Field(default="openai", env="EMBEDDING_PROVIDER")
     embedding_model: str = Field(default="text-embedding-3-small", env="EMBEDDING_MODEL")
     embedding_api_key: Optional[str] = Field(default=None, env="EMBEDDING_API_KEY")
-    embedding_base_url: Optional[str] = Field(default=None, env="EMBEDDING_BASE_URL")
+    embedding_base_url: Optional[str] = Field(default=None, env="EMBEDDING_API_BASE")
 
     @model_validator(mode="after")
     def set_defaults(self):
@@ -64,7 +64,7 @@ class Settings(BaseModel):
     def validate(self) -> bool:
         """验证配置是否有效"""
         if not self.openai_api_key:
-            _get_logger().error("❌ 错误: 未配置 OPENAI_API_KEY")
+            _get_logger().error("❌ 错误: 未配置 API_KEY")
             return False
 
         if self.temperature < 0.0 or self.temperature > 2.0:
@@ -123,10 +123,10 @@ if __name__ == "__main__":
     else:
         logger.error("❌ 配置验证失败")
         logger.info("\n请检查以下环境变量:")
-        logger.info("  - OPENAI_API_KEY: 必需")
+        logger.info("  - API_KEY: 必需")
         logger.info("  - LLM_PROVIDER: 可选，默认 openai")
         logger.info("  - MODEL_NAME (或 LLM_MODEL): 可选，默认 gpt-4o-mini")
-        logger.info("  - OPENAI_API_BASE: 可选")
+        logger.info("  - API_BASE: 可选")
         logger.info("  - TEMPERATURE: 可选，默认 0.7")
         logger.info("  - MAX_TOKENS: 可选，默认 4096")
         logger.info("  - TIMEOUT: 可选，默认 60")
