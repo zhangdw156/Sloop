@@ -74,6 +74,7 @@ def generate(
     count: int = typer.Option(2, "--count", "-c", help="生成对话数量"),
     max_turns: int = typer.Option(20, "--max-turns", "-t", help="最大对话轮数"),
     chain_length: int = typer.Option(5, "--chain-length", "-l", help="工具链长度"),
+    mode: str = typer.Option("graph", "--mode", "-m", help="生成模式 (graph 或 rag)"),
 ):
     """
     生成多轮工具调用对话数据
@@ -85,6 +86,7 @@ def generate(
     typer.echo(f"   📤 输出文件: {output_file}")
     typer.echo(f"   🔄 最大轮数: {max_turns}")
     typer.echo(f"   🔗 工具链长度: {chain_length}")
+    typer.echo(f"   🎯 生成模式: {mode}")
 
     # 1. 加载工具定义
     typer.echo("📋 加载工具定义...")
@@ -105,7 +107,7 @@ def generate(
 
     # 2. 初始化蓝图生成器
     typer.echo("🔧 初始化蓝图生成器...")
-    generator = BlueprintGenerator(tools)
+    generator = BlueprintGenerator(tools, mode=mode)
 
     # 3. 准备输出文件
     output_path = Path(output_file)

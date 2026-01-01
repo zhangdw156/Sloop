@@ -21,15 +21,17 @@ class BlueprintGenerator:
     基于工具图谱采样和LLM推理，自动生成对话蓝图。
     """
 
-    def __init__(self, tools: List[ToolDefinition]):
+    def __init__(self, tools: List[ToolDefinition], mode: str = "graph"):
         """
         初始化蓝图生成器
 
         参数:
             tools: 工具定义列表
+            mode: 生成模式 ("graph" 或 "rag")
         """
         self.tools = tools
         self.tool_map = {tool.name: tool for tool in tools}
+        self.mode = mode
 
         # 初始化工具图谱构建器
         self.graph_builder = ToolGraphBuilder(tools)
@@ -39,7 +41,94 @@ class BlueprintGenerator:
         stats = self.graph_builder.get_graph_stats()
         logger.info(f"📊 工具图谱构建完成:\n   - 节点数量: {stats['nodes']}\n   - 边数量: {stats['edges']}\n   - 起始节点 (入度为0): {stats['start_nodes']}\n   - 结束节点 (出度为0): {stats['end_nodes']}")
 
-        logger.info(f"BlueprintGenerator initialized with {len(tools)} tools")
+        # 初始化 RAG 相关组件（如果启用）
+        if self.mode == "rag":
+            from sloop.engine.rag import ToolRetrievalEngine
+            from sloop.agents.selector import SelectorAgent
+
+            logger.info("🔍 初始化 RAG 引擎...")
+            self.rag_engine = ToolRetrievalEngine()
+            self.rag_engine.build(tools)
+
+            logger.info("🤖 初始化选择智能体...")
+            self.selector_agent = SelectorAgent()
+
+            logger.info("✅ RAG 模式初始化完成")
+        else:
+            self.rag_engine = None
+            self.selector_agent = None
+
+        logger.info(f"BlueprintGenerator initialized with {len(tools)} tools (mode: {mode})")
+
+    def _sample_rag_tool_chain(self, chain_length: int) -> List[str]:
+        """
+        使用 RAG 增强采样工具链
+
+        参数:
+            chain_length: 目标链长度
+
+        返回:
+            采样得到的工具链
+        """
+        logger.info(f"🎯 开始 RAG 增强采样 (目标长度: {chain_length})")
+
+        # 1. 随机选择起始工具
+        start_nodes = self.graph_builder.get_start_nodes()
+        if not start_nodes:
+            logger.warning("No start nodes found, falling back to random selection")
+            start_nodes = list(self.tool_map.keys())
+
+        current_tool_name = start_nodes[0]  # 简化：选择第一个起始节点
+        tool_chain = [current_tool_name]
+        current_tool = self.tool_map[current_tool_name]
+
+        logger.info(f"🎬 起始工具: {current_tool_name}")
+
+        # 2. 循环采样直到达到目标长度或决定结束
+        while len(tool_chain) < chain_length:
+            logger.info(f"🔄 当前链条: {' -> '.join(tool_chain)}")
+
+            # 获取 Graph 邻居（显式候选）
+            graph_neighbors = self.graph_builder.get_neighbors(current_tool_name)
+            graph_candidates = [self.tool_map[name] for name in graph_neighbors if name in self.tool_map]
+
+            # 获取 RAG 相似工具（隐式候选）
+            rag_candidates = []
+            if self.rag_engine:
+                rag_names = self.rag_engine.search(current_tool, top_k=5)
+                rag_candidates = [self.tool_map[name] for name in rag_names if name in self.tool_map and name not in graph_neighbors]
+
+            # 合并候选，去重
+            all_candidates = graph_candidates + rag_candidates
+            # 排除已在链条中的工具
+            available_candidates = [tool for tool in all_candidates if tool.name not in tool_chain]
+
+            if not available_candidates:
+                logger.info("⚠️ 没有更多可用候选，提前结束")
+                break
+
+            logger.info(f"📋 候选工具: {[t.name for t in available_candidates]}")
+
+            # 调用 Selector 做决策
+            selected_name = self.selector_agent.select_next_tool(tool_chain, available_candidates)
+
+            if selected_name is None:
+                logger.info("🏁 Selector 决定结束任务")
+                break
+
+            if selected_name not in self.tool_map:
+                logger.warning(f"Selected tool {selected_name} not found, ending chain")
+                break
+
+            # 添加到链条
+            tool_chain.append(selected_name)
+            current_tool_name = selected_name
+            current_tool = self.tool_map[current_tool_name]
+
+            logger.info(f"✅ 选择工具: {selected_name}")
+
+        logger.info(f"🎯 RAG 采样完成，最终链条: {' -> '.join(tool_chain)}")
+        return tool_chain
 
     def generate(self, chain_length: int = 3, max_retries: int = 3) -> Blueprint:
         """
@@ -60,10 +149,13 @@ class BlueprintGenerator:
             try:
                 logger.info(f"Attempt {attempt + 1}/{max_retries}")
 
-                # 1. 从图谱中采样工具链
-                tool_chain = self.graph_builder.sample_tool_chain(
-                    min_length=max(1, chain_length - 1), max_length=chain_length
-                )
+                # 1. 采样工具链
+                if self.mode == "rag":
+                    tool_chain = self._sample_rag_tool_chain(chain_length)
+                else:
+                    tool_chain = self.graph_builder.sample_tool_chain(
+                        min_length=max(1, chain_length - 1), max_length=chain_length
+                    )
 
                 if not tool_chain:
                     logger.warning(
