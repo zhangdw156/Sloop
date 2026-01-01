@@ -129,7 +129,6 @@ class AssistantAgent:
             logger.error(f"Failed to generate thought: {thought}")
             return "我需要分析用户的请求并确定最佳响应方式。"
 
-        logger.info(f"Generated thought: {thought[:100]}...")
         return thought.strip()
 
     def decide_tool_use(self, thought: str) -> bool:
