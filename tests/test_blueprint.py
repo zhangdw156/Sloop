@@ -2,11 +2,14 @@
 测试 Blueprint Generator 功能
 """
 
-import pytest
 import json
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
+
+import pytest
+
 from sloop.engine import BlueprintGenerator
-from sloop.models import ToolDefinition, Blueprint
+from sloop.models import Blueprint, ToolDefinition
+from sloop.utils.template import render_planner_prompt
 
 
 class TestBlueprintGenerator:
@@ -24,8 +27,8 @@ class TestBlueprintGenerator:
                     "properties": {
                         "city": {"type": "string", "description": "City name"}
                     },
-                    "required": ["city"]
-                }
+                    "required": ["city"],
+                },
             ),
             ToolDefinition(
                 name="get_menu",
@@ -33,10 +36,13 @@ class TestBlueprintGenerator:
                 parameters={
                     "type": "object",
                     "properties": {
-                        "restaurant_id": {"type": "string", "description": "Restaurant ID"}
+                        "restaurant_id": {
+                            "type": "string",
+                            "description": "Restaurant ID",
+                        }
                     },
-                    "required": ["restaurant_id"]
-                }
+                    "required": ["restaurant_id"],
+                },
             ),
             ToolDefinition(
                 name="order_food",
@@ -45,11 +51,14 @@ class TestBlueprintGenerator:
                     "type": "object",
                     "properties": {
                         "dish_id": {"type": "string", "description": "Dish ID"},
-                        "restaurant_id": {"type": "string", "description": "Restaurant ID"}
+                        "restaurant_id": {
+                            "type": "string",
+                            "description": "Restaurant ID",
+                        },
                     },
-                    "required": ["dish_id"]
-                }
-            )
+                    "required": ["dish_id"],
+                },
+            ),
         ]
 
     def test_initialization(self, mock_tools):
@@ -64,9 +73,11 @@ class TestBlueprintGenerator:
         stats = generator.graph_builder.get_graph_stats()
         assert stats["nodes"] == 3
 
-    @patch('sloop.engine.blueprint.chat_completion')
-    @patch('sloop.engine.graph.ToolGraphBuilder.sample_tool_chain')
-    def test_generate_success(self, mock_sample_chain, mock_chat_completion, mock_tools):
+    @patch("sloop.engine.blueprint.chat_completion")
+    @patch("sloop.engine.graph.ToolGraphBuilder.sample_tool_chain")
+    def test_generate_success(
+        self, mock_sample_chain, mock_chat_completion, mock_tools
+    ):
         """测试成功生成蓝图"""
         # 模拟固定的采样结果
         mock_sample_chain.return_value = ["find_restaurants", "get_menu"]
@@ -77,7 +88,7 @@ class TestBlueprintGenerator:
             "required_tools": ["find_restaurants", "get_menu"],
             "ground_truth": ["find_restaurants", "get_menu"],
             "initial_state": {"restaurant_found": False},
-            "expected_state": {"restaurant_found": True, "menu_loaded": True}
+            "expected_state": {"restaurant_found": True, "menu_loaded": True},
         })
         mock_chat_completion.return_value = mock_response
 
@@ -88,11 +99,16 @@ class TestBlueprintGenerator:
         assert blueprint.intent == "查找餐厅并查看菜单"
         assert blueprint.ground_truth == ["find_restaurants", "get_menu"]
         assert blueprint.initial_state == {"restaurant_found": False}
-        assert blueprint.expected_state == {"restaurant_found": True, "menu_loaded": True}
+        assert blueprint.expected_state == {
+            "restaurant_found": True,
+            "menu_loaded": True,
+        }
 
-    @patch('sloop.engine.blueprint.chat_completion')
-    @patch('sloop.engine.graph.ToolGraphBuilder.sample_tool_chain')
-    def test_generate_with_missing_fields(self, mock_sample_chain, mock_chat_completion, mock_tools):
+    @patch("sloop.engine.blueprint.chat_completion")
+    @patch("sloop.engine.graph.ToolGraphBuilder.sample_tool_chain")
+    def test_generate_with_missing_fields(
+        self, mock_sample_chain, mock_chat_completion, mock_tools
+    ):
         """测试处理LLM响应缺少字段的情况"""
         # 模拟固定的采样结果
         mock_sample_chain.return_value = ["find_restaurants", "get_menu"]
@@ -114,7 +130,7 @@ class TestBlueprintGenerator:
         assert blueprint.initial_state == {}  # 默认值
         assert blueprint.expected_state == {}  # 默认值
 
-    @patch('sloop.engine.blueprint.chat_completion')
+    @patch("sloop.engine.blueprint.chat_completion")
     def test_generate_llm_error(self, mock_chat_completion, mock_tools):
         """测试LLM调用失败的情况"""
         mock_chat_completion.return_value = "调用错误: 网络问题"
@@ -124,7 +140,7 @@ class TestBlueprintGenerator:
         with pytest.raises(RuntimeError, match="LLM调用失败"):
             generator.generate(chain_length=2)
 
-    @patch('sloop.engine.blueprint.chat_completion')
+    @patch("sloop.engine.blueprint.chat_completion")
     def test_generate_invalid_json(self, mock_chat_completion, mock_tools):
         """测试LLM返回无效JSON的情况"""
         mock_chat_completion.return_value = "这不是有效的JSON响应"
@@ -144,7 +160,7 @@ class TestBlueprintGenerator:
             "required_tools": ["tool1", "tool2"],
             "ground_truth": ["tool1", "tool2"],
             "initial_state": {"key": "value"},
-            "expected_state": {"key": "new_value"}
+            "expected_state": {"key": "new_value"},
         }
 
         result = generator._validate_blueprint_data(valid_data, ["tool1", "tool2"])
@@ -161,7 +177,9 @@ class TestBlueprintGenerator:
             # 缺少其他字段
         }
 
-        result = generator._validate_blueprint_data(incomplete_data, ["find_restaurants", "get_menu"])
+        result = generator._validate_blueprint_data(
+            incomplete_data, ["find_restaurants", "get_menu"]
+        )
         assert result["intent"] == "测试意图"
         assert result["ground_truth"] == ["find_restaurants", "get_menu"]  # 使用期望链
         assert result["initial_state"] == {}  # 默认值
@@ -174,7 +192,7 @@ class TestBlueprintGenerator:
         # 测试无效意图
         invalid_data = {
             "intent": 123,  # 应该是字符串
-            "ground_truth": ["find_restaurants"]
+            "ground_truth": ["find_restaurants"],
         }
 
         with pytest.raises(ValueError, match="缺少有效的intent字段"):
@@ -187,7 +205,7 @@ class TestBlueprintGenerator:
         with pytest.raises(ValueError, match="无法采样到有效的工具链"):
             generator.generate(chain_length=2)
 
-    @patch('sloop.engine.blueprint.chat_completion')
+    @patch("sloop.engine.blueprint.chat_completion")
     def test_generate_multiple(self, mock_chat_completion, mock_tools):
         """测试批量生成蓝图"""
         # 模拟LLM响应
@@ -196,7 +214,7 @@ class TestBlueprintGenerator:
             "required_tools": ["find_restaurants"],
             "ground_truth": ["find_restaurants"],
             "initial_state": {},
-            "expected_state": {"done": True}
+            "expected_state": {"done": True},
         })
         mock_chat_completion.return_value = mock_response
 
@@ -217,11 +235,9 @@ def mock_tools_global():
             description="Find restaurants and return restaurant_id",
             parameters={
                 "type": "object",
-                "properties": {
-                    "city": {"type": "string", "description": "City name"}
-                },
-                "required": ["city"]
-            }
+                "properties": {"city": {"type": "string", "description": "City name"}},
+                "required": ["city"],
+            },
         ),
         ToolDefinition(
             name="get_menu",
@@ -231,8 +247,8 @@ def mock_tools_global():
                 "properties": {
                     "restaurant_id": {"type": "string", "description": "Restaurant ID"}
                 },
-                "required": ["restaurant_id"]
-            }
+                "required": ["restaurant_id"],
+            },
         ),
         ToolDefinition(
             name="order_food",
@@ -241,18 +257,16 @@ def mock_tools_global():
                 "type": "object",
                 "properties": {
                     "dish_id": {"type": "string", "description": "Dish ID"},
-                    "restaurant_id": {"type": "string", "description": "Restaurant ID"}
+                    "restaurant_id": {"type": "string", "description": "Restaurant ID"},
                 },
-                "required": ["dish_id"]
-            }
-        )
+                "required": ["dish_id"],
+            },
+        ),
     ]
 
 
 def test_planner_prompt_rendering(mock_tools_global):
     """测试规划器提示模板渲染"""
-    from sloop.utils.template import render_planner_prompt
-
     tool_chain = ["find_restaurants", "get_menu"]
     tool_definitions = mock_tools_global[:2]  # 只用前两个工具
 

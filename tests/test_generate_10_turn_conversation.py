@@ -2,22 +2,21 @@
 测试生成10轮对话数据的功能
 """
 
-import pytest
 import json
-import os
-from pathlib import Path
-from sloop.core.data_generator import BatchDataGenerator
+
+import pytest
 from sloop.core.api_structure import load_apis_from_file
+from sloop.core.config import config
+from sloop.core.data_generator import BatchDataGenerator
 
 
 class TestGenerate10TurnConversation:
     """生成10轮对话数据的测试"""
 
     @pytest.mark.integration
-    def test_generate_single_10_turn_conversation(self, mock_config):
+    def test_generate_single_10_turn_conversation(self):
         """测试生成单个10轮对话数据"""
         # 只有在有有效配置时才运行
-        from sloop.core.config import config
         if not config.validate():
             pytest.skip("需要有效的API配置才能运行集成测试")
 
@@ -37,7 +36,7 @@ class TestGenerate10TurnConversation:
             apis_per_conversation=3,
             sampling_strategy="balanced",
             target_turns=10,  # 降低目标轮数，让测试更容易通过
-            output_file=output_file
+            output_file=output_file,
         )
 
         # 验证结果
@@ -57,7 +56,9 @@ class TestGenerate10TurnConversation:
         for msg in messages:
             assert "role" in msg, "每条消息应该有role字段"
             assert "content" in msg, "每条消息应该有content字段"
-            assert msg["role"] in ["user", "assistant", "tool_call", "tool_response"], f"无效的role: {msg['role']}"
+            assert msg["role"] in ["user", "assistant", "tool_call", "tool_response"], (
+                f"无效的role: {msg['role']}"
+            )
 
         # 验证至少有一条assistant消息
         assistant_messages = [msg for msg in messages if msg["role"] == "assistant"]
@@ -71,7 +72,9 @@ class TestGenerate10TurnConversation:
             assert "</think>" in content, "assistant消息应该包含</think>标签"
 
         estimated_turns = len([msg for msg in messages if msg["role"] == "user"])
-        print(f"✅ 成功生成对话，包含 {len(messages)} 条消息，约 {estimated_turns} 轮对话")
+        print(
+            f"✅ 成功生成对话，包含 {len(messages)} 条消息，约 {estimated_turns} 轮对话"
+        )
 
     def test_conversation_data_format(self):
         """测试对话数据格式"""
@@ -81,10 +84,16 @@ class TestGenerate10TurnConversation:
             "tools": '[{"type": "function", "function": {"name": "test_api", "description": "test"}}]',
             "messages": [
                 {"role": "user", "content": "测试用户消息"},
-                {"role": "tool_call", "content": '{"name": "test_api", "arguments": {}}'},
+                {
+                    "role": "tool_call",
+                    "content": '{"name": "test_api", "arguments": {}}',
+                },
                 {"role": "tool_response", "content": '{"result": "success"}'},
-                {"role": "assistant", "content": "<think>\n测试推理\n</think>\n\n测试回复"}
-            ]
+                {
+                    "role": "assistant",
+                    "content": "<think>\n测试推理\n</think>\n\n测试回复",
+                },
+            ],
         }
 
         # 验证格式
@@ -100,7 +109,9 @@ class TestGenerate10TurnConversation:
         assert "tool_response" in roles
 
         # 验证assistant消息格式
-        assistant_msg = [msg for msg in mock_conversation["messages"] if msg["role"] == "assistant"][0]
+        assistant_msg = [
+            msg for msg in mock_conversation["messages"] if msg["role"] == "assistant"
+        ][0]
         assert "<think>" in assistant_msg["content"]
         assert "</think>" in assistant_msg["content"]
 

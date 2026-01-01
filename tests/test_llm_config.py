@@ -2,11 +2,16 @@
 测试 LLM 配置管理与调用封装
 """
 
-import pytest
 import os
-from unittest.mock import patch, MagicMock
-from sloop.config import Settings, get_settings, reload_settings
-from sloop.utils.llm import completion, chat_completion, validate_llm_config
+from unittest.mock import MagicMock, patch
+
+from sloop.config import Settings
+from sloop.utils.llm import (
+    chat_completion,
+    completion,
+    get_supported_models,
+    validate_llm_config,
+)
 
 
 class TestSettings:
@@ -20,18 +25,22 @@ class TestSettings:
         assert isinstance(settings.temperature, float)
         assert isinstance(settings.max_tokens, int)
         assert isinstance(settings.timeout, int)
-        assert settings.temperature >= 0.0 and settings.temperature <= 2.0
+        assert settings.temperature >= 0.0
+        assert settings.temperature <= 2.0
         assert settings.max_tokens > 0
         assert settings.timeout > 0
 
     def test_env_loading(self):
         """测试环境变量加载"""
-        with patch.dict(os.environ, {
-            "MODEL_NAME": "gpt-4o",
-            "OPENAI_API_KEY": "test_key_123",
-            "TEMPERATURE": "0.8",
-            "MAX_TOKENS": "2048"
-        }):
+        with patch.dict(
+            os.environ,
+            {
+                "MODEL_NAME": "gpt-4o",
+                "OPENAI_API_KEY": "test_key_123",
+                "TEMPERATURE": "0.8",
+                "MAX_TOKENS": "2048",
+            },
+        ):
             settings = Settings()
             assert settings.model_name == "gpt-4o"
             assert settings.openai_api_key == "test_key_123"
@@ -72,8 +81,8 @@ class TestSettings:
 class TestLLMUtils:
     """测试LLM工具函数"""
 
-    @patch('sloop.utils.llm.litellm.completion')
-    @patch('sloop.utils.llm.get_settings')
+    @patch("sloop.utils.llm.litellm.completion")
+    @patch("sloop.utils.llm.get_settings")
     def test_completion_success(self, mock_get_settings, mock_litellm):
         """测试成功调用"""
         # 模拟配置
@@ -99,8 +108,8 @@ class TestLLMUtils:
         assert result == "测试响应"
         mock_litellm.assert_called_once()
 
-    @patch('sloop.utils.llm.litellm.completion')
-    @patch('sloop.utils.llm.get_settings')
+    @patch("sloop.utils.llm.litellm.completion")
+    @patch("sloop.utils.llm.get_settings")
     def test_completion_config_error(self, mock_get_settings, mock_litellm):
         """测试配置错误"""
         # 模拟无效配置
@@ -114,8 +123,8 @@ class TestLLMUtils:
         assert result.startswith("配置错误")
         mock_litellm.assert_not_called()
 
-    @patch('sloop.utils.llm.litellm.completion')
-    @patch('sloop.utils.llm.get_settings')
+    @patch("sloop.utils.llm.litellm.completion")
+    @patch("sloop.utils.llm.get_settings")
     def test_completion_api_error(self, mock_get_settings, mock_litellm):
         """测试API调用错误"""
         # 模拟配置
@@ -137,8 +146,8 @@ class TestLLMUtils:
         assert result.startswith("调用错误")
         assert "API错误" in result
 
-    @patch('sloop.utils.llm.litellm.completion')
-    @patch('sloop.utils.llm.get_settings')
+    @patch("sloop.utils.llm.litellm.completion")
+    @patch("sloop.utils.llm.get_settings")
     def test_json_mode_openai(self, mock_get_settings, mock_litellm):
         """测试OpenAI JSON模式"""
         # 模拟配置
@@ -158,15 +167,15 @@ class TestLLMUtils:
         mock_litellm.return_value = mock_response
 
         messages = [{"role": "user", "content": "测试"}]
-        result = completion(messages, json_mode=True)
+        completion(messages, json_mode=True)
 
         # 检查是否设置了response_format
         call_kwargs = mock_litellm.call_args[1]
         assert "response_format" in call_kwargs
         assert call_kwargs["response_format"] == {"type": "json_object"}
 
-    @patch('sloop.utils.llm.litellm.completion')
-    @patch('sloop.utils.llm.get_settings')
+    @patch("sloop.utils.llm.litellm.completion")
+    @patch("sloop.utils.llm.get_settings")
     def test_json_mode_other_model(self, mock_get_settings, mock_litellm):
         """测试其他模型JSON模式"""
         # 模拟配置
@@ -186,7 +195,7 @@ class TestLLMUtils:
         mock_litellm.return_value = mock_response
 
         messages = [{"role": "user", "content": "测试"}]
-        result = completion(messages, json_mode=True)
+        completion(messages, json_mode=True)
 
         # 检查系统消息是否添加了JSON指令
         call_kwargs = mock_litellm.call_args[1]
@@ -196,13 +205,10 @@ class TestLLMUtils:
 
     def test_chat_completion(self):
         """测试简化聊天接口"""
-        with patch('sloop.utils.llm.completion') as mock_completion:
+        with patch("sloop.utils.llm.completion") as mock_completion:
             mock_completion.return_value = "响应内容"
 
-            result = chat_completion(
-                prompt="测试提示",
-                system_message="系统消息"
-            )
+            result = chat_completion(prompt="测试提示", system_message="系统消息")
 
             assert result == "响应内容"
             mock_completion.assert_called_once()
@@ -217,7 +223,7 @@ class TestLLMUtils:
 
     def test_validate_llm_config(self):
         """测试配置验证函数"""
-        with patch('sloop.utils.llm.get_settings') as mock_get_settings:
+        with patch("sloop.utils.llm.get_settings") as mock_get_settings:
             mock_settings = MagicMock()
             mock_settings.validate.return_value = True
             mock_get_settings.return_value = mock_settings
@@ -226,7 +232,6 @@ class TestLLMUtils:
 
     def test_get_supported_models(self):
         """测试获取支持的模型"""
-        from sloop.utils.llm import get_supported_models
         models = get_supported_models()
 
         assert isinstance(models, list)

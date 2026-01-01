@@ -2,11 +2,18 @@
 测试智能体功能
 """
 
-import pytest
 import json
-from unittest.mock import patch, MagicMock
-from sloop.agents import UserAgent, AssistantAgent, ServiceAgent
-from sloop.models import ToolDefinition, ChatMessage, ToolCall, Blueprint, EnvState
+from unittest.mock import patch
+
+import pytest
+
+from sloop.agents import AssistantAgent, ServiceAgent, UserAgent
+from sloop.models import Blueprint, ChatMessage, EnvState, ToolCall, ToolDefinition
+from sloop.utils.template import (
+    render_assistant_prompt,
+    render_service_prompt,
+    render_user_prompt,
+)
 
 
 class TestUserAgent:
@@ -25,7 +32,7 @@ class TestUserAgent:
             required_tools=["find_restaurants", "get_menu"],
             ground_truth=["find_restaurants", "get_menu"],
             initial_state={"restaurant_found": False},
-            expected_state={"restaurant_found": True, "menu_loaded": True}
+            expected_state={"restaurant_found": True, "menu_loaded": True},
         )
 
     @pytest.fixture
@@ -36,8 +43,10 @@ class TestUserAgent:
             ChatMessage(role="user", content="我想找一家餐厅吃饭"),
         ]
 
-    @patch('sloop.agents.user.chat_completion')
-    def test_generate_message_success(self, mock_chat_completion, user_agent, mock_blueprint, mock_history):
+    @patch("sloop.agents.user.chat_completion")
+    def test_generate_message_success(
+        self, mock_chat_completion, user_agent, mock_blueprint, mock_history
+    ):
         """测试成功生成用户消息"""
         mock_chat_completion.return_value = "我想找一家意大利餐厅"
 
@@ -46,8 +55,10 @@ class TestUserAgent:
         assert message == "我想找一家意大利餐厅"
         assert not user_agent.is_task_complete(message)
 
-    @patch('sloop.agents.user.chat_completion')
-    def test_generate_message_stop_signal(self, mock_chat_completion, user_agent, mock_blueprint, mock_history):
+    @patch("sloop.agents.user.chat_completion")
+    def test_generate_message_stop_signal(
+        self, mock_chat_completion, user_agent, mock_blueprint, mock_history
+    ):
         """测试生成包含停止信号的消息"""
         mock_chat_completion.return_value = "任务完成了。###STOP###"
 
@@ -56,8 +67,10 @@ class TestUserAgent:
         assert message == "###STOP###"
         assert user_agent.is_task_complete(message)
 
-    @patch('sloop.agents.user.chat_completion')
-    def test_generate_message_error(self, mock_chat_completion, user_agent, mock_blueprint, mock_history):
+    @patch("sloop.agents.user.chat_completion")
+    def test_generate_message_error(
+        self, mock_chat_completion, user_agent, mock_blueprint, mock_history
+    ):
         """测试LLM调用失败的情况"""
         mock_chat_completion.return_value = "调用错误: 网络问题"
 
@@ -85,8 +98,8 @@ class TestAssistantAgent:
                 parameters={
                     "type": "object",
                     "properties": {"city": {"type": "string"}},
-                    "required": ["city"]
-                }
+                    "required": ["city"],
+                },
             )
         ]
 
@@ -103,8 +116,10 @@ class TestAssistantAgent:
             ChatMessage(role="assistant", content="好的，请告诉我你在哪个城市"),
         ]
 
-    @patch('sloop.agents.assistant.chat_completion')
-    def test_generate_response_success(self, mock_chat_completion, assistant_agent, mock_history):
+    @patch("sloop.agents.assistant.chat_completion")
+    def test_generate_response_success(
+        self, mock_chat_completion, assistant_agent, mock_history
+    ):
         """测试成功生成助手响应"""
         mock_chat_completion.return_value = "我来帮你搜索餐厅"
 
@@ -112,8 +127,10 @@ class TestAssistantAgent:
 
         assert response == "我来帮你搜索餐厅"
 
-    @patch('sloop.agents.assistant.chat_completion')
-    def test_generate_response_error(self, mock_chat_completion, assistant_agent, mock_history):
+    @patch("sloop.agents.assistant.chat_completion")
+    def test_generate_response_error(
+        self, mock_chat_completion, assistant_agent, mock_history
+    ):
         """测试LLM调用失败的情况"""
         mock_chat_completion.return_value = "调用错误: 网络问题"
 
@@ -142,7 +159,9 @@ class TestAssistantAgent:
 
     def test_should_call_tools(self, assistant_agent):
         """测试工具调用检测"""
-        response_with_call = '调用工具{"name": "search_restaurants", "arguments": {"city": "Shanghai"}}'
+        response_with_call = (
+            '调用工具{"name": "search_restaurants", "arguments": {"city": "Shanghai"}}'
+        )
         response_without_call = "普通响应"
 
         assert assistant_agent.should_call_tools(response_with_call)
@@ -162,7 +181,7 @@ class TestServiceAgent:
         """模拟工具调用fixture"""
         return ToolCall(
             name="search_restaurants",
-            arguments={"city": "Shanghai", "cuisine": "Italian"}
+            arguments={"city": "Shanghai", "cuisine": "Italian"},
         )
 
     @pytest.fixture
@@ -172,7 +191,7 @@ class TestServiceAgent:
             state={
                 "restaurant_found": False,
                 "menu_loaded": False,
-                "booking_confirmed": False
+                "booking_confirmed": False,
             }
         )
 
@@ -184,25 +203,42 @@ class TestServiceAgent:
             required_tools=["search_restaurants", "book_restaurant"],
             ground_truth=["search_restaurants", "book_restaurant"],
             initial_state={"restaurant_found": False},
-            expected_state={"restaurant_found": True, "booking_confirmed": True}
+            expected_state={"restaurant_found": True, "booking_confirmed": True},
         )
 
-    @patch('sloop.agents.service.chat_completion')
-    def test_execute_tool_success(self, mock_chat_completion, service_agent, mock_tool_call, mock_state, mock_blueprint):
+    @patch("sloop.agents.service.chat_completion")
+    def test_execute_tool_success(
+        self,
+        mock_chat_completion,
+        service_agent,
+        mock_tool_call,
+        mock_state,
+        mock_blueprint,
+    ):
         """测试成功执行工具"""
         mock_response = json.dumps({
             "response": "Found 5 Italian restaurants in Shanghai",
-            "state_updates": {"restaurant_found": True, "restaurant_count": 5}
+            "state_updates": {"restaurant_found": True, "restaurant_count": 5},
         })
         mock_chat_completion.return_value = mock_response
 
         result = service_agent.execute_tool(mock_tool_call, mock_state, mock_blueprint)
 
         assert result["response"] == "Found 5 Italian restaurants in Shanghai"
-        assert result["state_updates"] == {"restaurant_found": True, "restaurant_count": 5}
+        assert result["state_updates"] == {
+            "restaurant_found": True,
+            "restaurant_count": 5,
+        }
 
-    @patch('sloop.agents.service.chat_completion')
-    def test_execute_tool_error(self, mock_chat_completion, service_agent, mock_tool_call, mock_state, mock_blueprint):
+    @patch("sloop.agents.service.chat_completion")
+    def test_execute_tool_error(
+        self,
+        mock_chat_completion,
+        service_agent,
+        mock_tool_call,
+        mock_state,
+        mock_blueprint,
+    ):
         """测试工具执行失败的情况"""
         mock_chat_completion.return_value = "调用错误: 网络问题"
 
@@ -211,8 +247,15 @@ class TestServiceAgent:
         assert "Error executing" in result["response"]
         assert result["state_updates"] == {}
 
-    @patch('sloop.agents.service.chat_completion')
-    def test_execute_tool_invalid_json(self, mock_chat_completion, service_agent, mock_tool_call, mock_state, mock_blueprint):
+    @patch("sloop.agents.service.chat_completion")
+    def test_execute_tool_invalid_json(
+        self,
+        mock_chat_completion,
+        service_agent,
+        mock_tool_call,
+        mock_state,
+        mock_blueprint,
+    ):
         """测试返回无效JSON的情况"""
         mock_chat_completion.return_value = "这不是有效的JSON"
 
@@ -227,9 +270,9 @@ class TestServiceAgent:
 
         updated_state = service_agent.update_state(mock_state, state_updates)
 
-        assert updated_state.state["restaurant_found"] == True
+        assert updated_state.state["restaurant_found"]
         assert updated_state.state["restaurant_count"] == 3  # 新增属性
-        assert updated_state.state["menu_loaded"] == False  # 未修改的属性保持不变
+        assert not updated_state.state["menu_loaded"]  # 未修改的属性保持不变
 
     def test_update_state_empty_updates(self, service_agent, mock_state):
         """测试空状态更新的情况"""
@@ -240,35 +283,28 @@ class TestServiceAgent:
 
 def test_render_user_prompt():
     """测试用户提示模板渲染"""
-    from sloop.utils.template import render_user_prompt
-
     intent = "查找餐厅"
     history = [
-        {"role": "assistant", "content": "你好"},
-        {"role": "user", "content": "我想吃饭"}
+        ChatMessage(role="user", content="你好"),
+        ChatMessage(role="assistant", content="有什么可以帮你的吗？"),
     ]
-
     prompt = render_user_prompt(intent, history)
-
-    assert intent in prompt
+    assert "查找餐厅" in prompt
     assert "你好" in prompt
-    assert "我想吃饭" in prompt
+    assert "有什么可以帮你的吗？" in prompt
 
 
 def test_render_assistant_prompt():
     """测试助手提示模板渲染"""
-    from sloop.utils.template import render_assistant_prompt
 
     tools = [
         ToolDefinition(
             name="search",
             description="Search tool",
-            parameters={"type": "object", "properties": {}}
+            parameters={"type": "object", "properties": {}},
         )
     ]
-    history = [
-        ChatMessage(role="user", content="帮我搜索")
-    ]
+    history = [ChatMessage(role="user", content="帮我搜索")]
 
     prompt = render_assistant_prompt(tools, history)
 
@@ -279,12 +315,8 @@ def test_render_assistant_prompt():
 
 def test_render_service_prompt():
     """测试服务提示模板渲染"""
-    from sloop.utils.template import render_service_prompt
 
-    tool_call = ToolCall(
-        name="test_tool",
-        arguments={"param": "value"}
-    )
+    tool_call = ToolCall(name="test_tool", arguments={"param": "value"})
 
     current_state = EnvState(state={"key": "value"})
     blueprint = Blueprint(
@@ -292,7 +324,7 @@ def test_render_service_prompt():
         required_tools=[],
         ground_truth=[],
         initial_state={},
-        expected_state={"final": True}
+        expected_state={"final": True},
     )
 
     prompt = render_service_prompt(tool_call, current_state, blueprint)
