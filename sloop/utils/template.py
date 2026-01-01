@@ -327,3 +327,38 @@ def render_assistant_reply_prompt(thought: str, conversation_history: list) -> s
         history_dict.append(msg_dict)
 
     return template.render(thought=thought, conversation_history=history_dict)
+
+
+def get_selector_template():
+    """
+    获取裁判智能体模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("selector")
+
+
+def render_selector_prompt(current_chain: list, candidates: list) -> str:
+    """
+    渲染裁判智能体提示
+
+    参数:
+        current_chain: 当前已执行的工具名称列表
+        candidates: 候选工具定义列表
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_selector_template()
+
+    # 转换工具对象为字典格式
+    candidates_dict = []
+    for tool in candidates:
+        tool_dict = {
+            "name": tool.name,
+            "description": tool.description,
+        }
+        candidates_dict.append(tool_dict)
+
+    return template.render(current_chain=current_chain, candidates=candidates_dict)

@@ -10,6 +10,7 @@ from typing import List, Optional
 from sloop.config import get_settings
 from sloop.models import ToolDefinition
 from sloop.utils.llm import chat_completion
+from sloop.utils.template import render_selector_prompt
 
 
 class SelectorAgent:
@@ -43,38 +44,13 @@ class SelectorAgent:
         if not candidates:
             return None
 
-        # 构造候选工具描述
-        candidates_desc = []
-        for i, tool in enumerate(candidates, 1):
-            candidates_desc.append(f"{i}. {tool.name}: {tool.description}")
+        # 使用模板渲染提示
+        user_prompt = render_selector_prompt(current_chain, candidates)
 
-        # 构造系统提示
-        system_prompt = """你是一个专业的 API 编排专家，负责选择最合适的下一个工具来完成任务。
-
-决策原则：
-1. 序贯性优先：选择能处理上一步工具输出的工具，建立连贯的调用链。
-2. 多样性抑制：避免选择功能高度相似的工具，除非有明确需求。
-3. 完备性判断：如果当前链条已能解决问题，选择 FINISH 结束任务。
-4. 逻辑合理性：确保选择对任务进展有实际帮助。
-
-输出格式：
-- 如果选择工具：直接返回工具的名称（如 "get_weather"）
-- 如果结束任务：返回 "FINISH"
-- 只返回名称，不要其他解释"""
-
-        # 构造用户提示
-        user_prompt = f"""当前已执行的工具链：
-{chr(10).join(f"- {tool}" for tool in current_chain) if current_chain else "无"}
-
-候选工具列表：
-{chr(10).join(candidates_desc)}
-
-请分析当前任务状态，选择最合适的下一个工具，或决定结束任务。"""
-
-        # 调用 LLM
+        # 调用 LLM（系统提示已在模板中）
         response = chat_completion(
             prompt=user_prompt,
-            system_message=system_prompt,
+            system_message="",
             json_mode=False,
         )
 
