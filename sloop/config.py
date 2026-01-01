@@ -42,6 +42,12 @@ class Settings:
     max_tokens: int = 2048
     timeout: int = 60
 
+    # Embedding 配置
+    embedding_provider: str = "openai"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_api_key: Optional[str] = None
+    embedding_base_url: Optional[str] = None
+
     def __post_init__(self):
         """从环境变量初始化"""
         # LLM配置
@@ -72,6 +78,16 @@ class Settings:
         except (ValueError, TypeError):
             pass
 
+        # Embedding配置
+        self.embedding_provider = os.getenv("EMBEDDING_PROVIDER", self.embedding_provider)
+        self.embedding_model = os.getenv("EMBEDDING_MODEL", self.embedding_model)
+        self.embedding_api_key = os.getenv("EMBEDDING_API_KEY", self.embedding_api_key)
+        self.embedding_base_url = os.getenv("EMBEDDING_BASE_URL", self.embedding_base_url)
+
+        # 如果embedding_api_key为空，则复用openai_api_key
+        if not self.embedding_api_key:
+            self.embedding_api_key = self.openai_api_key
+
     def validate(self) -> bool:
         """验证配置是否有效"""
         if not self.openai_api_key:
@@ -95,6 +111,10 @@ class Settings:
             "temperature": self.temperature,
             "max_tokens": self.max_tokens,
             "timeout": self.timeout,
+            "embedding_provider": self.embedding_provider,
+            "embedding_model": self.embedding_model,
+            "embedding_api_key": f"{self.embedding_api_key[:4]}***" if self.embedding_api_key else "未设置",
+            "embedding_base_url": self.embedding_base_url or "默认",
         }
 
 
@@ -135,3 +155,7 @@ if __name__ == "__main__":
         logger.info("  - TEMPERATURE: 可选，默认 0.7")
         logger.info("  - MAX_TOKENS: 可选，默认 4096")
         logger.info("  - TIMEOUT: 可选，默认 60")
+        logger.info("  - EMBEDDING_PROVIDER: 可选，默认 openai")
+        logger.info("  - EMBEDDING_MODEL: 可选，默认 text-embedding-3-small")
+        logger.info("  - EMBEDDING_API_KEY: 可选，默认复用 OPENAI_API_KEY")
+        logger.info("  - EMBEDDING_BASE_URL: 可选")
