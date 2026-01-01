@@ -150,9 +150,11 @@ class ToolRetrievalEngine:
             force: 是否强制重新构建
         """
         # 检查是否需要跳过构建
-        if not force and self.index is not None and self.tool_names:
-            logger.info("Index already exists, skipping build (use force=True to rebuild)")
+        if not force and self.index is not None and self.tool_names and len(self.tool_names) == len(tools):
+            logger.info("Index already exists and tool count matches, skipping build (use force=True to rebuild)")
             return
+        elif not force and self.index is not None and self.tool_names and len(self.tool_names) != len(tools):
+            logger.warning(f"Tool count mismatch: index has {len(self.tool_names)} tools, input has {len(tools)} tools, rebuilding...")
 
         logger.info(f"Starting to build index: {len(tools)} tools")
 

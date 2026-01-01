@@ -118,6 +118,7 @@ def generate(
 
     with tqdm(total=count, desc="生成进度") as pbar:
         for i in range(count):
+            blueprint = None
             try:
                 # 生成蓝图
                 blueprint = generator.generate(chain_length=chain_length)
