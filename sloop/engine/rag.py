@@ -105,16 +105,33 @@ class ToolRetrievalEngine:
                     input=text,
                     api_key=self.settings.embedding_api_key,
                     api_base=self.settings.embedding_base_url,
+                    encoding_format="float",
                 )
 
                 if response and response.data:
                     if isinstance(text, str):
                         # 单条输入
                         if len(response.data) > 0:
-                            return response.data[0].embedding
+                            item = response.data[0]
+                            if hasattr(item, 'embedding'):
+                                return item.embedding
+                            elif isinstance(item, dict) and 'embedding' in item:
+                                return item['embedding']
+                            else:
+                                # 假设 item 就是向量列表
+                                return item
                     else:
                         # 批量输入
-                        return [item.embedding for item in response.data]
+                        embeddings = []
+                        for item in response.data:
+                            if hasattr(item, 'embedding'):
+                                embeddings.append(item.embedding)
+                            elif isinstance(item, dict) and 'embedding' in item:
+                                embeddings.append(item['embedding'])
+                            else:
+                                # 假设 item 就是向量列表
+                                embeddings.append(item)
+                        return embeddings
 
             except Exception as e:
                 logger.warning(f"Embedding call failed (attempt {attempt + 1}/{max_retries}): {e}")
