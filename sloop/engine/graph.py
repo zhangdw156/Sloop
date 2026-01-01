@@ -277,6 +277,31 @@ class ToolGraphBuilder:
             cat2 in related_categories and cat1 in related_categories[cat2]
         )
 
+    def get_start_nodes(self) -> List[str]:
+        """
+        获取起始节点（入度为0的节点）
+
+        返回:
+            起始节点名称列表
+        """
+        if self.graph is None:
+            return []
+        return [node for node in self.graph.nodes if self.graph.in_degree(node) == 0]
+
+    def get_neighbors(self, node_name: str) -> List[str]:
+        """
+        获取节点的邻居节点（后继节点）
+
+        参数:
+            node_name: 节点名称
+
+        返回:
+            邻居节点名称列表
+        """
+        if self.graph is None or node_name not in self.graph:
+            return []
+        return list(self.graph.successors(node_name))
+
     def get_graph_stats(self) -> Dict:
         """
         获取图的统计信息
