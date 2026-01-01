@@ -50,6 +50,7 @@ class ConversationPDA:
         tools: List[ToolDefinition],
         conversation_id: str = None,
         max_turns: int = 20,
+        auto_start: bool = True,
     ):
         """
         初始化对话循环
@@ -59,6 +60,7 @@ class ConversationPDA:
             tools: 可用的工具定义列表
             conversation_id: 对话ID，如果不提供则自动生成
             max_turns: 最大对话轮数
+            auto_start: 是否自动启动对话，默认为True。对于测试可以设为False
         """
         self.blueprint = blueprint
         self.tools = tools
@@ -87,10 +89,13 @@ class ConversationPDA:
         # 设置状态机
         self._setup_state_machine()
 
-        # 手动触发初始状态的回调（transitions不会自动调用）
-        self.on_enter_user_gen()
-
-        logger.info(f"🎬 ConversationPDA initialized: {self.conversation_id}")
+        # 根据auto_start参数决定是否自动启动对话
+        if auto_start:
+            # 手动触发初始状态的回调（transitions不会自动调用）
+            self.on_enter_user_gen()
+            logger.info(f"🎬 ConversationPDA initialized and started: {self.conversation_id}")
+        else:
+            logger.info(f"🎬 ConversationPDA initialized (auto_start=False): {self.conversation_id}")
 
     def _setup_state_machine(self):
         """设置状态机"""
@@ -461,51 +466,3 @@ class ConversationPDA:
             "is_completed": self.context.is_completed,
             "message_count": len(self.context.messages),
         }
-
-
-# ==================== 自测代码 ====================
-
-if __name__ == "__main__":
-    # 配置日志
-
-    # 创建测试工具
-    test_tools = [
-        ToolDefinition(
-            name="get_weather",
-            description="Get weather information",
-            parameters={
-                "type": "object",
-                "properties": {"location": {"type": "string"}},
-                "required": ["location"],
-            },
-        ),
-        ToolDefinition(
-            name="get_location",
-            description="Get user location",
-            parameters={"type": "object", "properties": {}, "required": []},
-        ),
-    ]
-
-    # 创建测试蓝图
-    test_blueprint = Blueprint(
-        intent="查询天气",
-        required_tools=["get_weather", "get_location"],
-        ground_truth=["get_weather"],
-        initial_state={"weather_data": None},
-        expected_state={"weather_data": "sunny"},
-    )
-
-    # 创建对话循环
-    loop = ConversationPDA(test_blueprint, test_tools, "test_conv_001")
-
-    # 运行对话
-    logger.info("=" * 50)
-    logger.info("🎬 开始PDA测试")
-    logger.info("=" * 50)
-
-    loop.run()
-
-    logger.info("=" * 50)
-    logger.info("📊 最终状态:")
-    logger.info(loop.get_status())
-    logger.info("=" * 50)

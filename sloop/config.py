@@ -10,10 +10,18 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from sloop.utils.logger import logger
-
 # 加载.env文件
 load_dotenv()
+
+# 延迟导入logger，避免循环导入
+def _get_logger():
+    try:
+        from sloop.utils.logger import logger
+        return logger
+    except ImportError:
+        # 如果无法导入，使用标准logging
+        import logging
+        return logging.getLogger(__name__)
 
 
 @dataclass
@@ -63,11 +71,11 @@ class Settings:
     def validate(self) -> bool:
         """验证配置是否有效"""
         if not self.openai_api_key:
-            logger.error("❌ 错误: 未配置 OPENAI_API_KEY")
+            _get_logger().error("❌ 错误: 未配置 OPENAI_API_KEY")
             return False
 
         if self.temperature < 0.0 or self.temperature > 2.0:
-            logger.error("❌ 错误: TEMPERATURE 必须在 0.0-2.0 之间")
+            _get_logger().error("❌ 错误: TEMPERATURE 必须在 0.0-2.0 之间")
             return False
 
         return True
@@ -103,6 +111,7 @@ def reload_settings() -> Settings:
 
 
 if __name__ == "__main__":
+    logger = _get_logger()
     logger.info("🔧 配置验证")
     logger.info("=" * 50)
 

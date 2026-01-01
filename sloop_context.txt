@@ -1,0 +1,3413 @@
+# Project Directory Structure
+
+./
+    config.py
+    __init__.py
+    core/
+    agents/
+        service.py
+        user.py
+        assistant.py
+        __init__.py
+    utils/
+        __init__.py
+        llm.py
+        logger.py
+        template.py
+    models/
+        blueprint.py
+        __init__.py
+        state.py
+        schema.py
+    cli/
+        main.py
+    templates/
+        assistant_think.j2
+        assistant_decide.j2
+        __init__.py
+        assistant_reply.j2
+        tool_call_gen.j2
+        planner.j2
+        user.j2
+        service.j2
+    engine/
+        blueprint.py
+        graph.py
+        __init__.py
+        pda.py
+
+==================================================
+
+
+==================== FILE: config.py ====================
+"""
+配置管理模块
+
+负责加载环境变量和配置参数，支持通过.env文件进行配置。
+"""
+
+import os
+from dataclasses import dataclass
+from typing import Optional
+
+from dotenv import load_dotenv
+
+from sloop.utils.logger import logger
+
+# 加载.env文件
+load_dotenv()
+
+
+@dataclass
+class Settings:
+    """应用配置类"""
+
+    # LLM配置
+    model_name: str = "gpt-4o-mini"
+    openai_api_key: Optional[str] = None
+    openai_api_base: Optional[str] = None
+    temperature: float = 0.7
+
+    # 系统配置
+    max_tokens: int = 4096
+    timeout: int = 60
+
+    def __post_init__(self):
+        """从环境变量初始化"""
+        # LLM配置
+        self.model_name = os.getenv("MODEL_NAME", self.model_name)
+        self.openai_api_key = os.getenv("OPENAI_API_KEY", self.openai_api_key)
+        self.openai_api_base = os.getenv("OPENAI_API_BASE", self.openai_api_base)
+
+        # 温度参数
+        try:
+            temp_str = os.getenv("TEMPERATURE")
+            if temp_str:
+                self.temperature = float(temp_str)
+        except (ValueError, TypeError):
+            pass  # 使用默认值
+
+        # 系统配置
+        try:
+            max_tokens_str = os.getenv("MAX_TOKENS")
+            if max_tokens_str:
+                self.max_tokens = int(max_tokens_str)
+        except (ValueError, TypeError):
+            pass
+
+        try:
+            timeout_str = os.getenv("TIMEOUT")
+            if timeout_str:
+                self.timeout = int(timeout_str)
+        except (ValueError, TypeError):
+            pass
+
+    def validate(self) -> bool:
+        """验证配置是否有效"""
+        if not self.openai_api_key:
+            logger.error("❌ 错误: 未配置 OPENAI_API_KEY")
+            return False
+
+        if self.temperature < 0.0 or self.temperature > 2.0:
+            logger.error("❌ 错误: TEMPERATURE 必须在 0.0-2.0 之间")
+            return False
+
+        return True
+
+    def get_safe_display(self) -> dict:
+        """获取安全的配置显示（隐藏敏感信息）"""
+        return {
+            "model_name": self.model_name,
+            "openai_api_key": f"{self.openai_api_key[:4]}***"
+            if self.openai_api_key
+            else "未设置",
+            "openai_api_base": self.openai_api_base or "默认",
+            "temperature": self.temperature,
+            "max_tokens": self.max_tokens,
+            "timeout": self.timeout,
+        }
+
+
+# 全局配置实例
+settings = Settings()
+
+
+def get_settings() -> Settings:
+    """获取全局配置实例"""
+    return settings
+
+
+def reload_settings() -> Settings:
+    """重新加载配置（用于测试或动态更新）"""
+    global settings
+    settings = Settings()
+    return settings
+
+
+if __name__ == "__main__":
+    logger.info("🔧 配置验证")
+    logger.info("=" * 50)
+
+    # 验证配置
+    if settings.validate():
+        logger.info("✅ 配置验证通过")
+        logger.info("\n📋 当前配置:")
+        safe_config = settings.get_safe_display()
+        for key, value in safe_config.items():
+            logger.info(f"  {key}: {value}")
+    else:
+        logger.error("❌ 配置验证失败")
+        logger.info("\n请检查以下环境变量:")
+        logger.info("  - OPENAI_API_KEY: 必需")
+        logger.info("  - MODEL_NAME: 可选，默认 gpt-4o-mini")
+        logger.info("  - OPENAI_API_BASE: 可选")
+        logger.info("  - TEMPERATURE: 可选，默认 0.7")
+        logger.info("  - MAX_TOKENS: 可选，默认 4096")
+        logger.info("  - TIMEOUT: 可选，默认 60")
+
+
+==================== FILE: __init__.py ====================
+"""
+Sloop - 智能对话循环系统
+
+一个基于下推自动机(PDA)的智能对话系统，支持工具调用、状态管理和栈操作。
+"""
+
+__version__ = "0.1.1"
+
+# 导出主要组件
+from sloop import config, engine, models, utils
+
+
+==================== FILE: agents/service.py ====================
+"""
+服务模拟器 (Service Agent)
+
+模拟API服务执行，根据工具调用更新环境状态。
+"""
+
+import json
+from typing import Any, Dict
+
+from sloop.models import Blueprint, EnvState, ToolCall
+from sloop.utils.llm import chat_completion
+from sloop.utils.logger import logger
+from sloop.utils.template import render_service_prompt
+
+
+class ServiceAgent:
+    """
+    服务智能体
+
+    负责模拟API服务调用，根据工具调用和当前状态生成合理的响应，
+    并更新环境状态。
+    """
+
+    def __init__(self):
+        """初始化服务智能体"""
+        logger.info("ServiceAgent initialized")
+
+    def execute_tool(
+        self, tool_call: ToolCall, current_state: EnvState, blueprint: Blueprint
+    ) -> Dict[str, Any]:
+        """
+        执行工具调用
+
+        参数:
+            tool_call: 工具调用信息
+            current_state: 当前环境状态
+            blueprint: 对话蓝图（用于参考）
+
+        返回:
+            包含响应和状态更新的字典
+        """
+        logger.info(f"Executing tool: {tool_call.name}")
+
+        # 构造提示
+        prompt = render_service_prompt(tool_call, current_state, blueprint)
+
+        # 调用LLM生成服务响应
+        response = chat_completion(
+            prompt=prompt,
+            system_message="",
+            json_mode=True,
+        )
+
+        if not response or response.startswith("调用错误"):
+            logger.error(f"Failed to execute tool: {response}")
+            return {
+                "response": f"Error executing {tool_call.name}",
+                "state_updates": {},
+            }
+
+        try:
+            # 解析LLM响应
+            result = json.loads(response)
+            logger.info(f"Tool execution successful: {tool_call.name}")
+
+            # 验证响应格式
+            if not isinstance(result, dict):
+                raise ValueError("Response must be a dictionary")
+
+            if "response" not in result:
+                result["response"] = f"Executed {tool_call.name}"
+
+            if "state_updates" not in result:
+                result["state_updates"] = {}
+
+            # 确保state_updates是字典
+            if not isinstance(result["state_updates"], dict):
+                result["state_updates"] = {}
+
+            return result
+
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"Failed to parse service response: {e}")
+            return {
+                "response": f"Executed {tool_call.name} (response parsing failed)",
+                "state_updates": {},
+            }
+
+    def update_state(
+        self, current_state: EnvState, state_updates: Dict[str, Any]
+    ) -> EnvState:
+        """
+        更新环境状态
+
+        参数:
+            current_state: 当前状态
+            state_updates: 状态更新字典
+
+        返回:
+            更新后的新状态
+        """
+        # 创建状态副本
+        new_state = current_state.model_copy()
+
+        # 应用更新到状态字典
+        new_state.update(state_updates)
+
+        logger.info(f"State updated with {len(state_updates)} changes")
+        return new_state
+
+
+# ==================== 测试代码 ====================
+
+if __name__ == "__main__":
+    logger.info("🔧 Service Agent 测试")
+    logger.info("=" * 50)
+
+    from sloop.models import Blueprint, EnvState, ToolCall
+
+    # 创建模拟工具调用
+    mock_tool_call = ToolCall(
+        tool_name="search_restaurants",
+        arguments={"city": "Shanghai", "cuisine": "Italian"},
+    )
+
+    # 创建模拟状态
+    mock_state = EnvState(
+        state={
+            "restaurant_found": False,
+            "menu_loaded": False,
+            "booking_confirmed": False,
+        }
+    )
+
+    # 创建模拟blueprint
+    mock_blueprint = Blueprint(
+        intent="查找餐厅并预订",
+        required_tools=["search_restaurants", "book_restaurant"],
+        ground_truth=["search_restaurants", "book_restaurant"],
+        initial_state={"restaurant_found": False, "booking_confirmed": False},
+        expected_state={"restaurant_found": True, "booking_confirmed": True},
+    )
+
+    logger.info("📋 测试数据:")
+    logger.info(f"  工具调用: {mock_tool_call.name}")
+    logger.info(f"  参数: {mock_tool_call.arguments}")
+    logger.info(f"  当前状态: {mock_state.model_dump()}")
+    logger.info("")
+
+    # 初始化服务智能体
+    logger.info("🔧 初始化ServiceAgent...")
+    service_agent = ServiceAgent()
+
+    logger.info("⚙️ 执行工具调用...")
+    try:
+        result = service_agent.execute_tool(mock_tool_call, mock_state, mock_blueprint)
+
+        logger.info("✅ 执行成功！")
+        logger.info(f"📝 响应: {result['response']}")
+        logger.info(f"🔄 状态更新: {result['state_updates']}")
+
+        # 应用状态更新
+        updated_state = service_agent.update_state(mock_state, result["state_updates"])
+        logger.info(f"📊 更新后状态: {updated_state.model_dump()}")
+
+    except Exception as e:
+        logger.error(f"❌ 执行失败: {e}")
+
+        # 如果LLM调用失败，提供模拟结果
+        logger.info("\n🔧 提供模拟服务响应:")
+        mock_result = {
+            "response": "Found 5 Italian restaurants in Shanghai",
+            "state_updates": {"restaurant_found": True},
+        }
+        logger.info(f"响应: {mock_result['response']}")
+        logger.info(f"状态更新: {mock_result['state_updates']}")
+
+        # 应用模拟更新
+        updated_state = service_agent.update_state(
+            mock_state, mock_result["state_updates"]
+        )
+        logger.info(f"更新后状态: {updated_state.model_dump()}")
+
+    logger.info("\n✅ Service Agent 测试完成！")
+
+
+==================== FILE: agents/user.py ====================
+"""
+用户模拟器 (User Agent)
+
+模拟用户行为，根据blueprint的意图和对话历史生成下一条用户消息。
+"""
+
+from typing import List
+
+from sloop.models import Blueprint, ChatMessage
+from sloop.utils.llm import chat_completion
+from sloop.utils.logger import logger
+from sloop.utils.template import render_user_prompt
+
+
+class UserAgent:
+    """
+    用户智能体
+
+    负责模拟用户行为，根据给定的意图和对话历史生成合理的用户消息。
+    """
+
+    def __init__(self):
+        """初始化用户智能体"""
+        logger.info("UserAgent initialized")
+
+    def generate_message(
+        self, blueprint: Blueprint, conversation_history: List[ChatMessage]
+    ) -> str:
+        """
+        生成用户消息
+
+        参数:
+            blueprint: 对话蓝图，包含用户意图
+            conversation_history: 对话历史消息列表
+
+        返回:
+            生成的用户消息字符串，如果任务完成则返回"###STOP###"
+        """
+        logger.info(f"Generating user message for intent: {blueprint.intent}")
+
+        # 构造提示
+        prompt = render_user_prompt(blueprint.intent, conversation_history)
+
+        # 调用LLM生成消息
+        response = chat_completion(
+            prompt=prompt,
+            system_message="",
+            json_mode=False,
+        )
+
+        if not response or response.startswith("调用错误"):
+            logger.error(f"Failed to generate user message: {response}")
+            return "I need help with something."  # 默认消息
+
+        # 检查是否包含停止标记
+        response = response.strip()
+        if "###STOP###" in response:
+            logger.info("User indicated task completion")
+            return "###STOP###"
+
+        logger.info(f"Generated user message: {response[:100]}...")
+        return response
+
+    def is_task_complete(self, message: str) -> bool:
+        """
+        检查任务是否完成
+
+        参数:
+            message: 用户消息
+
+        返回:
+            是否完成任务
+        """
+        return "###STOP###" in message
+
+
+# ==================== 测试代码 ====================
+
+if __name__ == "__main__":
+    logger.info("🤖 User Agent 测试")
+    logger.info("=" * 50)
+
+    from sloop.models import Blueprint
+
+    # 创建模拟blueprint
+    mock_blueprint = Blueprint(
+        intent="查找餐厅并点餐",
+        required_tools=["find_restaurants", "get_menu"],
+        ground_truth=["find_restaurants", "get_menu"],
+        initial_state={"restaurant_found": False},
+        expected_state={"restaurant_found": True, "menu_loaded": True},
+    )
+
+    # 创建模拟对话历史
+    mock_history = [
+        ChatMessage(role="assistant", content="你好！有什么可以帮助你的吗？"),
+        ChatMessage(role="user", content="我想找一家餐厅吃饭"),
+    ]
+
+    logger.info("📋 测试数据:")
+    logger.info(f"  意图: {mock_blueprint.intent}")
+    logger.info(f"  历史消息数: {len(mock_history)}")
+    logger.info("")
+
+    # 初始化用户智能体
+    logger.info("🔧 初始化UserAgent...")
+    user_agent = UserAgent()
+
+    logger.info("💬 生成用户消息...")
+    try:
+        message = user_agent.generate_message(mock_blueprint, mock_history)
+
+        logger.info("✅ 生成成功！")
+        logger.info(f"📝 消息内容: {message}")
+
+        if user_agent.is_task_complete(message):
+            logger.info("🎯 任务已完成")
+        else:
+            logger.info("🔄 任务继续")
+
+    except Exception as e:
+        logger.error(f"❌ 生成失败: {e}")
+
+        # 如果LLM调用失败，提供模拟结果
+        logger.info("\n🔧 提供模拟用户消息:")
+        logger.info("我想在市中心找一家中餐厅。")
+
+    logger.info("\n✅ User Agent 测试完成！")
+
+
+==================== FILE: agents/assistant.py ====================
+"""
+助手模拟器 (Assistant Agent)
+
+模拟被测试的助手模型，根据工具定义和对话历史决定下一步行动。
+"""
+
+import json
+import re
+from typing import List
+
+from sloop.models import ChatMessage, ToolCall, ToolDefinition
+from sloop.utils.llm import chat_completion
+from sloop.utils.logger import logger
+from sloop.utils.template import (
+    render_assistant_decide_prompt,
+    render_assistant_reply_prompt,
+    render_assistant_think_prompt,
+    render_tool_call_gen_prompt,
+)
+
+
+class AssistantAgent:
+    """
+    助手智能体
+
+    负责模拟被测试的助手模型，根据工具定义和对话历史生成响应，
+    可能包含工具调用。
+    """
+
+    def __init__(self, tools: List[ToolDefinition]):
+        """
+        初始化助手智能体
+
+        参数:
+            tools: 可用的工具定义列表
+        """
+        self.tools = tools
+        self.tool_map = {tool.name: tool for tool in tools}
+
+        logger.info(f"AssistantAgent initialized with {len(tools)} tools")
+
+    def parse_tool_calls(self, response: str) -> List[ToolCall]:
+        """
+        从响应中解析工具调用
+
+        参数:
+            response: 助手响应字符串
+
+        返回:
+            解析出的工具调用列表
+        """
+        tool_calls = []
+
+        # 尝试解析JSON格式的工具调用
+        # 查找类似 {"tool_name": "...", "arguments": {...}} 的模式（兼容name字段）
+        json_pattern = r'\{[^}]*"(?:tool_name|name)"\s*:\s*"([^"]+)"[^}]*"arguments"\s*:\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})\}'
+        matches = re.findall(json_pattern, response, re.DOTALL)
+
+        for match in matches:
+            tool_name, args_str = match
+            try:
+                arguments = json.loads(args_str)
+                if tool_name in self.tool_map:
+                    tool_call = ToolCall(name=tool_name, arguments=arguments)
+                    tool_calls.append(tool_call)
+                    logger.info(f"Parsed tool call: {tool_name}")
+            except json.JSONDecodeError:
+                logger.warning(f"Failed to parse tool call arguments: {args_str}")
+
+        # 如果没找到JSON格式，尝试查找函数调用模式
+        if not tool_calls:
+            # 查找 function_call 模式
+            func_pattern = r'"function_call"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]+)"[^}]*"arguments"\s*:\s*(\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\})\}'
+            func_matches = re.findall(func_pattern, response, re.DOTALL)
+
+            for match in func_matches:
+                tool_name, args_str = match
+                try:
+                    arguments = json.loads(args_str)
+                    if tool_name in self.tool_map:
+                        tool_call = ToolCall(name=tool_name, arguments=arguments)
+                        tool_calls.append(tool_call)
+                        logger.info(f"Parsed function call: {tool_name}")
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Failed to parse function call arguments: {args_str}"
+                    )
+
+        return tool_calls
+
+    def should_call_tools(self, response: str) -> bool:
+        """
+        判断响应是否包含工具调用
+
+        参数:
+            response: 助手响应字符串
+
+        返回:
+            是否包含工具调用
+        """
+        return len(self.parse_tool_calls(response)) > 0
+
+    def generate_thought(
+        self, conversation_history: List[ChatMessage], context_hint: str = ""
+    ) -> str:
+        """
+        生成助手思考过程 (Chain of Thought)
+
+        参数:
+            conversation_history: 对话历史消息列表
+            context_hint: 栈上下文提示信息（可选）
+
+        返回:
+            思考过程字符串
+        """
+        logger.info("Generating assistant thought process (CoT)")
+
+        # 使用模板渲染提示
+        prompt = render_assistant_think_prompt(conversation_history, context_hint)
+
+        # 调用LLM生成思考过程
+        thought = chat_completion(
+            prompt=prompt,
+            system_message="",
+            json_mode=False,
+        )
+
+        if not thought or thought.startswith("调用错误"):
+            logger.error(f"Failed to generate thought: {thought}")
+            return "我需要分析用户的请求并确定最佳响应方式。"
+
+        logger.info(f"Generated thought: {thought[:100]}...")
+        return thought.strip()
+
+    def decide_tool_use(self, thought: str) -> bool:
+        """
+        基于思考过程决定是否需要使用工具
+
+        参数:
+            thought: 思考过程字符串
+
+        返回:
+            是否需要使用工具
+        """
+        logger.info("Deciding whether to use tools based on thought process")
+
+        # 使用模板渲染提示
+        prompt = render_assistant_decide_prompt(thought, self.tools)
+
+        decision = (
+            chat_completion(
+                prompt=prompt,
+                system_message="",
+                json_mode=False,
+            )
+            .strip()
+            .upper()
+        )
+
+        needs_tools = decision.startswith("YES")
+        logger.info(f"Tool use decision: {needs_tools}")
+        return needs_tools
+
+    def generate_tool_calls(
+        self, thought: str, tools: List[ToolDefinition]
+    ) -> List[ToolCall]:
+        """
+        基于思考过程生成工具调用
+
+        参数:
+            thought: 思考过程字符串
+            tools: 可用的工具列表
+
+        返回:
+            工具调用列表
+        """
+        logger.info("Generating tool calls based on thought process")
+
+        # 使用模板渲染提示
+        prompt = render_tool_call_gen_prompt(thought, tools)
+
+        response = chat_completion(
+            prompt=prompt,
+            system_message="",
+            json_mode=True,
+        )
+
+        try:
+            tool_calls_data = json.loads(response)
+            if not isinstance(tool_calls_data, list):
+                tool_calls_data = [tool_calls_data]
+
+            tool_calls = []
+            for call_data in tool_calls_data:
+                if (
+                    isinstance(call_data, dict)
+                    and "name" in call_data
+                    and "arguments" in call_data
+                ):
+                    tool_name = call_data["name"]
+                    if tool_name in self.tool_map:
+                        tool_call = ToolCall(
+                            name=tool_name, arguments=call_data["arguments"]
+                        )
+                        tool_calls.append(tool_call)
+                        logger.info(f"Generated tool call: {tool_name}")
+
+            return tool_calls
+
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.error(f"Failed to parse generated tool calls: {e}")
+            return []
+
+    def generate_reply(
+        self, thought: str, conversation_history: List[ChatMessage]
+    ) -> str:
+        """
+        基于思考过程生成最终回复
+
+        参数:
+            thought: 思考过程字符串
+            conversation_history: 对话历史消息列表
+
+        返回:
+            最终回复字符串
+        """
+        logger.info("Generating final reply based on thought process")
+
+        # 使用模板渲染提示
+        prompt = render_assistant_reply_prompt(thought, conversation_history)
+
+        reply = chat_completion(
+            prompt=prompt,
+            system_message="",
+            json_mode=False,
+        )
+
+        if not reply or reply.startswith("调用错误"):
+            logger.error(f"Failed to generate reply: {reply}")
+            return "我很乐意为您提供帮助！有什么可以效劳的吗？"
+
+        logger.info(f"Generated reply: {reply[:100]}...")
+        return reply.strip()
+
+
+# ==================== 测试代码 ====================
+
+if __name__ == "__main__":
+    logger.info("🤖 Assistant Agent 测试")
+    logger.info("=" * 50)
+
+    from sloop.models import ChatMessage, ToolDefinition
+
+    # 创建模拟工具
+    mock_tools = [
+        ToolDefinition(
+            name="search_restaurants",
+            description="Search for restaurants in a city",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "city": {"type": "string", "description": "City name"},
+                    "cuisine": {"type": "string", "description": "Type of cuisine"},
+                },
+                "required": ["city"],
+            },
+        ),
+        ToolDefinition(
+            name="book_restaurant",
+            description="Book a table at a restaurant",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "restaurant_id": {"type": "string", "description": "Restaurant ID"},
+                    "date": {"type": "string", "description": "Booking date"},
+                    "time": {"type": "string", "description": "Booking time"},
+                    "party_size": {
+                        "type": "integer",
+                        "description": "Number of people",
+                    },
+                },
+                "required": ["restaurant_id", "date", "time"],
+            },
+        ),
+    ]
+
+    # 创建模拟对话历史
+    mock_history = [
+        ChatMessage(role="user", content="我想在上海找一家意大利餐厅吃饭"),
+        ChatMessage(
+            role="assistant",
+            content="我来帮你找上海的意大利餐厅。你想要什么样的价位或地点吗？",
+        ),
+        ChatMessage(role="user", content="市中心就可以，适合4个人"),
+    ]
+
+    logger.info("📋 测试数据:")
+    logger.info(f"  可用工具数: {len(mock_tools)}")
+    for tool in mock_tools:
+        logger.info(f"    - {tool.name}: {tool.description}")
+    logger.info(f"  对话历史: {len(mock_history)} 条消息")
+    logger.info("")
+
+    # 初始化助手智能体
+    logger.info("🔧 初始化AssistantAgent...")
+    assistant_agent = AssistantAgent(mock_tools)
+
+    logger.info("🔧 测试工具调用解析...")
+    try:
+        # 测试解析功能
+        mock_response = '我来帮你搜索上海的意大利餐厅。{"tool_name": "search_restaurants", "arguments": {"city": "上海", "cuisine": "意大利菜"}}'
+        logger.info(f"📝 测试响应: {mock_response}")
+
+        # 解析工具调用
+        tool_calls = assistant_agent.parse_tool_calls(mock_response)
+        if tool_calls:
+            logger.info(f"🔧 检测到 {len(tool_calls)} 个工具调用:")
+            for i, tool_call in enumerate(tool_calls, 1):
+                logger.info(f"  {i}. {tool_call.name}: {tool_call.arguments}")
+        else:
+            logger.info("💬 纯文本响应，无工具调用")
+
+    except Exception as e:
+        logger.error(f"❌ 解析失败: {e}")
+
+    logger.info("\n✅ Assistant Agent 测试完成！")
+
+
+==================== FILE: agents/__init__.py ====================
+"""
+智能代理模块
+
+包含各种AI代理的核心逻辑类。
+"""
+
+from sloop.agents.assistant import AssistantAgent
+from sloop.agents.service import ServiceAgent
+from sloop.agents.user import UserAgent
+
+__all__ = [
+    "UserAgent",
+    "AssistantAgent",
+    "ServiceAgent",
+]
+
+
+==================== FILE: utils/__init__.py ====================
+"""
+工具函数包
+
+导出各种实用工具函数。
+"""
+
+from sloop.utils.llm import completion
+
+__all__ = [
+    "completion",
+]
+
+
+==================== FILE: utils/llm.py ====================
+"""
+LLM 调用封装工具
+
+基于 litellm 提供统一的模型调用接口，支持多种模型和配置。
+"""
+
+import sys
+from typing import Any, Dict, List, Optional
+
+import litellm
+
+from sloop.utils.logger import logger
+
+# 设置日志
+
+
+def completion(
+    messages: List[Dict[str, Any]], json_mode: bool = False, **kwargs
+) -> str:
+    """
+    统一的LLM调用接口
+
+    参数:
+        messages: 消息列表，OpenAI格式
+        json_mode: 是否启用JSON模式
+        **kwargs: 其他参数，会覆盖默认设置
+
+    返回:
+        模型响应内容字符串
+
+    异常:
+        各种LLM调用异常会被捕获并记录，但不抛出
+    """
+    from sloop.config import get_settings
+
+    settings = get_settings()
+
+    # 验证配置
+    if not settings.validate():
+        error_msg = "LLM配置无效，请检查环境变量"
+        logger.error(error_msg)
+        return f"配置错误: {error_msg}"
+
+    try:
+        # 检查API key是否有效
+        if not settings.openai_api_key or len(str(settings.openai_api_key)) < 10:
+            error_msg = "API key无效或未配置，请检查OPENAI_API_KEY环境变量"
+            logger.error(error_msg)
+            return f"配置错误: {error_msg}"
+
+        # 准备调用参数
+        call_kwargs = {
+            "model": settings.model_name,
+            "messages": messages,
+            "temperature": settings.temperature,
+            "max_tokens": settings.max_tokens,
+            "timeout": settings.timeout,
+            "api_key": settings.openai_api_key,
+        }
+
+        # 如果设置了API base URL
+        if settings.openai_api_base:
+            call_kwargs["api_base"] = settings.openai_api_base
+
+        # JSON模式处理
+        if json_mode:
+            # 对于OpenAI兼容的API
+            if (
+                "gpt" in settings.model_name.lower()
+                or "openai" in settings.model_name.lower()
+            ):
+                call_kwargs["response_format"] = {"type": "json_object"}
+            # 对于其他模型，在系统消息中添加JSON指令
+            elif messages and messages[0].get("role") == "system":
+                messages[0]["content"] += "\n\n请以JSON格式响应。"
+            else:
+                # 添加系统消息
+                system_msg = {"role": "system", "content": "请以JSON格式响应。"}
+                messages.insert(0, system_msg)
+
+        # 合并用户提供的额外参数
+        call_kwargs.update(kwargs)
+
+        logger.info(f"调用LLM: {settings.model_name}, 消息数量: {len(messages)}")
+
+        # 调用模型
+        response = litellm.completion(**call_kwargs)
+
+        # 提取响应内容
+        if hasattr(response, "choices") and response.choices:
+            content = response.choices[0].message.content
+            if content:
+                logger.info(f"LLM响应成功，长度: {len(content)}")
+                return content
+
+        # 如果没有内容，返回空字符串
+        logger.warning("LLM返回空响应")
+        return ""
+
+    except Exception as e:
+        error_msg = f"LLM调用失败: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return f"调用错误: {error_msg}"
+
+
+def chat_completion(
+    prompt: str, system_message: Optional[str] = None, json_mode: bool = False, **kwargs
+) -> str:
+    """
+    简化的聊天完成接口
+
+    参数:
+        prompt: 用户提示
+        system_message: 系统消息（可选）
+        json_mode: 是否启用JSON模式
+        **kwargs: 其他参数
+
+    返回:
+        模型响应内容
+    """
+    messages = []
+
+    # 添加系统消息
+    if system_message:
+        messages.append({"role": "system", "content": system_message})
+
+    # 添加用户消息
+    messages.append({"role": "user", "content": prompt})
+
+    return completion(messages, json_mode=json_mode, **kwargs)
+
+
+def validate_llm_config() -> bool:
+    """
+    验证LLM配置是否有效
+
+    返回:
+        配置是否有效
+    """
+    from sloop.config import get_settings
+
+    settings = get_settings()
+    return settings.validate()
+
+
+def get_supported_models() -> List[str]:
+    """
+    获取litellm支持的模型列表（示例）
+
+    返回:
+        支持的模型名称列表
+    """
+    # 这里返回一些常见的模型作为示例
+    # 实际应该从litellm获取完整列表
+    return [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-3.5-turbo",
+        "claude-3-sonnet-20240229",
+        "claude-3-haiku-20240307",
+        "gemini-pro",
+        "deepseek-chat",
+        "qwen2-72b-instruct",
+    ]
+
+
+if __name__ == "__main__":
+    from sloop.config import get_settings
+
+    logger.info("🔧 LLM 配置和调用测试")
+    logger.info("=" * 50)
+
+    # 测试配置验证
+    logger.info("📋 配置状态:")
+    settings = get_settings()
+    if settings.validate():
+        logger.info("✅ 配置验证通过")
+        safe_config = settings.get_safe_display()
+        for key, value in safe_config.items():
+            logger.info(f"  {key}: {value}")
+    else:
+        logger.error("❌ 配置验证失败")
+        logger.info("\n请设置以下环境变量:")
+        logger.info("  OPENAI_API_KEY=your_api_key_here")
+        logger.info("  MODEL_NAME=gpt-4o-mini  # 可选")
+        logger.info("  OPENAI_API_BASE=https://api.openai.com/v1  # 可选")
+        logger.info("  TEMPERATURE=0.7  # 可选")
+        sys.exit(1)
+
+    logger.info("\n🧪 简单调用测试:")
+
+    # 测试简单调用（如果配置了有效的API key）
+    if settings.openai_api_key and len(settings.openai_api_key) > 10:  # 简单的key验证
+        try:
+            response = chat_completion(
+                prompt="请简单介绍一下你自己。", system_message="你是一个友好的AI助手。"
+            )
+
+            if response and not response.startswith("调用错误"):
+                logger.info("✅ LLM调用成功")
+                logger.info(f"响应预览: {response[:100]}...")
+            else:
+                logger.warning("⚠️ LLM调用失败或无响应")
+                logger.warning(f"响应: {response}")
+
+        except Exception as e:
+            logger.error(f"❌ 测试调用失败: {e}")
+    else:
+        logger.info("ℹ️ 未配置有效的API Key，跳过实际调用测试")
+
+    logger.info("\n📚 支持的模型示例:")
+    models = get_supported_models()
+    for i, model in enumerate(models[:5], 1):  # 只显示前5个
+        logger.info(f"  {i}. {model}")
+    if len(models) > 5:
+        logger.info(f"  ... 还有 {len(models) - 5} 个模型")
+
+    logger.info("\n✅ LLM工具测试完成")
+
+
+==================== FILE: utils/logger.py ====================
+import os
+
+from loguru import logger
+from tqdm import tqdm
+
+
+def tqdm_sink(msg):
+    """自定义 sink，使用 tqdm.write 输出日志，避免与进度条冲突"""
+    tqdm.write(str(msg), end="")
+
+
+# 确保 logs 目录存在
+log_dir = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs"
+)
+os.makedirs(log_dir, exist_ok=True)
+
+# 移除默认的 loguru handler
+logger.remove()
+
+# 添加控制台输出
+logger.add(
+    tqdm_sink,
+    level="INFO",
+    format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+    colorize=True,
+)
+
+# 添加文件输出，支持轮换和压缩
+logger.add(
+    os.path.join(log_dir, "file_{time:YYYY-MM-DD}.log"),
+    level="DEBUG",
+    rotation="1 day",  # 每天轮换
+    compression="zip",  # 压缩旧日志文件
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+    enqueue=True,  # 异步写入
+    retention="7 days",  # 保留7天日志
+)
+
+# 可以根据需要添加更多的配置，例如不同的日志级别、过滤器等
+
+# 导出 logger 实例
+__all__ = ["logger"]
+
+
+==================== FILE: utils/template.py ====================
+"""
+统一模板管理模块
+
+负责所有Jinja2模板的加载和渲染。
+"""
+
+import os
+
+from jinja2 import Template
+
+
+def _get_template_path(template_name: str) -> str:
+    """
+    获取模板文件路径
+
+    参数:
+        template_name: 模板文件名（不含扩展名）
+
+    返回:
+        模板文件的完整路径
+    """
+    # 从utils目录向上查找templates目录
+    utils_dir = os.path.dirname(__file__)
+    project_root = os.path.dirname(utils_dir)  # src/sloop
+    template_path = os.path.join(project_root, "templates", f"{template_name}.j2")
+    return template_path
+
+
+def _load_template(template_name: str) -> Template:
+    """
+    加载模板文件
+
+    参数:
+        template_name: 模板文件名（不含扩展名）
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    template_path = _get_template_path(template_name)
+
+    with open(template_path, "r", encoding="utf-8") as f:
+        template_content = f.read()
+
+    return Template(template_content)
+
+
+def get_planner_template() -> Template:
+    """
+    获取蓝图规划器的Jinja2模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("planner")
+
+
+def render_planner_prompt(tool_chain: list, tool_definitions: list) -> str:
+    """
+    渲染蓝图规划器提示
+
+    参数:
+        tool_chain: 工具调用链列表
+        tool_definitions: 工具定义列表
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_planner_template()
+
+    # 将ToolDefinition对象转换为字典格式，以便JSON序列化
+    tool_definitions_dict = []
+    for tool in tool_definitions:
+        tool_dict = {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters.model_dump()
+            if hasattr(tool.parameters, "model_dump")
+            else tool.parameters,
+        }
+        tool_definitions_dict.append(tool_dict)
+
+    return template.render(
+        tool_chain=tool_chain, tool_definitions=tool_definitions_dict
+    )
+
+
+def get_user_template():
+    """
+    获取用户智能体模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("user")
+
+
+def render_user_prompt(intent: str, conversation_history: list) -> str:
+    """
+    渲染用户智能体提示
+
+    参数:
+        intent: 用户意图
+        conversation_history: 对话历史消息列表
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_user_template()
+
+    # 转换消息对象为字典格式（兼容对象和字典）
+    history_dict = []
+    for message in conversation_history:
+        if hasattr(message, "role") and hasattr(message, "content"):
+            # 这是ChatMessage对象
+            msg_dict = {"role": message.role, "content": message.content}
+        else:
+            # 这已经是字典了
+            msg_dict = message
+        history_dict.append(msg_dict)
+
+    return template.render(intent=intent, conversation_history=history_dict)
+
+
+def get_service_template():
+    """
+    获取服务智能体模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("service")
+
+
+def render_service_prompt(
+    tool_call, current_state, blueprint, conversation_history=None
+) -> str:
+    """
+    渲染服务智能体提示
+
+    参数:
+        tool_call: 工具调用对象
+        current_state: 当前状态对象
+        blueprint: 蓝图对象
+        conversation_history: 对话历史消息列表（可选）
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_service_template()
+
+    # 转换对象为字典格式（兼容对象和字典）
+    if hasattr(tool_call, "name") and hasattr(tool_call, "arguments"):
+        # 这是ToolCall对象
+        tool_call_dict = {"tool_name": tool_call.name, "arguments": tool_call.arguments}
+    else:
+        # 这已经是字典了
+        tool_call_dict = tool_call
+
+    state_dict = (
+        current_state.model_dump()
+        if hasattr(current_state, "model_dump")
+        else current_state.__dict__
+    )
+
+    blueprint_dict = {
+        "intent": blueprint.intent,
+        "expected_state": blueprint.expected_state,
+    }
+
+    # 转换对话历史为字典格式
+    history_dict = []
+    if conversation_history:
+        for message in conversation_history:
+            if hasattr(message, "role") and hasattr(message, "content"):
+                # 这是ChatMessage对象
+                msg_dict = {"role": message.role, "content": message.content}
+            else:
+                # 这已经是字典了
+                msg_dict = message
+            history_dict.append(msg_dict)
+
+    return template.render(
+        tool_call=tool_call_dict,
+        current_state=state_dict,
+        blueprint=blueprint_dict,
+        conversation_history=history_dict,
+    )
+
+
+def get_assistant_think_template():
+    """
+    获取助手思考模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("assistant_think")
+
+
+def render_assistant_think_prompt(
+    conversation_history: list, context_hint: str = ""
+) -> str:
+    """
+    渲染助手思考提示
+
+    参数:
+        conversation_history: 对话历史消息列表
+        context_hint: 栈上下文提示信息（可选）
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_assistant_think_template()
+
+    # 转换消息对象为字典格式
+    history_dict = []
+    for message in conversation_history:
+        msg_dict = {"role": message.role, "content": message.content}
+        history_dict.append(msg_dict)
+
+    return template.render(conversation_history=history_dict, context_hint=context_hint)
+
+
+def get_assistant_decide_template():
+    """
+    获取助手决策模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("assistant_decide")
+
+
+def render_assistant_decide_prompt(thought: str, tools: list) -> str:
+    """
+    渲染助手决策提示
+
+    参数:
+        thought: 思考过程字符串
+        tools: 工具定义列表
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_assistant_decide_template()
+
+    # 转换工具对象为字典格式
+    tools_dict = []
+    for tool in tools:
+        tool_dict = {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters.model_dump()
+            if hasattr(tool.parameters, "model_dump")
+            else tool.parameters,
+        }
+        tools_dict.append(tool_dict)
+
+    return template.render(thought=thought, tools=tools_dict)
+
+
+def get_tool_call_gen_template():
+    """
+    获取工具调用生成模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("tool_call_gen")
+
+
+def render_tool_call_gen_prompt(thought: str, tools: list) -> str:
+    """
+    渲染工具调用生成提示
+
+    参数:
+        thought: 思考过程字符串
+        tools: 工具定义列表
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_tool_call_gen_template()
+
+    # 转换工具对象为字典格式
+    tools_dict = []
+    for tool in tools:
+        tool_dict = {
+            "name": tool.name,
+            "description": tool.description,
+            "parameters": tool.parameters.model_dump()
+            if hasattr(tool.parameters, "model_dump")
+            else tool.parameters,
+        }
+        tools_dict.append(tool_dict)
+
+    return template.render(thought=thought, tools=tools_dict)
+
+
+def get_assistant_reply_template():
+    """
+    获取助手回复模板
+
+    返回:
+        编译后的Jinja2模板对象
+    """
+    return _load_template("assistant_reply")
+
+
+def render_assistant_reply_prompt(thought: str, conversation_history: list) -> str:
+    """
+    渲染助手回复提示
+
+    参数:
+        thought: 思考过程字符串
+        conversation_history: 对话历史消息列表
+
+    返回:
+        渲染后的提示字符串
+    """
+    template = get_assistant_reply_template()
+
+    # 转换消息对象为字典格式
+    history_dict = []
+    for message in conversation_history:
+        msg_dict = {"role": message.role, "content": message.content}
+        history_dict.append(msg_dict)
+
+    return template.render(thought=thought, conversation_history=history_dict)
+
+
+==================== FILE: models/blueprint.py ====================
+"""
+蓝图数据模型：任务蓝图定义
+
+包含用户意图、必需工具、执行路径和状态定义。
+"""
+
+from typing import Any, Dict, List
+
+from pydantic import BaseModel, Field
+
+
+class Blueprint(BaseModel):
+    """
+    任务蓝图：定义对话生成的任务大纲
+
+    在正式对话前先生成蓝图，确保多轮对话有明确的终点和逻辑一致性。
+    """
+
+    intent: str = Field(..., description="用户的高层意图描述")
+    required_tools: List[str] = Field(..., description="必须使用的工具名称列表")
+    ground_truth: List[str] = Field(
+        ..., description="预期的正确调用序列（工具名称列表）"
+    )
+    initial_state: Dict[str, Any] = Field(..., description="环境初始状态字典")
+    expected_state: Dict[str, Any] = Field(..., description="结束时期望状态字典")
+
+    class Config:
+        extra = "allow"  # 允许额外字段以支持扩展
+
+    def validate_state_transition(self) -> bool:
+        """
+        验证初始状态和期望状态的键是否一致
+
+        返回: bool - 状态转换是否有效
+        """
+        return set(self.initial_state.keys()) == set(self.expected_state.keys())
+
+    def get_tool_sequence_str(self) -> str:
+        """
+        获取工具调用序列的字符串表示
+
+        返回: str - 工具序列描述
+        """
+        return " -> ".join(self.ground_truth)
+
+    def __str__(self) -> str:
+        """蓝图的字符串表示"""
+        return f"Blueprint(intent='{self.intent}', tools={self.required_tools}, sequence={self.get_tool_sequence_str()})"
+
+
+==================== FILE: models/__init__.py ====================
+"""
+Sloop 数据模型包
+
+导出所有核心数据模型类。
+"""
+
+from sloop.models.blueprint import Blueprint
+from sloop.models.schema import ChatMessage, ToolCall, ToolDefinition
+from sloop.models.state import ConversationContext, EnvState
+
+__all__ = [
+    "ToolDefinition",
+    "ToolCall",
+    "ChatMessage",
+    "Blueprint",
+    "EnvState",
+    "ConversationContext",
+]
+
+
+==================== FILE: models/state.py ====================
+"""
+状态数据模型：环境状态和对话上下文
+
+用于有状态服务模拟和PDA状态传递。
+"""
+
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
+
+from sloop.models.schema import ChatMessage, ToolCall
+
+
+class EnvState(BaseModel):
+    """
+    虚拟环境状态：维护有状态的工具调用环境
+
+    模拟真实API的状态变更，避免LLM产生逻辑幻觉。
+    """
+
+    state: Dict[str, Any] = Field(default_factory=dict, description="当前环境状态字典")
+    history: List[Dict[str, Any]] = Field(
+        default_factory=list, description="状态变更历史记录"
+    )
+
+    def get(self, key: str, default: Any = None) -> Any:
+        """获取状态值"""
+        return self.state.get(key, default)
+
+    def set(self, key: str, value: Any) -> None:
+        """设置状态值并记录历史"""
+        old_value = self.state.get(key)
+        self.state[key] = value
+
+        # 记录变更历史
+        self.history.append({
+            "timestamp": datetime.now().isoformat(),
+            "key": key,
+            "old_value": old_value,
+            "new_value": value,
+            "action": "set",
+        })
+
+    def update(self, updates: Dict[str, Any]) -> None:
+        """批量更新状态"""
+        for key, value in updates.items():
+            self.set(key, value)
+
+    def reset(self) -> None:
+        """重置状态"""
+        self.state.clear()
+        self.history.clear()
+
+    def validate_transition(self, expected_state: Dict[str, Any]) -> bool:
+        """
+        验证当前状态是否符合期望状态
+
+        参数:
+            expected_state: 期望的状态字典
+
+        返回: bool - 是否匹配
+        """
+        return self.state == expected_state
+
+    def __str__(self) -> str:
+        """状态的字符串表示"""
+        return f"EnvState({self.state})"
+
+
+class ConversationContext(BaseModel):
+    """
+    对话上下文：用于PDA传递上下文信息
+
+    包含对话历史、轮次计数、当前状态和栈管理等。
+    """
+
+    conversation_id: str = Field(..., description="对话唯一标识")
+    blueprint_id: Optional[str] = Field(None, description="关联的蓝图ID")
+
+    messages: List[ChatMessage] = Field(
+        default_factory=list, description="对话消息历史"
+    )
+    turn_count: int = Field(default=0, description="当前对话轮次")
+
+    env_state: EnvState = Field(default_factory=EnvState, description="当前环境状态")
+    initial_state: Dict[str, Any] = Field(
+        default_factory=dict, description="初始环境状态快照"
+    )
+
+    current_user_intent: Optional[str] = Field(None, description="当前用户意图")
+    pending_tool_calls: List[ToolCall] = Field(
+        default_factory=list, description="待处理的工具调用"
+    )
+    current_thought: Optional[str] = Field(
+        None, description="当前 Assistant 的思考过程 (CoT) 缓冲区"
+    )
+    scratchpad: Dict[str, Any] = Field(
+        default_factory=dict, description="状态机流转过程中的临时变量存储"
+    )
+
+    # PDA Stack: 用于实现Pushdown Automaton，支持嵌套工具调用和上下文管理
+    stack: List[Dict[str, Any]] = Field(
+        default_factory=lambda: [{"type": "ROOT", "data": {}}],
+        description="对话栈，用于跟踪待处理的任务上下文",
+    )
+
+    max_turns: int = Field(default=10, description="最大对话轮次限制")
+    is_completed: bool = Field(default=False, description="对话是否完成")
+
+    created_at: datetime = Field(default_factory=datetime.now, description="创建时间")
+    updated_at: datetime = Field(
+        default_factory=datetime.now, description="最后更新时间"
+    )
+
+    def add_message(self, message: ChatMessage) -> None:
+        """添加消息到对话历史"""
+        self.messages.append(message)
+        self.updated_at = datetime.now()
+
+    def increment_turn(self) -> None:
+        """增加轮次计数"""
+        self.turn_count += 1
+        self.updated_at = datetime.now()
+
+    def can_continue(self) -> bool:
+        """检查是否可以继续对话"""
+        return not self.is_completed and self.turn_count < self.max_turns
+
+    def complete_conversation(self) -> None:
+        """标记对话完成"""
+        self.is_completed = True
+        self.updated_at = datetime.now()
+
+    def clear_buffers(self) -> None:
+        """清空临时缓冲区，为下一轮对话做准备"""
+        self.current_thought = None
+        self.pending_tool_calls.clear()
+        self.scratchpad.clear()
+        self.updated_at = datetime.now()
+
+    def get_last_message(self) -> Optional[ChatMessage]:
+        """获取最后一条消息"""
+        return self.messages[-1] if self.messages else None
+
+    def get_tool_call_history(self) -> List[ToolCall]:
+        """获取工具调用历史"""
+        tool_calls = []
+        for msg in self.messages:
+            if msg.tool_call:
+                tool_calls.append(msg.tool_call)
+        return tool_calls
+
+    def push_context(self, context_type: str, data: Dict[str, Any] = None) -> None:
+        """推入新的上下文帧到栈顶"""
+        frame = {"type": context_type, "data": data or {}}
+        self.stack.append(frame)
+        self.updated_at = datetime.now()
+
+    def pop_context(self) -> Optional[Dict[str, Any]]:
+        """弹出栈顶上下文帧"""
+        if len(self.stack) > 1:  # 保留ROOT帧
+            frame = self.stack.pop()
+            self.updated_at = datetime.now()
+            return frame
+        return None
+
+    def peek_context(self) -> Optional[Dict[str, Any]]:
+        """查看栈顶上下文帧（不弹出）"""
+        return self.stack[-1] if self.stack else None
+
+    def get_stack_depth(self) -> int:
+        """获取栈深度（不包括ROOT）"""
+        return len(self.stack) - 1
+
+    def __str__(self) -> str:
+        """上下文的字符串表示"""
+        return f"ConversationContext(id='{self.conversation_id}', turns={self.turn_count}, completed={self.is_completed})"
+
+
+==================== FILE: models/schema.py ====================
+"""
+核心数据模型：符合 OpenAI 规范的工具定义和消息格式
+
+使用 Pydantic v2 进行数据验证和类型提示。
+"""
+
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class ToolParameterProperty(BaseModel):
+    """工具参数的属性定义"""
+
+    type: str = Field(..., description="参数类型，如 'string', 'number', 'boolean'")
+    description: Optional[str] = Field(None, description="参数描述")
+    enum: Optional[List[str]] = Field(None, description="枚举值列表")
+    items: Optional[Dict[str, Any]] = Field(
+        None, description="数组项的定义（用于数组类型）"
+    )
+
+
+class ToolParameters(BaseModel):
+    """工具参数的整体定义"""
+
+    type: str = Field("object", description="参数结构类型，通常为 'object'")
+    properties: Dict[str, ToolParameterProperty] = Field(
+        ..., description="参数属性字典"
+    )
+    required: Optional[List[str]] = Field(None, description="必需的参数列表")
+
+
+class ToolDefinition(BaseModel):
+    """OpenAI 规范的工具定义"""
+
+    name: str = Field(..., description="工具名称")
+    description: str = Field(..., description="工具描述")
+    parameters: ToolParameters = Field(..., description="工具参数定义")
+
+    class Config:
+        extra = "allow"  # 允许额外字段
+
+
+class ToolCall(BaseModel):
+    """工具调用定义"""
+
+    name: str = Field(..., description="调用的工具名称")
+    arguments: Dict[str, Any] = Field(..., description="工具调用参数")
+
+
+class ChatMessage(BaseModel):
+    """聊天消息定义"""
+
+    role: str = Field(
+        ..., description="消息角色：'user', 'assistant', 'tool', 'system'"
+    )
+    content: Optional[str] = Field(None, description="消息内容")
+    tool_call: Optional[ToolCall] = Field(
+        None, description="单个工具调用（仅assistant消息，向后兼容）"
+    )
+    tool_calls: Optional[List[ToolCall]] = Field(
+        None, description="并行工具调用列表（仅assistant消息）"
+    )
+    tool_call_id: Optional[str] = Field(None, description="工具调用ID（仅tool消息）")
+
+    class Config:
+        extra = "allow"  # 允许额外字段以支持扩展
+
+
+==================== FILE: cli/main.py ====================
+"""
+Sloop CLI 入口
+
+使用 typer 实现命令行接口，用于生成多轮工具调用对话数据。
+"""
+
+import json
+from pathlib import Path
+from typing import List
+
+import typer
+from tqdm import tqdm
+
+from sloop.engine import BlueprintGenerator
+from sloop.engine.pda import ConversationPDA
+from sloop.models import ChatMessage, ToolDefinition
+from sloop.utils.logger import logger
+
+app = typer.Typer()
+
+
+@app.callback()
+def main():
+    """
+    Sloop - 多轮工具调用数据生成框架
+    """
+    pass
+
+
+def convert_to_training_format(
+    tools: List[ToolDefinition], messages: List[ChatMessage]
+) -> dict:
+    """
+    将内部消息格式转换为扁平化的训练数据格式
+
+    参数:
+        tools: 活跃的工具定义列表
+        messages: 对话消息列表
+
+    返回:
+        训练数据格式的字典（扁平化格式）
+    """
+    # 转换tools为JSON字符串
+    tools_list = [tool.model_dump() for tool in tools]
+    tools_str = json.dumps(tools_list, ensure_ascii=False)
+
+    # 转换messages为扁平化格式
+    converted_messages = []
+    for msg in messages:
+        if msg.role == "user":
+            # 用户消息保持不变
+            converted_messages.append({"role": "user", "content": msg.content})
+        elif msg.role == "tool_call":
+            # 工具调用消息（FSM中已创建独立的tool_call消息）
+            converted_messages.append({"role": "tool_call", "content": msg.content})
+        elif msg.role == "tool":
+            # 工具响应 -> tool_response
+            converted_messages.append({"role": "tool_response", "content": msg.content})
+        elif msg.role == "assistant":
+            # 助手消息（已包含思考 + 回复）
+            converted_messages.append({"role": "assistant", "content": msg.content})
+
+    return {"tools": tools_str, "messages": converted_messages}
+
+
+@app.command()
+def generate(
+    input_file: str = typer.Option(
+        "tests/data/tools.json", "--input", "-i", help="工具定义文件路径"
+    ),
+    output_file: str = typer.Option(
+        "tests/data/output.json", "--output", "-o", help="输出文件路径"
+    ),
+    count: int = typer.Option(2, "--count", "-c", help="生成对话数量"),
+    max_turns: int = typer.Option(20, "--max-turns", "-t", help="最大对话轮数"),
+    chain_length: int = typer.Option(5, "--chain-length", "-l", help="工具链长度"),
+):
+    """
+    生成多轮工具调用对话数据
+
+    从工具定义文件中读取工具，自动生成对话蓝图和完整的对话流程。
+    """
+    typer.echo(f"🚀 开始生成 {count} 个对话数据")
+    typer.echo(f"   📥 输入文件: {input_file}")
+    typer.echo(f"   📤 输出文件: {output_file}")
+    typer.echo(f"   🔄 最大轮数: {max_turns}")
+    typer.echo(f"   🔗 工具链长度: {chain_length}")
+
+    # 1. 加载工具定义
+    typer.echo("📋 加载工具定义...")
+    try:
+        with open(input_file, "r", encoding="utf-8") as f:
+            tools_data = json.load(f)
+
+        # 转换为 ToolDefinition 对象
+        tools = [ToolDefinition(**tool) for tool in tools_data]
+        typer.echo(f"   ✅ 加载了 {len(tools)} 个工具定义")
+
+    except FileNotFoundError:
+        typer.echo(f"❌ 找不到输入文件: {input_file}", err=True)
+        raise typer.Exit(1) from None
+    except json.JSONDecodeError as e:
+        typer.echo(f"❌ JSON解析错误: {e}", err=True)
+        raise typer.Exit(1) from None
+
+    # 2. 初始化蓝图生成器
+    typer.echo("🔧 初始化蓝图生成器...")
+    generator = BlueprintGenerator(tools)
+
+    # 3. 准备输出文件
+    output_path = Path(output_file)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # 4. 生成对话数据
+    typer.echo("🎬 开始生成对话...")
+
+    with tqdm(total=count, desc="生成进度") as pbar:
+        for i in range(count):
+            try:
+                # 生成蓝图
+                blueprint = generator.generate(chain_length=chain_length)
+
+                # 根据blueprint.required_tools筛选active_tools
+                active_tools = [
+                    tool for tool in tools if tool.name in blueprint.required_tools
+                ]
+                typer.echo(
+                    f"   🔧 使用 {len(active_tools)} 个活跃工具: {blueprint.required_tools}"
+                )
+
+                # 创建对话循环（只传入active_tools，防止Context溢出）
+                conversation_id = f"conv_{i + 1:04d}"
+                loop = ConversationPDA(
+                    blueprint, active_tools, conversation_id, max_turns=max_turns
+                )
+
+                # 运行对话
+                loop.run()
+
+                # 转换为训练数据格式
+                training_data = convert_to_training_format(
+                    active_tools, loop.context.messages
+                )
+
+                # 追加写入输出文件
+                with open(output_path, "a", encoding="utf-8") as f:
+                    f.write(json.dumps(training_data, ensure_ascii=False) + "\n")
+
+                pbar.set_description(f"生成进度 (最近: {blueprint.intent[:20]}...)")
+
+            except Exception as e:
+                logger.error(f"生成对话 {i + 1} 失败: {e}")
+                typer.echo(f"⚠️ 跳过失败的对话 {i + 1}: {e}", err=True)
+                continue
+
+            pbar.update(1)
+
+    typer.echo(f"✅ 生成完成！输出文件: {output_file}")
+
+
+if __name__ == "__main__":
+    app()
+
+
+==================== FILE: templates/assistant_think.j2 ====================
+你是一个有逻辑思维能力的AI助手，正在分析对话历史来理解用户的需求。
+
+基于对话历史，生成一步步的推理过程来回应用户的最新消息。
+
+## 对话历史
+{% for message in conversation_history %}
+{{ message.role }}: {{ message.content }}
+{% endfor %}
+
+{% if context_hint %}
+## 当前上下文状态
+{{ context_hint }}
+{% endif %}
+
+## 指令
+请提供详细的思考过程，考虑：
+1. 用户在问什么
+2. 我们有什么信息
+3. 可能需要什么工具
+4. 如何构建回复
+
+## 思考过程
+
+
+==================== FILE: templates/assistant_decide.j2 ====================
+你是一个决策AI，负责根据思考过程判断是否需要调用工具。
+
+基于以下思考过程，判断是否需要调用工具来完成用户的请求。
+
+## 思考过程
+{{ thought }}
+
+## 可用工具
+{% for tool in tools %}
+- {{ tool.name }}: {{ tool.description }}
+{% endfor %}
+
+## 指令
+只回答"YES"或"NO"：是否需要调用工具？
+
+
+==================== FILE: templates/__init__.py ====================
+"""
+模板目录
+
+存放所有Jinja2模板文件。
+"""
+
+# 这个文件可以为空，只用于标记这是一个Python包
+
+
+==================== FILE: templates/assistant_reply.j2 ====================
+你是一个乐于助人的AI助手，负责根据思考过程为用户生成自然、有帮助的回复。
+
+基于你的思考过程，为用户生成有帮助和自然的回复。
+
+## 思考过程
+{{ thought }}
+
+## 对话历史
+{% for message in conversation_history %}
+{{ message.role }}: {{ message.content }}
+{% endfor %}
+
+## 指令
+生成回复时需要：
+1. 解决用户的需求
+2. 回复要有帮助、友好
+3. 使用思考过程中的信息
+4. 不要提及内部推理过程
+
+## 回复
+
+
+==================== FILE: templates/tool_call_gen.j2 ====================
+你是一个工具调用生成AI，负责根据思考过程生成正确的工具调用参数。
+
+基于思考过程，生成合适的工具调用参数。
+
+## 思考过程
+{{ thought }}
+
+## 可用工具
+{% for tool in tools %}
+### {{ tool.name }}
+描述: {{ tool.description }}
+参数: {{ tool.parameters | tojson }}
+{% endfor %}
+
+## 指令
+生成工具调用为JSON数组。每个工具调用应有'name'和'arguments'字段。
+如果不需要工具，返回空数组。
+
+## 工具调用
+
+
+==================== FILE: templates/planner.j2 ====================
+你是一个专家级的 AI 数据集生成器，专门生成真实、自然的对话场景。
+
+## 目标工具链
+{{ tool_chain | tojson }}
+
+## 工具定义
+{% for tool in tool_definitions %}
+### {{ tool.name }}
+描述: {{ tool.description }}
+参数: {{ tool.parameters | tojson }}
+{% if tool.category %}领域: {{ tool.category }}{% endif %}
+{% endfor %}
+
+## 任务
+首先，为这个工具链构思一个合理的**用户画像(Persona)**，然后基于这个Persona设计一个**中文**的用户意图。
+
+1. **分析工具链合理性**：
+   - 检查给定的工具链是否能在现实场景中逻辑连贯地组合使用
+   - 如果工具链不合理（如"寻找宝藏" + "查询股价"），请在返回中设置 "valid": false
+
+2. **构思用户画像(Persona)**：
+   - 选择一个具体的用户类型（如"忙碌的金融分析师"、"正在旅行计划的学生"、"家庭主妇"等）
+   - 这个Persona必须与工具链的领域高度相关
+
+3. **设计用户意图(Intent)**：
+   - 意图必须是这个Persona在现实生活中会遇到的具体问题
+   - 意图需要严格按照工具链的顺序来解决
+   - 意图应该是自然、具体的中文描述
+
+4. **定义状态**：
+   - 初始状态：执行工具前Persona的状态
+   - 期望状态：执行所有工具后世界应该发生的变化
+
+## 要求
+- **领域一致性**：Persona和意图必须与工具链的领域保持一致
+- **现实合理性**：场景必须像真实用户在实际生活中遇到的问题
+- **逻辑连贯性**：工具调用顺序必须符合解决问题的自然流程
+- **状态精确性**：只定义会被工具实际修改的变量
+
+## 输出格式
+严格按照此JSON格式输出：
+
+{
+  "valid": true|false,
+  "persona": "用户画像描述",
+  "intent": "描述用户意图的中文字符串",
+  "required_tools": {{ tool_chain | tojson }},
+  "ground_truth": {{ tool_chain | tojson }},
+  "initial_state": {"key": "value"},
+  "expected_state": {"key": "new_value"}
+}
+
+## 示例
+
+**有效场景**：
+{
+  "valid": true,
+  "persona": "正在准备年终汇报的金融分析师",
+  "intent": "获取过去一个月顶级创业公司的新闻，用于年终行业分析报告",
+  "required_tools": ["search_news", "filter_by_category"],
+  "ground_truth": ["search_news", "filter_by_category"],
+  "initial_state": {"news_collected": false, "analysis_ready": false},
+  "expected_state": {"news_collected": true, "analysis_ready": true}
+}
+
+**无效场景**：
+{
+  "valid": false,
+  "reason": "工具链涉及不同领域（娱乐游戏和金融投资），无法形成连贯的用户场景",
+  "intent": "",
+  "required_tools": {{ tool_chain | tojson }},
+  "ground_truth": {{ tool_chain | tojson }},
+  "initial_state": {},
+  "expected_state": {}
+}
+
+
+==================== FILE: templates/user.j2 ====================
+你是一个正在与 AI 助手对话的用户。你的目标是：{{ intent }}
+
+## 对话历史
+{% for message in conversation_history %}
+{{ message.role }}: {{ message.content }}
+{% endfor %}
+
+## 你的任务
+根据上面的对话历史，决定作为追求目标的用户接下来会说什么。
+
+如果你认为任务已经成功完成（所有要求都已满足），请回复 "###STOP###" 来结束对话。
+
+否则，用自然、流畅的**中文**继续对话，提出一个真实的用户消息来朝着实现目标前进。
+
+保持回复自然且对话式。不要包含任何关于你角色的元评论。
+
+
+==================== FILE: templates/service.j2 ====================
+你是一个模拟 API 服务器的 Python 函数。你**只返回数据**，绝不与用户对话。
+
+## 对话历史
+{% for message in conversation_history %}
+{{ message.role }}: {{ message.content }}
+{% endfor %}
+
+## 当前环境状态
+{{ current_state | tojson }}
+
+## 工具调用信息
+工具名称: {{ tool_call.tool_name }}
+参数: {{ tool_call.arguments | tojson }}
+
+## 蓝图上下文
+意图: {{ blueprint.intent }}
+期望最终状态: {{ blueprint.expected_state | tojson }}
+
+## 任务
+1. 根据当前状态和对话历史模拟工具调用的执行
+2. 生成该工具会返回的**纯JSON数据**（模拟真实的API返回体）
+3. 确定此工具执行后应该更新的状态变量
+4. 返回响应和状态更新
+
+## 指令
+- **Response字段必须是纯JSON字符串或数值**，模拟真实的API返回体
+- **严禁包含自然语言描述**（如"订单已创建"、"天气不错"等）
+- **生成合理的数据**，参考对话历史避免逻辑冲突（如用户预算300却生成6999的订单）
+- 例如：`{"temp": 24, "condition": "Sunny"}` 而不是 `今天天气晴朗`
+- 状态更新应该反映工具执行带来的有意义变化
+- 仅更新会被此工具调用逻辑改变的状态变量
+- 为状态值使用适当的数据类型（字符串、数字、布尔值）
+- 如果不需要状态变化，返回空的state_updates对象
+
+## 输出格式
+返回具有完全此结构的JSON对象：
+{
+  "response": "纯JSON字符串或数值，模拟API返回体",
+  "state_updates": {
+    "variable_name": "new_value",
+    "another_variable": true,
+    "numeric_value": 42
+  }
+}
+
+## 示例
+对于天气查询工具：
+{
+  "response": "{\"temperature\": 25, \"condition\": \"Sunny\", \"humidity\": 65}",
+  "state_updates": {
+    "weather_data": "{\"temperature\": 25, \"condition\": \"Sunny\", \"humidity\": 65}",
+    "weather_retrieved": true
+  }
+}
+
+对于餐厅搜索工具：
+{
+  "response": "[{\"name\": \"蜀大侠火锅\", \"rating\": 4.8, \"address\": \"成都市锦江区\"}, {\"name\": \"辣府\", \"rating\": 4.6, \"address\": \"成都市武侯区\"}]",
+  "state_updates": {
+    "restaurants_found": true,
+    "restaurant_count": 2
+  }
+}
+
+
+==================== FILE: engine/blueprint.py ====================
+"""
+蓝图生成器 (Blueprint Generator)
+
+连接工具图谱和LLM想象力，自动生成合理的对话蓝图。
+"""
+
+import json
+from typing import List
+
+from sloop.engine.graph import ToolGraphBuilder
+from sloop.models import Blueprint, ToolDefinition
+from sloop.utils.llm import chat_completion
+from sloop.utils.logger import logger
+from sloop.utils.template import render_planner_prompt
+
+
+class BlueprintGenerator:
+    """
+    蓝图生成器
+
+    基于工具图谱采样和LLM推理，自动生成对话蓝图。
+    """
+
+    def __init__(self, tools: List[ToolDefinition]):
+        """
+        初始化蓝图生成器
+
+        参数:
+            tools: 工具定义列表
+        """
+        self.tools = tools
+        self.tool_map = {tool.name: tool for tool in tools}
+
+        # 初始化工具图谱构建器
+        self.graph_builder = ToolGraphBuilder(tools)
+        self.graph_builder.build()
+
+        logger.info(f"BlueprintGenerator initialized with {len(tools)} tools")
+
+    def generate(self, chain_length: int = 3, max_retries: int = 3) -> Blueprint:
+        """
+        生成对话蓝图，包含合理性验证和重试机制
+
+        参数:
+            chain_length: 工具链长度
+            max_retries: 最大重试次数
+
+        返回:
+            生成的对话蓝图
+        """
+        logger.info(
+            f"Generating blueprint with chain length {chain_length}, max_retries {max_retries}"
+        )
+
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Attempt {attempt + 1}/{max_retries}")
+
+                # 1. 从图谱中采样工具链
+                tool_chain = self.graph_builder.sample_tool_chain(
+                    min_length=max(1, chain_length - 1), max_length=chain_length
+                )
+
+                if not tool_chain:
+                    logger.warning(
+                        f"Attempt {attempt + 1}: Failed to sample tool chain, retrying..."
+                    )
+                    continue
+
+                logger.info(f"Sampled tool chain: {tool_chain}")
+
+                # 2. 获取工具定义
+                tool_definitions = []
+                for tool_name in tool_chain:
+                    if tool_name in self.tool_map:
+                        tool_definitions.append(self.tool_map[tool_name])
+                    else:
+                        logger.warning(f"Tool {tool_name} not found in tool map")
+
+                if not tool_definitions:
+                    logger.warning(
+                        f"Attempt {attempt + 1}: No valid tool definitions found, retrying..."
+                    )
+                    continue
+
+                # 3. 构造和发送提示
+                prompt = render_planner_prompt(tool_chain, tool_definitions)
+
+                logger.info("Sending prompt to LLM for blueprint generation")
+
+                # 4. 调用LLM生成蓝图
+                llm_response = chat_completion(
+                    prompt=prompt,
+                    system_message="",
+                    json_mode=True,
+                )
+
+                if not llm_response or llm_response.startswith("调用错误"):
+                    logger.warning(
+                        f"Attempt {attempt + 1}: LLM call failed: {llm_response}, retrying..."
+                    )
+                    continue
+
+                # 5. 解析和验证响应
+                try:
+                    blueprint_data = json.loads(llm_response)
+                    logger.info("Successfully parsed LLM response")
+                except json.JSONDecodeError:
+                    logger.warning(
+                        f"Attempt {attempt + 1}: Failed to parse LLM response as JSON: {llm_response}, retrying..."
+                    )
+                    continue
+
+                # 6. 检查蓝图合理性
+                if not blueprint_data.get("valid", True):
+                    reason = blueprint_data.get("reason", "Unknown reason")
+                    logger.warning(
+                        f"Attempt {attempt + 1}: Blueprint marked as invalid: {reason}, retrying..."
+                    )
+                    continue
+
+                # 7. 验证和修正数据
+                validated_data = self._validate_blueprint_data(
+                    blueprint_data, tool_chain
+                )
+
+                # 8. 创建Blueprint对象
+                blueprint = Blueprint(**validated_data)
+
+                logger.info(
+                    f"Successfully generated valid blueprint: {blueprint.intent}"
+                )
+                return blueprint
+
+            except Exception as e:
+                logger.warning(f"Attempt {attempt + 1} failed: {e}, retrying...")
+                continue
+
+        # 所有重试都失败了，返回一个简单的默认蓝图
+        logger.error(
+            f"All {max_retries} attempts failed, generating fallback blueprint"
+        )
+        return self._generate_fallback_blueprint(tool_chain)
+
+    def _validate_blueprint_data(self, data: dict, expected_chain: List[str]) -> dict:
+        """
+        验证和修正蓝图数据
+
+        参数:
+            data: LLM返回的原始数据
+            expected_chain: 期望的工具链
+
+        返回:
+            验证后的数据字典
+        """
+        validated = {}
+
+        # 验证intent
+        if "intent" not in data or not isinstance(data["intent"], str):
+            raise ValueError("缺少有效的intent字段")
+        validated["intent"] = data["intent"].strip()
+
+        # 验证required_tools（可以是采样的链或LLM建议的链）
+        if "required_tools" in data and isinstance(data["required_tools"], list):
+            validated["required_tools"] = data["required_tools"]
+        else:
+            validated["required_tools"] = expected_chain
+
+        # 强制设置ground_truth为采样的链
+        validated["ground_truth"] = expected_chain
+
+        # 验证initial_state
+        if "initial_state" not in data or not isinstance(data["initial_state"], dict):
+            logger.warning("缺少initial_state，使用默认值")
+            validated["initial_state"] = {}
+        else:
+            validated["initial_state"] = data["initial_state"]
+
+        # 验证expected_state
+        if "expected_state" not in data or not isinstance(data["expected_state"], dict):
+            logger.warning("缺少expected_state，使用默认值")
+            validated["expected_state"] = {}
+        else:
+            validated["expected_state"] = data["expected_state"]
+
+        return validated
+
+    def _generate_fallback_blueprint(self, tool_chain: List[str]) -> Blueprint:
+        """
+        生成后备蓝图，当所有重试都失败时使用
+
+        参数:
+            tool_chain: 工具链列表
+
+        返回:
+            简单的后备蓝图
+        """
+        logger.info("Generating fallback blueprint")
+
+        # 构建简单的intent
+        tool_names = list(tool_chain)  # 直接使用工具名
+        intent = f"执行工具链: {' -> '.join(tool_names)}"
+
+        # 简单的状态
+        initial_state = {f"{name}_executed": False for name in tool_chain}
+        expected_state = {f"{name}_executed": True for name in tool_chain}
+
+        return Blueprint(
+            intent=intent,
+            required_tools=tool_chain,
+            ground_truth=tool_chain,
+            initial_state=initial_state,
+            expected_state=expected_state,
+        )
+
+    def generate_multiple(
+        self, count: int = 5, chain_length: int = 3
+    ) -> List[Blueprint]:
+        """
+        生成多个蓝图
+
+        参数:
+            count: 生成数量
+            chain_length: 工具链长度
+
+        返回:
+            蓝图列表
+        """
+        blueprints = []
+        for i in range(count):
+            try:
+                blueprint = self.generate(chain_length)
+                blueprints.append(blueprint)
+                logger.info(f"Generated blueprint {i + 1}/{count}: {blueprint.intent}")
+            except Exception as e:
+                logger.error(f"Failed to generate blueprint {i + 1}: {e}")
+                continue
+
+        return blueprints
+
+
+# ==================== 测试代码 ====================
+
+if __name__ == "__main__":
+    logger.info("🔧 Blueprint Generator 测试")
+    logger.info("=" * 50)
+
+    # 创建模拟工具数据
+    mock_tools = [
+        ToolDefinition(
+            name="find_restaurants",
+            description="Find restaurants and return restaurant_id",
+            parameters={
+                "type": "object",
+                "properties": {"city": {"type": "string", "description": "City name"}},
+                "required": ["city"],
+            },
+        ),
+        ToolDefinition(
+            name="get_menu",
+            description="Get menu for a restaurant",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "restaurant_id": {"type": "string", "description": "Restaurant ID"}
+                },
+                "required": ["restaurant_id"],
+            },
+        ),
+        ToolDefinition(
+            name="order_food",
+            description="Order food from menu",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "dish_id": {"type": "string", "description": "Dish ID"},
+                    "restaurant_id": {"type": "string", "description": "Restaurant ID"},
+                },
+                "required": ["dish_id"],
+            },
+        ),
+    ]
+
+    logger.info("📋 模拟工具数据:")
+    for tool in mock_tools:
+        logger.info(f"  - {tool.name}: {tool.description}")
+    logger.info("")
+
+    # 初始化生成器
+    logger.info("🔧 初始化BlueprintGenerator...")
+    generator = BlueprintGenerator(mock_tools)
+
+    logger.info("📊 图谱统计:")
+    stats = generator.graph_builder.get_graph_stats()
+    logger.info(f"  节点数量: {stats['nodes']}")
+    logger.info(f"  边数量: {stats['edges']}")
+    logger.info("")
+
+    # 生成蓝图
+    logger.info("🎯 生成Blueprint...")
+    try:
+        blueprint = generator.generate(chain_length=2)
+
+        logger.info("✅ 生成成功！")
+        logger.info("\n📋 Blueprint详情:")
+        logger.info(f"  意图: {blueprint.intent}")
+        logger.info(f"  必需工具: {blueprint.required_tools}")
+        logger.info(f"  真实工具链: {blueprint.ground_truth}")
+        logger.info(f"  初始状态: {blueprint.initial_state}")
+        logger.info(f"  期望状态: {blueprint.expected_state}")
+
+        logger.info("\n📄 完整JSON:")
+        logger.info(blueprint.model_dump_json(indent=2))
+
+    except Exception as e:
+        logger.error(f"❌ 生成失败: {e}")
+
+        # 如果LLM调用失败，提供模拟结果
+        logger.info("\n🔧 提供模拟Blueprint作为示例:")
+        mock_blueprint = Blueprint(
+            intent="查找餐厅并点餐",
+            required_tools=["find_restaurants", "get_menu"],
+            ground_truth=["find_restaurants", "get_menu"],
+            initial_state={"restaurant_found": False, "menu_loaded": False},
+            expected_state={"restaurant_found": True, "menu_loaded": True},
+        )
+        logger.info(mock_blueprint.model_dump_json(indent=2))
+
+    logger.info("\n✅ Blueprint Generator 测试完成！")
+
+
+==================== FILE: engine/graph.py ====================
+"""
+参数级工具图谱构建器 (Tool Graph Builder)
+
+实现工具之间的依赖关系分析和图谱构建，用于生成合理的工具调用链。
+"""
+
+import random
+from typing import Dict, List, Optional
+
+import matplotlib.pyplot as plt
+import networkx as nx
+
+from sloop.models import ToolDefinition
+from sloop.utils.logger import logger
+
+
+class ToolGraphBuilder:
+    """
+    工具图谱构建器
+
+    基于工具描述和参数分析，构建工具之间的依赖关系图。
+    用于生成合理的工具调用序列。
+    """
+
+    def __init__(self, tools: List[ToolDefinition]):
+        """
+        初始化构建器
+
+        参数:
+            tools: 工具定义列表
+        """
+        self.tools = tools
+        self.tool_map = {tool.name: tool for tool in tools}
+        self.graph: Optional[nx.DiGraph] = None
+
+    def build(self) -> nx.DiGraph:
+        """
+        构建工具依赖图
+
+        返回:
+            有向图：节点为工具名，边表示依赖关系
+        """
+        # 创建有向图
+        self.graph = nx.DiGraph()
+
+        # 添加所有节点
+        for tool in self.tools:
+            self.graph.add_node(tool.name, tool=tool)
+
+        # 分析依赖关系并添加边
+        for tool_a in self.tools:
+            for tool_b in self.tools:
+                if tool_a.name != tool_b.name and self._has_dependency(tool_a, tool_b):
+                    self.graph.add_edge(tool_a.name, tool_b.name)
+
+        return self.graph
+
+    def _has_dependency(self, tool_a: ToolDefinition, tool_b: ToolDefinition) -> bool:
+        """
+        判断工具A是否是工具B的依赖
+
+        逻辑：如果B的必需参数名出现在A的描述中，则A -> B
+
+        参数:
+            tool_a: 可能的依赖工具
+            tool_b: 被依赖的工具
+
+        返回:
+            是否存在依赖关系
+        """
+        # 获取B的必需参数名
+        required_params = self._get_required_params(tool_b)
+        if not required_params:
+            return False
+
+        # 检查A的描述是否包含B的必需参数名
+        description_a = tool_a.description.lower()
+        return any(param.lower() in description_a for param in required_params)
+
+    def _get_required_params(self, tool: ToolDefinition) -> List[str]:
+        """
+        获取工具的必需参数名列表
+
+        参数:
+            tool: 工具定义
+
+        返回:
+            必需参数名列表
+        """
+        required = []
+        if hasattr(tool.parameters, "required") and tool.parameters.required:
+            required = tool.parameters.required
+        return required
+
+    def sample_tool_chain(self, min_length: int = 2, max_length: int = 5) -> List[str]:
+        """
+        从图中采样一条工具调用链，考虑领域粘性
+
+        参数:
+            min_length: 最小链长度
+            max_length: 最大链长度
+
+        返回:
+            工具名列表，表示调用顺序
+        """
+        if self.graph is None:
+            raise ValueError("图尚未构建，请先调用 build() 方法")
+
+        if len(self.graph.nodes) == 0:
+            return []
+
+        # 找到入度为0的节点（起始节点）
+        start_nodes = [
+            node for node in self.graph.nodes if self.graph.in_degree(node) == 0
+        ]
+
+        if not start_nodes:
+            # 如果没有入度为0的节点，随机选择一个
+            start_nodes = list(self.graph.nodes)
+
+        # 随机选择起始节点
+        current_node = random.choice(start_nodes)
+        chain = [current_node]
+
+        # 获取当前工具的category作为基准
+        current_category = self._get_tool_category(current_node)
+
+        # 随机游走构建链（增加最大尝试次数避免死循环）
+        max_attempts = 50
+        attempts = 0
+
+        while len(chain) < max_length and attempts < max_attempts:
+            # 获取当前节点的后继节点
+            successors = list(self.graph.successors(current_node))
+
+            if not successors:
+                # 没有后继节点，结束
+                break
+
+            # 按领域粘性对后继节点进行排序
+            # 同领域或相关领域的节点优先级更高
+            scored_successors_with_random = []
+            for successor in successors:
+                score = self._calculate_domain_stickiness(current_category, successor)
+                scored_successors_with_random.append((
+                    successor,
+                    score,
+                    random.random(),
+                ))
+
+            # 按分数降序排序，然后按随机值降序排序以打破平局
+            scored_successors_with_random.sort(key=lambda x: (x[1], x[2]), reverse=True)
+            final_successors = [s[0] for s in scored_successors_with_random]
+
+            # 按80%的概率选择高粘性节点，20%概率随机选择
+            HIGH_STICKINESS_PROB = 0.8
+            if random.random() < HIGH_STICKINESS_PROB and final_successors:
+                next_node = final_successors[0]  # 选择最相关的节点
+            else:
+                next_node = random.choice(successors)  # 随机选择以保持多样性
+
+            # 避免环路
+            if next_node in chain:
+                attempts += 1
+                continue
+
+            chain.append(next_node)
+            current_node = next_node
+            current_category = self._get_tool_category(current_node)
+
+        # 确保最小长度（简化逻辑）
+        if len(chain) < min_length:
+            # 如果太短，返回当前链（避免复杂扩展逻辑导致问题）
+            pass
+
+        return chain
+
+    def _get_tool_category(self, tool_name: str) -> str:
+        """
+        获取工具的category
+
+        参数:
+            tool_name: 工具名
+
+        返回:
+            工具的category，如果没有则返回"general"
+        """
+        if tool_name in self.tool_map:
+            tool = self.tool_map[tool_name]
+            # 从tool的额外字段中获取category
+            if hasattr(tool, "category") and tool.category:
+                return tool.category
+            # 或者从model_extra中获取
+            if (
+                hasattr(tool, "model_extra")
+                and tool.model_extra
+                and "category" in tool.model_extra
+            ):
+                return tool.model_extra["category"]
+
+        return "general"
+
+    def _calculate_domain_stickiness(
+        self, current_category: str, candidate_tool: str
+    ) -> float:
+        """
+        计算领域粘性分数
+
+        参数:
+            current_category: 当前工具的category
+            candidate_tool: 候选工具名
+
+        返回:
+            粘性分数 (0-1)，越高表示越相关
+        """
+        candidate_category = self._get_tool_category(candidate_tool)
+
+        if current_category == candidate_category:
+            # 同领域，最高分数
+            return 1.0
+        elif self._are_related_categories(current_category, candidate_category):
+            # 相关领域，中等分数
+            return 0.7
+        else:
+            # 无关领域，低分数
+            return 0.3
+
+    def _are_related_categories(self, cat1: str, cat2: str) -> bool:
+        """
+        判断两个category是否相关
+
+        参数:
+            cat1: 类别1
+            cat2: 类别2
+
+        返回:
+            是否相关
+        """
+        # 定义相关类别的映射
+        related_categories = {
+            "finance": ["business", "investment", "stock", "banking"],
+            "business": ["finance", "investment", "company"],
+            "investment": ["finance", "business", "stock"],
+            "stock": ["finance", "investment"],
+            "banking": ["finance", "payment"],
+            "travel": ["booking", "hotel", "flight", "transport"],
+            "booking": ["travel", "hotel", "flight", "restaurant"],
+            "hotel": ["travel", "booking"],
+            "flight": ["travel", "booking", "transport"],
+            "transport": ["travel", "flight"],
+            "food": ["restaurant", "cooking", "delivery"],
+            "restaurant": ["food", "booking"],
+            "cooking": ["food", "recipe"],
+            "delivery": ["food", "restaurant"],
+            "music": ["audio", "entertainment"],
+            "audio": ["music", "entertainment"],
+            "entertainment": ["music", "audio", "game"],
+            "game": ["entertainment", "gaming"],
+            "gaming": ["game", "entertainment"],
+            "health": ["medical", "fitness"],
+            "medical": ["health", "doctor"],
+            "fitness": ["health", "exercise"],
+            "education": ["learning", "study"],
+            "learning": ["education", "study"],
+            "study": ["education", "learning"],
+            "shopping": ["ecommerce", "retail"],
+            "ecommerce": ["shopping", "retail"],
+            "retail": ["shopping", "ecommerce"],
+        }
+
+        # 检查双向关系
+        return (cat1 in related_categories and cat2 in related_categories[cat1]) or (
+            cat2 in related_categories and cat1 in related_categories[cat2]
+        )
+
+    def get_graph_stats(self) -> Dict:
+        """
+        获取图的统计信息
+
+        返回:
+            统计信息字典
+        """
+        if self.graph is None:
+            return {"error": "图尚未构建"}
+
+        return {
+            "nodes": len(self.graph.nodes),
+            "edges": len(self.graph.edges),
+            "start_nodes": len([
+                n for n in self.graph.nodes if self.graph.in_degree(n) == 0
+            ]),
+            "end_nodes": len([
+                n for n in self.graph.nodes if self.graph.out_degree(n) == 0
+            ]),
+        }
+
+    def visualize_graph(self, output_path: str = "tool_graph.png"):
+        """
+        可视化工具图（需要matplotlib）
+
+        参数:
+            output_path: 输出图片路径
+        """
+        if self.graph is None:
+            logger.info("图尚未构建")
+            return
+
+        try:
+            plt.figure(figsize=(12, 8))
+
+            # 计算节点位置
+            pos = nx.spring_layout(self.graph, k=2, iterations=50)
+
+            # 绘制节点
+            nx.draw_networkx_nodes(
+                self.graph, pos, node_size=2000, node_color="lightblue", alpha=0.7
+            )
+
+            # 绘制边
+            nx.draw_networkx_edges(
+                self.graph, pos, arrows=True, arrowsize=20, alpha=0.6
+            )
+
+            # 绘制标签
+            nx.draw_networkx_labels(self.graph, pos, font_size=10, font_weight="bold")
+
+            plt.title("Tool Dependency Graph", fontsize=16)
+            plt.axis("off")
+            plt.tight_layout()
+            plt.savefig(output_path, dpi=300, bbox_inches="tight")
+            plt.close()
+
+            logger.info(f"✅ 图可视化已保存到: {output_path}")
+
+        except ImportError:
+            logger.error("❌ 需要安装matplotlib才能可视化图谱")
+        except Exception as e:
+            logger.error(f"❌ 可视化失败: {e}")
+
+
+# 注意：测试代码已移至 tests/test_graph.py
+
+
+==================== FILE: engine/__init__.py ====================
+"""
+Sloop 引擎包
+
+导出核心引擎组件。
+"""
+
+from sloop.engine.blueprint import BlueprintGenerator
+from sloop.engine.graph import ToolGraphBuilder
+from sloop.engine.pda import ConversationPDA, PDAStates
+
+__all__ = [
+    "ConversationPDA",
+    "PDAStates",
+    "ToolGraphBuilder",
+    "BlueprintGenerator",
+]
+
+
+==================== FILE: engine/pda.py ====================
+"""
+下推自动机 (PDA) 核心引擎
+
+实现对话生成的核心循环逻辑，使用 transitions 库管理状态流转，支持栈操作。
+"""
+
+import json
+import random
+from typing import List
+
+from transitions import Machine
+
+from sloop.agents import AssistantAgent, ServiceAgent, UserAgent
+from sloop.models import (
+    Blueprint,
+    ChatMessage,
+    ConversationContext,
+    ToolDefinition,
+)
+from sloop.utils.logger import logger
+
+# 设置日志
+
+
+# 状态常量定义
+class PDAStates:
+    """PDA 状态常量 - 细粒度状态管理"""
+
+    USER_GEN = "user_gen"
+    ASSISTANT_THINK = "assistant_think"
+    ASSISTANT_DECIDE = "assistant_decide"
+    TOOL_CALL_GEN = "tool_call_gen"
+    TOOL_EXEC = "tool_exec"
+    ASSISTANT_REPLY_GEN = "assistant_reply_gen"
+    EVALUATION = "evaluation"
+    FINISH = "finish"
+
+
+class ConversationPDA:
+    """
+    对话循环下推自动机
+
+    管理完整的对话生成流程，从初始化到结束。
+    使用 transitions.Machine 实现状态流转，支持栈操作。
+    """
+
+    def __init__(
+        self,
+        blueprint: Blueprint,
+        tools: List[ToolDefinition],
+        conversation_id: str = None,
+        max_turns: int = 20,
+    ):
+        """
+        初始化对话循环
+
+        参数:
+            blueprint: 任务蓝图
+            tools: 可用的工具定义列表
+            conversation_id: 对话ID，如果不提供则自动生成
+            max_turns: 最大对话轮数
+        """
+        self.blueprint = blueprint
+        self.tools = tools
+        self.conversation_id = conversation_id or f"conv_{random.randint(1000, 9999)}"
+
+        # 初始化智能体
+        self.user_agent = UserAgent()
+        self.assistant_agent = AssistantAgent(tools)
+        self.service_agent = ServiceAgent()
+
+        # 初始化对话上下文
+        self.context = ConversationContext(
+            conversation_id=self.conversation_id,
+            blueprint_id=getattr(blueprint, "id", None),
+            initial_state=blueprint.initial_state.copy(),
+            current_user_intent=blueprint.intent,
+            max_turns=max_turns,
+        )
+
+        # 初始化环境状态
+        self.context.env_state.update(blueprint.initial_state)
+
+        # 初始化用户轮数计数器
+        self.user_turn_count = 0
+
+        # 设置状态机
+        self._setup_state_machine()
+
+        # 手动触发初始状态的回调（transitions不会自动调用）
+        self.on_enter_user_gen()
+
+        logger.info(f"🎬 ConversationPDA initialized: {self.conversation_id}")
+
+    def _setup_state_machine(self):
+        """设置状态机"""
+        # 定义状态
+        states = [
+            PDAStates.USER_GEN,
+            PDAStates.ASSISTANT_THINK,
+            PDAStates.ASSISTANT_DECIDE,
+            PDAStates.TOOL_CALL_GEN,
+            PDAStates.TOOL_EXEC,
+            PDAStates.ASSISTANT_REPLY_GEN,
+            PDAStates.EVALUATION,
+            PDAStates.FINISH,
+        ]
+
+        # 定义状态机
+        self.machine = Machine(
+            model=self,
+            states=states,
+            initial=PDAStates.USER_GEN,
+            model_attribute="current_state",
+        )
+
+        # 定义状态转换
+        self.machine.add_transition(
+            "user_generated", PDAStates.USER_GEN, PDAStates.ASSISTANT_THINK
+        )
+        self.machine.add_transition(
+            "thought_generated", PDAStates.ASSISTANT_THINK, PDAStates.ASSISTANT_DECIDE
+        )
+        self.machine.add_transition(
+            "decide_tool_call", PDAStates.ASSISTANT_DECIDE, PDAStates.TOOL_CALL_GEN
+        )
+        self.machine.add_transition(
+            "decide_reply", PDAStates.ASSISTANT_DECIDE, PDAStates.ASSISTANT_REPLY_GEN
+        )
+        self.machine.add_transition(
+            "tool_calls_generated", PDAStates.TOOL_CALL_GEN, PDAStates.TOOL_EXEC
+        )
+        self.machine.add_transition(
+            "skip_tools_reply", PDAStates.TOOL_CALL_GEN, PDAStates.ASSISTANT_REPLY_GEN
+        )  # 没有工具调用时直接回复
+        self.machine.add_transition(
+            "tools_executed", PDAStates.TOOL_EXEC, PDAStates.ASSISTANT_THINK
+        )  # ReAct 闭环
+        self.machine.add_transition(
+            "reply_generated", PDAStates.ASSISTANT_REPLY_GEN, PDAStates.EVALUATION
+        )
+        self.machine.add_transition(
+            "continue_dialogue", PDAStates.EVALUATION, PDAStates.USER_GEN
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.EVALUATION, PDAStates.FINISH
+        )
+        # 允许从任何状态直接结束对话
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.USER_GEN, PDAStates.FINISH
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.ASSISTANT_THINK, PDAStates.FINISH
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.ASSISTANT_DECIDE, PDAStates.FINISH
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.TOOL_CALL_GEN, PDAStates.FINISH
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.TOOL_EXEC, PDAStates.FINISH
+        )
+        self.machine.add_transition(
+            "finish_dialogue", PDAStates.ASSISTANT_REPLY_GEN, PDAStates.FINISH
+        )
+
+        # 注意：transitions库会自动绑定名为 on_enter_{state_name} 的方法作为状态进入回调
+        # 无需手动绑定，以避免重复绑定导致的回调执行问题
+
+    def _generate_context_hint(self) -> str:
+        """生成栈上下文提示信息"""
+        stack_top = self.context.peek_context()
+        if not stack_top or stack_top["type"] == "ROOT":
+            return ""
+
+        if stack_top["type"] == "WAITING_FOR_TOOLS":
+            tool_names = stack_top["data"].get("tool_names", [])
+            intent = stack_top["data"].get("intent", "未知意图")
+            nested_level = stack_top["data"].get("nested_level", 0)
+            indent = "  " * nested_level
+            return f"{indent}系统提示：你正在等待工具结果来完成子任务。等待的工具：{', '.join(tool_names)}。任务意图：{intent}。请基于最新工具结果继续推理。"
+
+        return ""
+
+    def _extract_intent_from_thought(self, thought: str) -> str:
+        """从思考过程中提取意图摘要"""
+        if not thought:
+            return "未知意图"
+        # 简单提取前50个字符作为意图摘要
+        return thought[:50].strip() + "..." if len(thought) > 50 else thought.strip()
+
+    # ==================== 状态回调方法 ====================
+
+    def on_enter_user_gen(self):
+        """进入用户消息生成状态"""
+        logger.info("👤 [USER_GEN] 用户消息生成")
+        self.user_turn_count += 1
+        logger.info(f"👤 [USER_GEN] 用户轮次 {self.user_turn_count}")
+
+        # 清空上一轮的缓冲区
+        self.context.clear_buffers()
+
+        # 调用用户智能体生成消息
+        user_message_content = self.user_agent.generate_message(
+            self.blueprint, self.context.messages
+        )
+
+        # 检查是否任务完成，并处理停止标记
+        should_stop = self.user_agent.is_task_complete(user_message_content)
+        if should_stop:
+            # 剥离停止标记，保留干净的消息内容
+            user_message_content = user_message_content.replace(
+                "###STOP###", ""
+            ).strip()
+            logger.info("   ✅ 用户表示任务完成")
+
+        # 如果消息内容不为空，始终添加到对话历史
+        if user_message_content:
+            # 创建消息对象并添加到上下文
+            user_message = ChatMessage(role="user", content=user_message_content)
+            self.context.add_message(user_message)
+            logger.info(f"   💬 用户: {user_message.content}")
+
+        # 如果需要停止，则标记完成并结束对话
+        if should_stop:
+            self.context.is_completed = True
+            self.finish_dialogue()
+            return
+
+        # 触发到助手思考
+        self.user_generated()
+
+    def on_enter_assistant_think(self):
+        """进入助手思考状态 - 生成 CoT"""
+        logger.info("🤖 [ASSISTANT_THINK] 助手正在生成思考过程")
+        logger.info("🤖 [ASSISTANT_THINK] 助手正在生成思考过程 (CoT)...")
+        logger.info(
+            f"   📚 当前栈状态: {[frame['type'] for frame in self.context.stack]}"
+        )
+
+        # 生成栈上下文提示
+        context_hint = self._generate_context_hint()
+
+        # 调用助手智能体生成思考过程
+        thought_content = self.assistant_agent.generate_thought(
+            self.context.messages, context_hint
+        )
+
+        # 存储到上下文缓冲区
+        self.context.current_thought = thought_content
+        logger.info(f"   💭 思考过程: {thought_content[:100]}...")
+
+        # 触发到决策状态
+        self.thought_generated()
+
+    def on_enter_assistant_decide(self):
+        """进入助手决策状态 - 基于思考决定下一步"""
+        logger.info("🤖 [ASSISTANT_DECIDE] 助手正在决策")
+        logger.info("🤖 [ASSISTANT_DECIDE] 基于思考过程进行决策...")
+
+        # 检查栈顶是否为WAITING_FOR_TOOLS，如果是则根据决策进行POP操作
+        stack_top = self.context.peek_context()
+        was_waiting = stack_top and stack_top["type"] == "WAITING_FOR_TOOLS"
+
+        # 基于思考过程决定是否需要工具调用
+        needs_tools = self.assistant_agent.decide_tool_use(self.context.current_thought)
+
+        if needs_tools:
+            if was_waiting:
+                # 任务进展：POP旧的WAITING帧，为新的工具调用让路
+                popped = self.context.pop_context()
+                logger.info(f"   📚 POP 栈: {popped['type']} - 任务进展，继续调用工具")
+            logger.info("   🔧 决策: 需要调用工具")
+            self.decide_tool_call()
+        else:
+            if was_waiting:
+                # 子任务完成：POP WAITING帧
+                popped = self.context.pop_context()
+                logger.info(f"   📚 POP 栈: {popped['type']} - 子任务完成")
+            logger.info("   💬 决策: 直接回复")
+            self.decide_reply()
+
+    def on_enter_tool_call_gen(self):
+        """进入工具调用生成状态 - 生成具体的工具调用参数"""
+        logger.info("🔧 [TOOL_CALL_GEN] 生成工具调用参数")
+        logger.info("🔧 [TOOL_CALL_GEN] 基于思考过程生成工具调用参数...")
+
+        # 基于思考过程生成工具调用
+        tool_calls = self.assistant_agent.generate_tool_calls(
+            self.context.current_thought, self.tools
+        )
+
+        if tool_calls:
+            # PUSH 等待工具结果的上下文帧
+            tool_names = [tc.name for tc in tool_calls]
+            nested_level = self.context.get_stack_depth()
+            self.context.push_context(
+                "WAITING_FOR_TOOLS",
+                {
+                    "tool_names": tool_names,
+                    "intent": self._extract_intent_from_thought(
+                        self.context.current_thought
+                    ),
+                    "nested_level": nested_level,
+                },
+            )
+            logger.info(f"   📚 PUSH 栈: WAITING_FOR_TOOLS - 工具: {tool_names}")
+
+            # 为每个工具调用创建独立的 tool_call 消息（扁平化格式）
+            for tool_call in tool_calls:
+                tool_call_data = {
+                    "name": tool_call.name,
+                    "arguments": tool_call.arguments,
+                }
+                tool_call_message = ChatMessage(
+                    role="tool_call",
+                    content=json.dumps(tool_call_data, ensure_ascii=False),
+                )
+                self.context.add_message(tool_call_message)
+
+            # 同时存储到pending列表供后续执行
+            self.context.pending_tool_calls.extend(tool_calls)
+            logger.info(f"   📝 生成 {len(tool_calls)} 个工具调用消息")
+
+            # 触发工具执行
+            self.tool_calls_generated()
+        else:
+            logger.info("   📝 没有生成工具调用，直接进入回复生成")
+            # 如果没有工具调用，直接进入回复生成状态
+            self.skip_tools_reply()
+
+    def on_enter_tool_exec(self):
+        """进入工具执行状态"""
+        logger.info("🛠️ [TOOL_EXEC] 正在执行工具")
+        logger.info("🛠️ [TOOL_EXEC] 执行工具调用...")
+
+        # 处理所有pending的工具调用
+        while self.context.pending_tool_calls:
+            tool_call = self.context.pending_tool_calls.pop(0)
+
+            logger.info(f"   🔧 执行工具: {tool_call.name}")
+
+            # 调用服务智能体执行工具
+            execution_result = self.service_agent.execute_tool(
+                tool_call, self.context.env_state, self.blueprint
+            )
+
+            # 更新环境状态
+            if execution_result["state_updates"]:
+                self.service_agent.update_state(
+                    self.context.env_state, execution_result["state_updates"]
+                )
+                logger.info(f"   📊 状态更新: {execution_result['state_updates']}")
+
+            # 创建工具消息
+            tool_message = ChatMessage(
+                role="tool",
+                content=execution_result["response"],
+                tool_call_id=f"call_{random.randint(1000, 9999)}",
+            )
+            self.context.add_message(tool_message)
+
+            logger.info(f"   ✅ 工具执行结果: {execution_result['response']}")
+
+        # 返回到助手思考（ReAct闭环）
+        self.tools_executed()
+
+    def on_enter_assistant_reply_gen(self):
+        """进入助手回复生成状态 - 生成最终回复文本"""
+        logger.info("🤖 [ASSISTANT_REPLY_GEN] 生成最终回复")
+        logger.info("🤖 [ASSISTANT_REPLY_GEN] 基于思考过程生成最终回复...")
+
+        # 基于思考过程生成最终回复
+        reply_content = self.assistant_agent.generate_reply(
+            self.context.current_thought, self.context.messages
+        )
+
+        # 将思考过程和回复拼接为完整内容（用于训练数据格式）
+        full_content = (
+            f"<think>\n{self.context.current_thought}\n</think>\n\n{reply_content}"
+        )
+
+        # 创建助手消息（包含思考和回复）
+        assistant_message = ChatMessage(role="assistant", content=full_content)
+        self.context.add_message(assistant_message)
+
+        logger.info(f"   💬 助手回复: {full_content[:100]}...")
+
+        # 触发到评估状态
+        self.reply_generated()
+
+    def on_enter_evaluation(self):
+        """进入评估状态"""
+        logger.info("📊 [EVALUATION] 评估对话状态")
+        logger.info("📊 [EVALUATION] 评估对话状态...")
+
+        # 如果已经完成，不要重复处理
+        if self.context.is_completed:
+            logger.info("   ✅ 对话已完成，跳过评估")
+            return
+
+        self.context.increment_turn()
+
+        # 评估结束条件（移除随机结束逻辑，确保对话充分展开）
+        should_finish = (
+            self.context.turn_count >= self.context.max_turns
+            or self.context.env_state.validate_transition(self.blueprint.expected_state)
+        )
+
+        if should_finish:
+            logger.info("   🏁 满足结束条件，完成对话")
+            self.finish_dialogue()
+            return  # 立即返回，避免后续逻辑
+        else:
+            logger.info("   🔄 继续下一轮对话")
+            self.continue_dialogue()
+
+    def on_enter_finish(self):
+        """进入结束状态"""
+        logger.info("✅ [FINISH] 对话完成")
+        logger.info(f"✅ [FINISH] 对话 {self.conversation_id} 完成")
+        logger.info(f"   📈 总轮次: {self.context.turn_count}")
+        logger.info(f"   📝 消息数量: {len(self.context.messages)}")
+        logger.info(f"   🎯 最终状态: {self.context.env_state.state}")
+
+    def run(self):
+        """运行完整的对话循环（同步版本，立即执行所有状态转换）"""
+        logger.info("🚀 开始运行对话循环")
+        logger.info("🚀 开始运行对话循环...")
+
+        # 在占位符实现中，所有状态转换都是同步的
+        # 状态机已经在初始化时启动(on_enter_init会调用start_conversation)
+        # 这里只需要等待状态机完成所有转换
+
+        # 等待直到达到结束状态（最多等待100次，避免无限循环）
+        max_wait = 100
+        wait_count = 0
+        while self.current_state != PDAStates.FINISH and wait_count < max_wait:
+            wait_count += 1
+
+        if self.current_state == PDAStates.FINISH:
+            logger.info("🎉 对话循环运行完成")
+            logger.info("🎉 对话循环运行完成")
+        else:
+            logger.warning(
+                f"⚠️ 对话循环未在{max_wait}步内完成，当前状态: {self.current_state}"
+            )
+            logger.warning(
+                f"⚠️ 对话循环未在{max_wait}步内完成，当前状态: {self.current_state}"
+            )
+
+    # 注意：current_state 由 transitions 库自动设置，无需 property
+
+    def get_status(self) -> dict:
+        """获取当前状态信息"""
+        return {
+            "conversation_id": self.conversation_id,
+            "current_state": self.current_state,
+            "turn_count": self.context.turn_count,
+            "is_completed": self.context.is_completed,
+            "message_count": len(self.context.messages),
+        }
+
+
+# ==================== 自测代码 ====================
+
+if __name__ == "__main__":
+    # 配置日志
+
+    # 创建测试工具
+    test_tools = [
+        ToolDefinition(
+            name="get_weather",
+            description="Get weather information",
+            parameters={
+                "type": "object",
+                "properties": {"location": {"type": "string"}},
+                "required": ["location"],
+            },
+        ),
+        ToolDefinition(
+            name="get_location",
+            description="Get user location",
+            parameters={"type": "object", "properties": {}, "required": []},
+        ),
+    ]
+
+    # 创建测试蓝图
+    test_blueprint = Blueprint(
+        intent="查询天气",
+        required_tools=["get_weather", "get_location"],
+        ground_truth=["get_weather"],
+        initial_state={"weather_data": None},
+        expected_state={"weather_data": "sunny"},
+    )
+
+    # 创建对话循环
+    loop = ConversationPDA(test_blueprint, test_tools, "test_conv_001")
+
+    # 运行对话
+    logger.info("=" * 50)
+    logger.info("🎬 开始PDA测试")
+    logger.info("=" * 50)
+
+    loop.run()
+
+    logger.info("=" * 50)
+    logger.info("📊 最终状态:")
+    logger.info(loop.get_status())
+    logger.info("=" * 50)

@@ -336,6 +336,3 @@ class ToolGraphBuilder:
             logger.error("❌ 需要安装matplotlib才能可视化图谱")
         except Exception as e:
             logger.error(f"❌ 可视化失败: {e}")
-
-
-# 注意：测试代码已移至 tests/test_graph.py
