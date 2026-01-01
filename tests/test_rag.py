@@ -168,3 +168,56 @@ class TestToolRetrievalEngine:
         # 强制重建所有工具
         engine.build(mock_tools, force=True)
         assert len(engine.tool_names) == len(mock_tools)
+
+
+def run_integration_test():
+    """运行集成测试（原rag.py main方法逻辑）"""
+    test_logger.info("🔍 ToolRetrievalEngine 集成测试")
+    test_logger.info("=" * 50)
+
+    # 创建测试工具（使用temp目录）
+    import tempfile
+    with tempfile.TemporaryDirectory() as temp_dir:
+        engine = ToolRetrievalEngine(cache_dir=temp_dir)
+
+        mock_tools = [
+            ToolDefinition(
+                name="get_weather",
+                description="获取指定城市的天气信息",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string", "description": "城市名称"},
+                    },
+                    "required": ["city"],
+                },
+            ),
+            ToolDefinition(
+                name="search_restaurants",
+                description="搜索指定城市的餐厅",
+                parameters={
+                    "type": "object",
+                    "properties": {
+                        "city": {"type": "string", "description": "城市名称"},
+                    },
+                    "required": ["city"],
+                },
+            ),
+        ]
+
+        # 构建索引
+        test_logger.info("🏗️ 构建索引...")
+        engine.build(mock_tools, force=True)
+
+        # 测试搜索
+        test_logger.info("🔍 测试搜索...")
+        query_tool = mock_tools[0]  # get_weather
+        results = engine.search(query_tool, top_k=3)
+        test_logger.info(f"🎯 相似工具: {results}")
+
+        test_logger.info("✅ 集成测试完成！")
+
+
+if __name__ == "__main__":
+    # 运行集成测试
+    run_integration_test()
