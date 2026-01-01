@@ -9,7 +9,7 @@ import os
 from typing import Optional
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 # 加载.env文件
 load_dotenv()
@@ -30,6 +30,8 @@ def _get_logger():
 
 class Settings(BaseModel):
     """应用配置类"""
+
+    model_config = ConfigDict(env_file='.env', env_prefix='')
 
     # LLM配置
     llm_provider: str = Field(default="openai", env="LLM_PROVIDER")
