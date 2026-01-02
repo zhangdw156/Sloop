@@ -65,3 +65,24 @@ class ChatMessage(BaseModel):
 
     class Config:
         extra = "allow"  # 允许额外字段以支持扩展
+
+
+class UserPersona(BaseModel):
+    """用户画像定义"""
+
+    name: str = Field(..., description="画像名称")
+    description: str = Field(..., description="画像描述")
+    behavior_traits: List[str] = Field(..., description="行为特征列表")
+    communication_style: str = Field(..., description="沟通风格描述")
+    expertise_level: str = Field(
+        "intermediate",
+        description="专业程度：'novice', 'intermediate', 'expert'"
+    )
+    patience_level: str = Field(
+        "normal",
+        description="耐心程度：'impatient', 'normal', 'patient'"
+    )
+    complexity_threshold: int = Field(
+        2,
+        description="能处理的工具链复杂度阈值，超过此值会显得困惑"
+    )

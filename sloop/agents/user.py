@@ -7,6 +7,7 @@
 from typing import List
 
 from sloop.models import Blueprint, ChatMessage
+from sloop.models.persona import get_persona_manager
 from sloop.utils.llm import chat_completion
 from sloop.utils.logger import logger
 from sloop.utils.template import render_user_prompt
@@ -38,8 +39,12 @@ class UserAgent:
         """
         logger.info(f"Generating user message for intent: {blueprint.intent}")
 
+        # 记录persona信息
+        if blueprint.persona:
+            logger.info(f"Using persona: {blueprint.persona.name} ({blueprint.persona.description})")
+
         # 构造提示
-        prompt = render_user_prompt(blueprint.intent, conversation_history)
+        prompt = render_user_prompt(blueprint.intent, conversation_history, blueprint.persona)
 
         # 调用LLM生成消息
         response = chat_completion(

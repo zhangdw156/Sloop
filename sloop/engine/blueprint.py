@@ -10,6 +10,7 @@ from typing import List
 
 from sloop.engine.graph import ToolGraphBuilder
 from sloop.models import Blueprint, ToolDefinition
+from sloop.models.persona import get_persona_manager
 from sloop.utils.llm import chat_completion
 from sloop.utils.logger import logger
 from sloop.utils.template import render_planner_prompt
@@ -304,7 +305,17 @@ class BlueprintGenerator:
                     blueprint_data, tool_chain
                 )
 
-                # 8. 创建Blueprint对象
+                # 8. 根据工具链复杂度选择用户画像
+                persona_manager = get_persona_manager()
+                tool_complexity = persona_manager.estimate_tool_complexity(tool_chain, tool_definitions)
+                selected_persona = persona_manager.select_persona_by_complexity(
+                    chain_length, tool_complexity
+                )
+                validated_data["persona"] = selected_persona
+
+                logger.info(f"Selected persona: {selected_persona.name} (complexity: {tool_complexity}, chain_length: {chain_length})")
+
+                # 9. 创建Blueprint对象
                 blueprint = Blueprint(**validated_data)
 
                 logger.info(
