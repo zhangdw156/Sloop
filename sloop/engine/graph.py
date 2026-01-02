@@ -9,7 +9,9 @@ from typing import Dict, List, Optional
 
 import matplotlib.pyplot as plt
 import networkx as nx
+import numpy as np
 
+from sloop.config import get_settings
 from sloop.models import ToolDefinition
 from sloop.utils.logger import logger
 
@@ -32,6 +34,11 @@ class ToolGraphBuilder:
         self.tools = tools
         self.tool_map = {tool.name: tool for tool in tools}
         self.graph: Optional[nx.DiGraph] = None
+
+        # 初始化embedding相关属性
+        self.settings = get_settings()
+        self.category_embeddings: Dict[str, List[float]] = {}  # 缓存category embeddings
+        self.similarity_threshold = 0.7  # 相似度阈值，高于此值认为相关
 
     def build(self) -> nx.DiGraph:
         """
@@ -229,9 +236,80 @@ class ToolGraphBuilder:
             # 无关领域，低分数
             return 0.3
 
+    def _get_category_embedding(self, category: str) -> List[float]:
+        """
+        获取category的向量表示，使用缓存避免重复计算
+
+        参数:
+            category: 类别名称
+
+        返回:
+            category的embedding向量
+        """
+        if category in self.category_embeddings:
+            return self.category_embeddings[category]
+
+        # 如果不在缓存中，计算embedding
+        try:
+            import litellm
+
+            response = litellm.embedding(
+                model=f"{self.settings.embedding_provider}/{self.settings.embedding_model}",
+                input=category,
+                api_key=self.settings.embedding_api_key,
+                api_base=self.settings.embedding_base_url,
+                encoding_format="float",
+            )
+
+            if response and response.data:
+                item = response.data[0]
+                if hasattr(item, 'embedding'):
+                    embedding = item.embedding
+                elif isinstance(item, dict) and 'embedding' in item:
+                    embedding = item['embedding']
+                else:
+                    # 假设 item 就是向量列表
+                    embedding = item
+
+                self.category_embeddings[category] = embedding
+                return embedding
+
+        except Exception as e:
+            logger.warning(f"Failed to get embedding for category '{category}': {e}")
+
+        # 如果embedding失败，返回空向量
+        return []
+
+    def _calculate_similarity(self, vec1: List[float], vec2: List[float]) -> float:
+        """
+        计算两个向量的余弦相似度
+
+        参数:
+            vec1: 向量1
+            vec2: 向量2
+
+        返回:
+            相似度分数 (0-1)
+        """
+        if not vec1 or not vec2 or len(vec1) != len(vec2):
+            return 0.0
+
+        # 计算余弦相似度
+        vec1_np = np.array(vec1)
+        vec2_np = np.array(vec2)
+
+        dot_product = np.dot(vec1_np, vec2_np)
+        norm1 = np.linalg.norm(vec1_np)
+        norm2 = np.linalg.norm(vec2_np)
+
+        if norm1 == 0 or norm2 == 0:
+            return 0.0
+
+        return dot_product / (norm1 * norm2)
+
     def _are_related_categories(self, cat1: str, cat2: str) -> bool:
         """
-        判断两个category是否相关
+        判断两个category是否相关，使用动态embedding相似度计算
 
         参数:
             cat1: 类别1
@@ -240,42 +318,23 @@ class ToolGraphBuilder:
         返回:
             是否相关
         """
-        # 定义相关类别的映射
-        related_categories = {
-            "finance": ["business", "investment", "stock", "banking"],
-            "business": ["finance", "investment", "company"],
-            "investment": ["finance", "business", "stock"],
-            "stock": ["finance", "investment"],
-            "banking": ["finance", "payment"],
-            "travel": ["booking", "hotel", "flight", "transport"],
-            "booking": ["travel", "hotel", "flight", "restaurant"],
-            "hotel": ["travel", "booking"],
-            "flight": ["travel", "booking", "transport"],
-            "transport": ["travel", "flight"],
-            "food": ["restaurant", "cooking", "delivery"],
-            "restaurant": ["food", "booking"],
-            "cooking": ["food", "recipe"],
-            "delivery": ["food", "restaurant"],
-            "music": ["audio", "entertainment"],
-            "audio": ["music", "entertainment"],
-            "entertainment": ["music", "audio", "game"],
-            "game": ["entertainment", "gaming"],
-            "gaming": ["game", "entertainment"],
-            "health": ["medical", "fitness"],
-            "medical": ["health", "doctor"],
-            "fitness": ["health", "exercise"],
-            "education": ["learning", "study"],
-            "learning": ["education", "study"],
-            "study": ["education", "learning"],
-            "shopping": ["ecommerce", "retail"],
-            "ecommerce": ["shopping", "retail"],
-            "retail": ["shopping", "ecommerce"],
-        }
+        # 如果是相同category，直接返回True
+        if cat1 == cat2:
+            return True
 
-        # 检查双向关系
-        return (cat1 in related_categories and cat2 in related_categories[cat1]) or (
-            cat2 in related_categories and cat1 in related_categories[cat2]
-        )
+        # 如果任一category是"general"，返回False
+        if cat1 == "general" or cat2 == "general":
+            return False
+
+        # 获取embeddings
+        emb1 = self._get_category_embedding(cat1)
+        emb2 = self._get_category_embedding(cat2)
+
+        # 计算相似度
+        similarity = self._calculate_similarity(emb1, emb2)
+
+        # 如果相似度高于阈值，认为相关
+        return similarity >= self.similarity_threshold
 
     def get_start_nodes(self) -> List[str]:
         """
