@@ -5,8 +5,9 @@ Sloop CLI 入口
 """
 
 import json
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import typer
 from tqdm import tqdm
@@ -14,7 +15,7 @@ from tqdm import tqdm
 from sloop.engine import BlueprintGenerator
 from sloop.engine.pda import ConversationPDA
 from sloop.models import ChatMessage, ToolDefinition
-from sloop.utils.logger import logger
+from sloop.utils.logger import logger, setup_logging
 
 app = typer.Typer()
 
@@ -63,6 +64,56 @@ def convert_to_training_format(
     return {"tools": tools_str, "messages": converted_messages}
 
 
+def _generate_single_dialog(
+    i: int,
+    generator: BlueprintGenerator,
+    chain_length: int,
+    tools: List[ToolDefinition],
+    max_turns: int
+) -> Optional[dict]:
+    """
+    生成单个对话数据
+
+    参数:
+        i: 对话索引
+        generator: 蓝图生成器
+        chain_length: 工具链长度
+        tools: 所有工具定义
+        max_turns: 最大对话轮数
+
+    返回:
+        训练数据字典，如果失败则返回 None
+    """
+    try:
+        # 生成蓝图
+        blueprint = generator.generate(chain_length=chain_length)
+
+        # 根据blueprint.required_tools筛选active_tools
+        active_tools = [
+            tool for tool in tools if tool.name in blueprint.required_tools
+        ]
+
+        # 创建对话循环（只传入active_tools，防止Context溢出）
+        conversation_id = f"conv_{i + 1:04d}"
+        loop = ConversationPDA(
+            blueprint, active_tools, conversation_id, max_turns=max_turns
+        )
+
+        # 运行对话
+        loop.run()
+
+        # 转换为训练数据格式
+        training_data = convert_to_training_format(
+            active_tools, loop.context.messages
+        )
+
+        return training_data
+
+    except Exception as e:
+        logger.error(f"生成对话 {i + 1} 失败: {e}")
+        return None
+
+
 @app.command()
 def generate(
     input_file: str = typer.Option(
@@ -75,18 +126,23 @@ def generate(
     max_turns: int = typer.Option(20, "--max-turns", "-t", help="最大对话轮数"),
     chain_length: int = typer.Option(5, "--chain-length", "-l", help="工具链长度"),
     mode: str = typer.Option("graph", "--mode", "-m", help="生成模式 (graph 或 rag)"),
+    concurrency: int = typer.Option(1, "--concurrency", "-j", help="并发线程数"),
 ):
     """
     生成多轮工具调用对话数据
 
     从工具定义文件中读取工具，自动生成对话蓝图和完整的对话流程。
     """
+    # 设置日志配置
+    setup_logging()
+
     typer.echo(f"🚀 开始生成 {count} 个对话数据")
     typer.echo(f"   📥 输入文件: {input_file}")
     typer.echo(f"   📤 输出文件: {output_file}")
     typer.echo(f"   🔄 最大轮数: {max_turns}")
     typer.echo(f"   🔗 工具链长度: {chain_length}")
     typer.echo(f"   🎯 生成模式: {mode}")
+    typer.echo(f"   🚀 并发线程数: {concurrency}")
 
     # 1. 加载工具定义
     typer.echo("📋 加载工具定义...")
@@ -113,52 +169,48 @@ def generate(
     output_path = Path(output_file)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # 4. 生成对话数据
+    # 4. 生成对话数据（保量生成循环）
     typer.echo("🎬 开始生成对话...")
 
-    with tqdm(total=count, desc="生成进度") as pbar:
+    results = []
+    task_counter = 0  # 用于生成唯一任务ID
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        # 初始提交 count 个任务
+        futures = {}
         for i in range(count):
-            blueprint = None
-            try:
-                # 生成蓝图
-                blueprint = generator.generate(chain_length=chain_length)
+            future = executor.submit(_generate_single_dialog, task_counter, generator, chain_length, tools, max_turns)
+            futures[future] = task_counter
+            task_counter += 1
 
-                # 根据blueprint.required_tools筛选active_tools
-                active_tools = [
-                    tool for tool in tools if tool.name in blueprint.required_tools
-                ]
-                typer.echo(
-                    f"   🔧 使用 {len(active_tools)} 个活跃工具: {blueprint.required_tools}"
-                )
+        # 使用 tqdm 显示进度
+        with tqdm(total=count, desc="生成进度", dynamic_ncols=True) as pbar:
+            while len(results) < count:
+                # 等待任意一个任务完成
+                done, _ = wait(futures, return_when=FIRST_COMPLETED)
 
-                # 创建对话循环（只传入active_tools，防止Context溢出）
-                conversation_id = f"conv_{i + 1:04d}"
-                loop = ConversationPDA(
-                    blueprint, active_tools, conversation_id, max_turns=max_turns
-                )
+                for future in done:
+                    task_id = futures.pop(future)
+                    result = future.result()
 
-                # 运行对话
-                loop.run()
+                    if result is not None:
+                        # 成功生成，添加到结果
+                        results.append(result)
+                        pbar.update(1)
+                    else:
+                        # 生成失败，补充一个新任务
+                        logger.warning(f"对话 {task_id} 生成失败，补充新任务...")
+                        new_future = executor.submit(_generate_single_dialog, task_counter, generator, chain_length, tools, max_turns)
+                        futures[new_future] = task_counter
+                        task_counter += 1
 
-                # 转换为训练数据格式
-                training_data = convert_to_training_format(
-                    active_tools, loop.context.messages
-                )
+    # 5. 统一写入文件
+    typer.echo("📝 写入输出文件...")
+    with open(output_path, "w", encoding="utf-8") as f:  # 使用 'w' 模式覆盖文件
+        for training_data in results:
+            f.write(json.dumps(training_data, ensure_ascii=False) + "\n")
 
-                # 追加写入输出文件
-                with open(output_path, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(training_data, ensure_ascii=False) + "\n")
-
-                pbar.set_description(f"生成进度 (最近: {blueprint.intent[:20]}...)")
-
-            except Exception as e:
-                logger.error(f"生成对话 {i + 1} 失败: {e}")
-                typer.echo(f"⚠️ 跳过失败的对话 {i + 1}: {e}", err=True)
-                continue
-
-            pbar.update(1)
-
-    typer.echo(f"✅ 生成完成！输出文件: {output_file}")
+    typer.echo(f"✅ 生成完成！成功生成 {len(results)} 个对话数据，输出文件: {output_file}")
 
 
 if __name__ == "__main__":

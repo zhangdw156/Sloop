@@ -12,7 +12,8 @@ import litellm
 from sloop.config import get_settings
 from sloop.utils.logger import logger
 
-# 设置日志
+# 屏蔽 LiteLLM 的调试信息，避免干扰控制台进度条
+litellm.suppress_debug_info = True
 
 
 def completion(

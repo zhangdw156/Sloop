@@ -5,6 +5,7 @@
 """
 
 import json
+import threading
 from typing import List
 
 from sloop.engine.graph import ToolGraphBuilder
@@ -67,6 +68,9 @@ class BlueprintGenerator:
             self.rag_engine = None
             self.selector_agent = None
 
+        # 初始化线程锁
+        self.lock = threading.Lock()
+
         logger.info(f"BlueprintGenerator initialized with {len(tools)} tools (mode: {mode})")
 
     def _select_diverse_start_node(self) -> str:
@@ -78,26 +82,27 @@ class BlueprintGenerator:
         返回:
             选中的起始节点名称
         """
-        # 计算当前未使用的起始节点
-        available = [node for node in self.all_start_nodes if node not in self.used_start_nodes]
+        with self.lock:
+            # 计算当前未使用的起始节点
+            available = [node for node in self.all_start_nodes if node not in self.used_start_nodes]
 
-        # 重置机制：如果所有节点都已使用，重置状态
-        if not available:
-            logger.info(f"🔄 重置起始节点使用状态 (已遍历 {len(self.used_start_nodes)} 个节点)")
-            self.used_start_nodes.clear()
-            available = self.all_start_nodes.copy()
+            # 重置机制：如果所有节点都已使用，重置状态
+            if not available:
+                logger.info(f"🔄 重置起始节点使用状态 (已遍历 {len(self.used_start_nodes)} 个节点)")
+                self.used_start_nodes.clear()
+                available = self.all_start_nodes.copy()
 
-        # 随机选择一个未使用的节点
-        import random
-        selected_node = random.choice(available)
+            # 随机选择一个未使用的节点
+            import random
+            selected_node = random.choice(available)
 
-        # 记录使用状态
-        self.used_start_nodes.add(selected_node)
+            # 记录使用状态
+            self.used_start_nodes.add(selected_node)
 
-        logger.info(f"🎯 选择起始节点: {selected_node} (剩余未使用: {len(available) - 1})")
-        return selected_node
+            logger.info(f"🎯 选择起始节点: {selected_node} (剩余未使用: {len(available) - 1})")
+            return selected_node
 
-    def _sample_rag_tool_chain(self, chain_length: int) -> List[str]:
+    def _sample_rag_tool_chain(self, chain_length: int, rag_top_k: int = 5) -> List[str]:
         """
         使用 RAG 增强采样工具链
 
@@ -191,7 +196,7 @@ class BlueprintGenerator:
         logger.info(f"🎯 图谱采样完成，最终链条: {' -> '.join(tool_chain)}")
         return tool_chain
 
-    def generate(self, chain_length: int = 3, max_retries: int = 3) -> Blueprint:
+    def generate(self, chain_length: int = 3, max_retries: int = 3, rag_top_k: int = 5) -> Blueprint:
         """
         生成对话蓝图，包含合理性验证和重试机制
 
@@ -244,11 +249,31 @@ class BlueprintGenerator:
                 logger.info("Sending prompt to LLM for blueprint generation")
 
                 # 4. 调用LLM生成蓝图
-                llm_response = chat_completion(
-                    prompt=prompt,
-                    system_message="",
-                    json_mode=True,
-                )
+                try:
+                    llm_response = chat_completion(
+                        prompt=prompt,
+                        system_message="",
+                        json_mode=True,
+                    )
+                except Exception as llm_e:
+                    # 捕获 LiteLLM 特定异常，避免打印长 traceback 到控制台
+                    import litellm
+                    if isinstance(llm_e, litellm.ContextWindowExceededError):
+                        # 智能降级重试：减小 rag_top_k 重新尝试
+                        if rag_top_k > 1:
+                            new_rag_top_k = max(1, rag_top_k // 2)
+                            logger.warning(f"Attempt {attempt + 1}: Token limit exceeded, retrying with top_k={new_rag_top_k}")
+                            # 递归调用自身，使用更小的 rag_top_k
+                            return self.generate(chain_length, max_retries, new_rag_top_k)
+                        else:
+                            logger.warning(f"Attempt {attempt + 1}: Token limit exceeded and rag_top_k <= 1, skipping this task")
+                    elif isinstance(llm_e, litellm.BadRequestError):
+                        logger.warning(f"Attempt {attempt + 1}: Bad request to LLM API, skipping this task")
+                    else:
+                        logger.warning(f"Attempt {attempt + 1}: LLM call failed: {str(llm_e)}, retrying...")
+
+                    # 对于这些异常，不重试，直接跳过
+                    continue
 
                 if not llm_response or llm_response.startswith("调用错误"):
                     logger.warning(

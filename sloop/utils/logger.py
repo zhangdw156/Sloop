@@ -1,4 +1,5 @@
 import os
+import sys
 
 from loguru import logger
 from tqdm import tqdm
@@ -9,35 +10,39 @@ def tqdm_sink(msg):
     tqdm.write(str(msg), end="")
 
 
-# 确保 logs 目录存在
-log_dir = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs"
-)
-os.makedirs(log_dir, exist_ok=True)
+def setup_logging():
+    """
+    设置日志配置
 
-# 移除默认的 loguru handler
-logger.remove()
+    Console: 只显示 WARNING/ERROR 级别日志，避免干扰进度条
+    File: 记录所有 DEBUG/INFO 级别日志，包含线程信息
+    """
+    # 确保 logs 目录存在
+    log_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs"
+    )
+    os.makedirs(log_dir, exist_ok=True)
 
-# 添加控制台输出
-logger.add(
-    tqdm_sink,
-    level="INFO",
-    format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    colorize=True,
-)
+    # 移除默认的 loguru handler
+    logger.remove()
 
-# 添加文件输出，支持轮换和压缩
-logger.add(
-    os.path.join(log_dir, "file_{time:YYYY-MM-DD}.log"),
-    level="DEBUG",
-    rotation="1 day",  # 每天轮换
-    compression="zip",  # 压缩旧日志文件
-    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
-    enqueue=True,  # 异步写入
-    retention="7 days",  # 保留7天日志
-)
+    # 添加控制台输出（只显示 WARNING/ERROR）
+    logger.add(
+        tqdm_sink,
+        level="WARNING",
+        format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+        colorize=True,
+    )
 
-# 可以根据需要添加更多的配置，例如不同的日志级别、过滤器等
+    # 添加文件输出
+    logger.add(
+        os.path.join(log_dir, "sloop.log"),
+        level="DEBUG",
+        rotation="10 MB",  # 10MB 轮换
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {thread.name} | {level: <8} | {name}:{function}:{line} - {message}",
+        enqueue=True,  # 异步写入，多线程安全
+    )
 
-# 导出 logger 实例
-__all__ = ["logger"]
+
+# 导出 logger 实例和配置函数
+__all__ = ["logger", "setup_logging"]

@@ -203,7 +203,7 @@ class ToolRetrievalEngine:
         # 保存索引
         self._save_index()
 
-    def search(self, query_tool: ToolDefinition, top_k: int = 10) -> List[str]:
+    def search(self, query_tool: ToolDefinition, top_k: int = 5) -> List[str]:
         """
         搜索相似的工具
 
