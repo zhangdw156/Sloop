@@ -94,13 +94,14 @@ def get_user_template():
     return _load_template("user")
 
 
-def render_user_prompt(intent: str, conversation_history: list) -> str:
+def render_user_prompt(intent: str, conversation_history: list, persona=None) -> str:
     """
     渲染用户智能体提示
 
     参数:
         intent: 用户意图
         conversation_history: 对话历史消息列表
+        persona: 用户画像对象（可选）
 
     返回:
         渲染后的提示字符串
@@ -118,7 +119,23 @@ def render_user_prompt(intent: str, conversation_history: list) -> str:
             msg_dict = message
         history_dict.append(msg_dict)
 
-    return template.render(intent=intent, conversation_history=history_dict)
+    # 转换persona为字典格式
+    persona_dict = None
+    if persona:
+        persona_dict = {
+            "name": persona.name,
+            "description": persona.description,
+            "behavior_traits": persona.behavior_traits,
+            "communication_style": persona.communication_style,
+            "expertise_level": persona.expertise_level,
+            "patience_level": persona.patience_level,
+        }
+
+    return template.render(
+        intent=intent,
+        conversation_history=history_dict,
+        persona=persona_dict
+    )
 
 
 def get_service_template():
