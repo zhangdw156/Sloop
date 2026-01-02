@@ -10,6 +10,7 @@
   - **Assistant Agent**: 模拟被测模型，执行思考 (Think)、决策 (Decide) 和工具调用 (Tool Call)。
   - **Service Agent**: 模拟真实 API 服务，维护环境状态 (Environment State)，返回执行结果。
 - **智能蓝图生成 (Blueprint Generation)**: 结合工具图谱 (Tool Graph) 分析和 LLM 的想象力，自动生成合理的对话意图和任务蓝图。
+- **RAG 增强采样 (RAG Sampling)**: 利用向量检索和 LLM 裁判来生成逻辑更连贯的多轮对话，提升数据质量和多样性。
 - **工具图谱构建**: 使用 NetworkX 构建参数级的工具依赖图，确保生成的工具调用序列符合逻辑依赖。
 - **全异步/流式支持**: 核心组件设计支持异步操作（具体实现视 LLM 客户端而定）。
 
@@ -42,6 +43,8 @@ source .venv/bin/activate
 pip install .
 ```
 
+*(注：系统会自动处理 `faiss-cpu` 和 `numpy` 等向量检索相关依赖)*
+
 ## 🚀 快速开始
 
 ### 1. 配置环境变量
@@ -68,8 +71,11 @@ MODEL_NAME=gpt-4o-mini  # 或其他兼容 OpenAI 接口的模型
 # 查看帮助
 sloop --help
 
-# 运行主程序 (具体子命令请参考 help)
-sloop
+# 默认模式 (图谱随机游走)
+sloop generate --mode graph
+
+# 新模式 (RAG 增强采样)
+sloop generate --mode rag
 ```
 
 *(注：当前 CLI 入口位于 `sloop/cli/main.py`，具体命令参数请以实际帮助信息为准)*
