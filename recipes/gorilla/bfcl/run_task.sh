@@ -55,7 +55,7 @@ GEN_CMD=(
     --gpu-memory-utilization "$GPU_MEM_UTIL"
     --local-model-path "$LOCAL_MODEL_PATH"
     --num-threads "$THREADS"
-    --result-dir "$ARTIFACT_DIR/result"  # <--- 直接指定输出目录
+    --result-dir "$ARTIFACT_DIR/result"
 )
 
 if [ "$ENABLE_LORA" == "true" ]; then
@@ -64,6 +64,11 @@ if [ "$ENABLE_LORA" == "true" ]; then
     if [ -n "$MAX_LORA_RANK" ]; then GEN_CMD+=( --max-lora-rank "$MAX_LORA_RANK" ); fi
     if [ -n "$LORA_MODULES" ]; then GEN_CMD+=( --lora-modules $LORA_MODULES ); fi
 fi
+
+echo "----------------------------------------------------------------"
+echo "🛠️  Full Command to Execute:"
+echo "${GEN_CMD[*]}"
+echo "----------------------------------------------------------------"
 
 echo "Executing Generate Command..."
 "${GEN_CMD[@]}"
@@ -79,6 +84,6 @@ bfcl evaluate \
   --test-category "$TEST_CATEGORY" \
   --partial-eval \
   --result-dir "$ARTIFACT_DIR/result" \
-  --score-dir "$ARTIFACT_DIR/score"     # <--- 直接指定分数输出目录
+  --score-dir "$ARTIFACT_DIR/score"
 
 log "✅ Done! Results and Scores are located in: $ARTIFACT_DIR"
