@@ -11,7 +11,7 @@ export VENV_ACTIVATE="/dfs/data/uv-venv/gorilla/bin/activate"
 
 # 2. 项目与输出
 export PROJECT_ROOT="/dfs/data/work/gorilla/berkeley-function-call-leaderboard"
-export OUTPUT_DIR_NAME="lootool" 
+export OUTPUT_DIR_NAME="looptool" 
 # 拼接最终的产物路径，传递给 Layer 2 使用
 export ARTIFACT_DIR="/dfs/data/work/Sloop/gorilla_bfcl_results/$OUTPUT_DIR_NAME"
 
