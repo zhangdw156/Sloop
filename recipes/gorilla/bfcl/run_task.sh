@@ -15,7 +15,9 @@ fi
 # ================= 1. 环境加载 =================
 log "Loading environment..."
 
-if [ -f "$SETUP_SCRIPT" ]; then source "$SETUP_SCRIPT"; fi
+if [ -f "$SETUP_SCRIPT" ]; then 
+    source "$SETUP_SCRIPT"; 
+fi
 if [ -f "$VENV_ACTIVATE" ]; then 
     source "$VENV_ACTIVATE"
 else
