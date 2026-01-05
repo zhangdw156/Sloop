@@ -15,7 +15,6 @@ dependencies = [
     "tqdm>=4.67.1",
     "typer>=0.15.1",
     "uvicorn>=0.32.0",
-    "crewai>=0.70.0",
     "networkx>=3.0",
     "matplotlib>=3.5.0",
     "transitions>=0.9.0",
@@ -24,6 +23,7 @@ dependencies = [
     "loguru>=0.7.3",
     "faiss-cpu>=1.11.0",
     "numpy>=1.26.4",
+    "agentscope>=1.0.11",
 ]
 
 [tool.hatch.version]
@@ -96,4 +96,5 @@ dev = [
     "annotated-doc",
     "pre-commit>=4.5.1",
     "ruff>=0.14.10",
+    "python-dotenv>=1.2.1",
 ]
