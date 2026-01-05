@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 requires-python = ">=3.12"
 name = "sloop"
 dynamic = ["version"]
+readme = "README.md" # 建议加上 README
 dependencies = [
     "fastapi>=0.125.0",
     "openai>=1.55.0",
@@ -29,12 +30,6 @@ dependencies = [
 path = "sloop/__init__.py"
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0.0",
-    "pytest-asyncio",
-    "pytest-mock",
-    "annotated-doc",
-]
 
 [project.scripts]
 sloop = "sloop.cli.main:app"
@@ -45,13 +40,18 @@ extend-exclude = [
 ]
 
 [tool.ruff.lint]
-# PL 包含了 Pylint 的所有规则 (Convention, Error, Refactor, Warning)
-select = ["E", "W", "F", "I", "B", "C4", "ARG", "SIM", "PT", "PL"]
+select = ["E", "W", "F", "I", "B", "C4", "SIM", "PT", "PL"]
 ignore = [
     "E501",    # 行太长
-    "PLR2004", # 在比较操作中使用了“魔法值 Magic value used in comparison
-    "PLW0603", # 使用了 global 语句 uUsing the global statement
-    "PLC0415", # 允许在函数/类内部进行 import (Import should be at the top-level of a file)
+    "PLR2004", # 魔法值
+    "PLW0603", # global
+    "PLC0415", # 局部 import
+    "PLR0913", # 参数太多 (Too many arguments): AI 项目传参经常很多，这个规则很烦
+    "PLR0912", # 分支太多 (Too many branches): 复杂逻辑难免
+    "PLR0915", # 语句太多 (Too many statements): 一个函数写太长，有时候是必要的
+    "ARG001",  # 未使用的函数参数 (Unused function argument): 配合框架时经常误报
+    "ARG002",  # 未使用的实例方法参数
+    "SIM108",  # 建议使用三元运算符 (Use ternary operator): 有时候 if-else 更清晰
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -80,6 +80,9 @@ include = [
 markers = [
     "integration: marks tests as integration tests that require external resources",
 ]
+# 让 pytest 默认识别当前目录，避免 import 错误
+pythonpath = ["."] 
+testpaths = ["tests"]
 
 [dependency-groups]
 eval = [

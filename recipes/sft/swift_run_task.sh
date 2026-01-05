@@ -45,10 +45,26 @@ fi
 export NPROC_PER_NODE=$GPU_COUNT
 export MASTER_PORT=$(($RANDOM + 20000))
 
+# =========================================================
+# NEW: 动态构建参数 (Handle LoRA vs Full)
+# =========================================================
+LORA_ARGS=""
+if [ "$TRAIN_TYPE" == "lora" ]; then
+    # 只有在 lora 模式下才组装这些参数
+    # 注意：这里假设 TARGET_MODULES 内部没有空格，通常是 "all-linear" 或 "q_proj,v_proj"
+    LORA_ARGS="--lora_rank $LORA_RANK --lora_alpha $LORA_ALPHA --target_modules $TARGET_MODULES"
+    echo "⚙️  Mode: LoRA (Rank: $LORA_RANK, Alpha: $LORA_ALPHA)"
+else
+    # 全量微调模式为空
+    LORA_ARGS=""
+    echo "⚙️  Mode: Full Fine-Tuning"
+fi
+
 echo "🚀 Launching Swift Task..."
 
 # 4. 执行训练命令
-# 注意：--dataset 使用不带引号的 $DATA_FILE 以支持多数据集
+# 修改点：将 lora_rank 等参数替换为 $LORA_ARGS 变量
+# 注意：$LORA_ARGS 不要加引号，以便让 bash 正确拆分参数
 swift sft \
     --model "$BASE_MODEL" \
     --train_type "$TRAIN_TYPE" \
@@ -59,9 +75,7 @@ swift sft \
     --per_device_eval_batch_size "$BATCH_SIZE" \
     --gradient_accumulation_steps "$GRAD_ACCUM" \
     --learning_rate "$LR" \
-    --lora_rank "$LORA_RANK" \
-    --lora_alpha "$LORA_ALPHA" \
-    --target_modules "$TARGET_MODULES" \
+    $LORA_ARGS \
     --eval_steps "$EVAL_STEPS" \
     --save_steps "$SAVE_STEPS" \
     --save_total_limit "$SAVE_LIMIT" \

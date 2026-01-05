@@ -25,7 +25,7 @@ export MAX_LORA_RANK=128
 export LORA_MODULES="bfclv3=/dfs/data/work/Sloop/checkpoints/swift-qwen3-looptool-.v1.1766635255394-20251225_1201/v0-20251225-120127/checkpoint-86"
 
 # 5. 评测参数
-export TEST_CATEGORY="multi_turn"
+export TEST_CATEGORY="single_turn,multi_turn"
 export THREADS=32
 export GPU_MEM_UTIL=0.9
 

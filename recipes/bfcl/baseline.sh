@@ -26,7 +26,7 @@ export LOCAL_MODEL_PATH="/dfs/data/models/Qwen3-8B"
 # export LORA_MODULES=""
 
 # 5. 评测参数
-export TEST_CATEGORY="multi_turn"
+export TEST_CATEGORY="single_turn,multi_turn"
 export THREADS=32
 export GPU_MEM_UTIL=0.9
 
