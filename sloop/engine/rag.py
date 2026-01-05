@@ -5,7 +5,6 @@
 """
 
 import json
-import os
 from pathlib import Path
 from typing import List
 
@@ -57,7 +56,7 @@ class ToolRetrievalEngine:
                 self.index = faiss.read_index(str(self.index_path))
 
                 # 加载工具名称映射
-                with open(self.names_path, 'r', encoding='utf-8') as f:
+                with open(self.names_path, "r", encoding="utf-8") as f:
                     self.tool_names = json.load(f)
 
                 logger.info(f"Loaded index successfully: {len(self.tool_names)} tools")
@@ -77,10 +76,12 @@ class ToolRetrievalEngine:
                 faiss.write_index(self.index, str(self.index_path))
 
                 # 保存工具名称映射
-                with open(self.names_path, 'w', encoding='utf-8') as f:
+                with open(self.names_path, "w", encoding="utf-8") as f:
                     json.dump(self.tool_names, f, ensure_ascii=False, indent=2)
 
-                logger.info(f"Index saved successfully: {self.index_path}, {self.names_path}")
+                logger.info(
+                    f"Index saved successfully: {self.index_path}, {self.names_path}"
+                )
 
             except Exception as e:
                 logger.error(f"Failed to save index: {e}")
@@ -113,10 +114,10 @@ class ToolRetrievalEngine:
                         # 单条输入
                         if len(response.data) > 0:
                             item = response.data[0]
-                            if hasattr(item, 'embedding'):
+                            if hasattr(item, "embedding"):
                                 return item.embedding
-                            elif isinstance(item, dict) and 'embedding' in item:
-                                return item['embedding']
+                            elif isinstance(item, dict) and "embedding" in item:
+                                return item["embedding"]
                             else:
                                 # 假设 item 就是向量列表
                                 return item
@@ -124,17 +125,19 @@ class ToolRetrievalEngine:
                         # 批量输入
                         embeddings = []
                         for item in response.data:
-                            if hasattr(item, 'embedding'):
+                            if hasattr(item, "embedding"):
                                 embeddings.append(item.embedding)
-                            elif isinstance(item, dict) and 'embedding' in item:
-                                embeddings.append(item['embedding'])
+                            elif isinstance(item, dict) and "embedding" in item:
+                                embeddings.append(item["embedding"])
                             else:
                                 # 假设 item 就是向量列表
                                 embeddings.append(item)
                         return embeddings
 
             except Exception as e:
-                logger.warning(f"Embedding call failed (attempt {attempt + 1}/{max_retries}): {e}")
+                logger.warning(
+                    f"Embedding call failed (attempt {attempt + 1}/{max_retries}): {e}"
+                )
                 if attempt < max_retries - 1:
                     continue
 
@@ -150,11 +153,25 @@ class ToolRetrievalEngine:
             force: 是否强制重新构建
         """
         # 检查是否需要跳过构建
-        if not force and self.index is not None and self.tool_names and len(self.tool_names) == len(tools):
-            logger.info("Index already exists and tool count matches, skipping build (use force=True to rebuild)")
+        if (
+            not force
+            and self.index is not None
+            and self.tool_names
+            and len(self.tool_names) == len(tools)
+        ):
+            logger.info(
+                "Index already exists and tool count matches, skipping build (use force=True to rebuild)"
+            )
             return
-        elif not force and self.index is not None and self.tool_names and len(self.tool_names) != len(tools):
-            logger.warning(f"Tool count mismatch: index has {len(self.tool_names)} tools, input has {len(tools)} tools, rebuilding...")
+        elif (
+            not force
+            and self.index is not None
+            and self.tool_names
+            and len(self.tool_names) != len(tools)
+        ):
+            logger.warning(
+                f"Tool count mismatch: index has {len(self.tool_names)} tools, input has {len(tools)} tools, rebuilding..."
+            )
 
         logger.info(f"Starting to build index: {len(tools)} tools")
 
@@ -176,7 +193,7 @@ class ToolRetrievalEngine:
         all_embeddings = []
 
         for i in tqdm(range(0, len(texts), batch_size), desc="Generating embeddings"):
-            batch_texts = texts[i:i + batch_size]
+            batch_texts = texts[i : i + batch_size]
 
             # 批量调用 embedding API
             batch_embeddings = self._get_embedding(batch_texts)
@@ -227,7 +244,9 @@ class ToolRetrievalEngine:
         query_vector = np.array([query_embedding], dtype=np.float32)
 
         # 搜索相似向量
-        distances, indices = self.index.search(query_vector, min(top_k, len(self.tool_names)))
+        distances, indices = self.index.search(
+            query_vector, min(top_k, len(self.tool_names))
+        )
 
         # 返回工具名称
         results = []

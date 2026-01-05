@@ -366,7 +366,6 @@ def test_on_enter_finish():
 
     # 注意：on_enter_finish 不会改变current_state，因为transitions库管理状态
     # 这里我们只是测试方法能正常执行
-    initial_state = pda.current_state
     pda.on_enter_finish()
     # 状态应该保持不变，因为我们没有通过状态机转换
 

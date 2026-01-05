@@ -75,14 +75,11 @@ class UserPersona(BaseModel):
     behavior_traits: List[str] = Field(..., description="行为特征列表")
     communication_style: str = Field(..., description="沟通风格描述")
     expertise_level: str = Field(
-        "intermediate",
-        description="专业程度：'novice', 'intermediate', 'expert'"
+        "intermediate", description="专业程度：'novice', 'intermediate', 'expert'"
     )
     patience_level: str = Field(
-        "normal",
-        description="耐心程度：'impatient', 'normal', 'patient'"
+        "normal", description="耐心程度：'impatient', 'normal', 'patient'"
     )
     complexity_threshold: int = Field(
-        2,
-        description="能处理的工具链复杂度阈值，超过此值会显得困惑"
+        2, description="能处理的工具链复杂度阈值，超过此值会显得困惑"
     )

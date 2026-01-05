@@ -81,10 +81,14 @@ class Settings:
             pass
 
         # Embedding配置
-        self.embedding_provider = os.getenv("EMBEDDING_PROVIDER", self.embedding_provider)
+        self.embedding_provider = os.getenv(
+            "EMBEDDING_PROVIDER", self.embedding_provider
+        )
         self.embedding_model = os.getenv("EMBEDDING_MODEL", self.embedding_model)
         self.embedding_api_key = os.getenv("EMBEDDING_API_KEY", self.embedding_api_key)
-        self.embedding_base_url = os.getenv("EMBEDDING_API_BASE", self.embedding_base_url)
+        self.embedding_base_url = os.getenv(
+            "EMBEDDING_API_BASE", self.embedding_base_url
+        )
 
         # 如果embedding参数未设置，则复用llm参数
         if not self.embedding_provider:
@@ -126,7 +130,9 @@ class Settings:
             "timeout": self.timeout,
             "embedding_provider": self.embedding_provider,
             "embedding_model": self.embedding_model,
-            "embedding_api_key": f"{self.embedding_api_key[:4]}***" if self.embedding_api_key else "未设置",
+            "embedding_api_key": f"{self.embedding_api_key[:4]}***"
+            if self.embedding_api_key
+            else "未设置",
             "embedding_base_url": self.embedding_base_url or "默认",
         }
 

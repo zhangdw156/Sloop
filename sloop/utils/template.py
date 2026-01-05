@@ -132,9 +132,7 @@ def render_user_prompt(intent: str, conversation_history: list, persona=None) ->
         }
 
     return template.render(
-        intent=intent,
-        conversation_history=history_dict,
-        persona=persona_dict
+        intent=intent, conversation_history=history_dict, persona=persona_dict
     )
 
 

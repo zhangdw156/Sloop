@@ -55,7 +55,10 @@ class TestSelectorAgent:
                 parameters={
                     "type": "object",
                     "properties": {
-                        "database_name": {"type": "string", "description": "数据库名称"},
+                        "database_name": {
+                            "type": "string",
+                            "description": "数据库名称",
+                        },
                     },
                     "required": ["database_name"],
                 },
@@ -65,7 +68,7 @@ class TestSelectorAgent:
     def test_init(self, selector_agent):
         """测试初始化"""
         assert selector_agent is not None
-        assert hasattr(selector_agent, 'settings')
+        assert hasattr(selector_agent, "settings")
 
     def test_select_next_tool_empty_candidates(self, selector_agent):
         """测试空候选列表"""

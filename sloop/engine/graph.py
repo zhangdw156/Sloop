@@ -263,10 +263,10 @@ class ToolGraphBuilder:
 
             if response and response.data:
                 item = response.data[0]
-                if hasattr(item, 'embedding'):
+                if hasattr(item, "embedding"):
                     embedding = item.embedding
-                elif isinstance(item, dict) and 'embedding' in item:
-                    embedding = item['embedding']
+                elif isinstance(item, dict) and "embedding" in item:
+                    embedding = item["embedding"]
                 else:
                     # 假设 item 就是向量列表
                     embedding = item

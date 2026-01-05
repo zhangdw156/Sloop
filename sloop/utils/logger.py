@@ -1,5 +1,4 @@
 import os
-import sys
 
 from loguru import logger
 from tqdm import tqdm
@@ -19,7 +18,8 @@ def setup_logging():
     """
     # 确保 logs 目录存在
     log_dir = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "logs"
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "logs",
     )
     os.makedirs(log_dir, exist_ok=True)
 

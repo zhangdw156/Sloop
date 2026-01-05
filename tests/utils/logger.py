@@ -5,7 +5,6 @@
 """
 
 import logging
-import os
 from pathlib import Path
 
 
@@ -20,7 +19,7 @@ def get_test_logger(module_name: str) -> logging.Logger:
         配置好的日志器实例
     """
     # 移除 .py 后缀
-    if module_name.endswith('.py'):
+    if module_name.endswith(".py"):
         module_name = module_name[:-3]
 
     # 创建 logger
@@ -73,7 +72,7 @@ def get_current_test_logger() -> logging.Logger:
         # 向上查找测试文件
         while frame:
             filename = frame.f_code.co_filename
-            if 'test_' in filename and filename.endswith('.py'):
+            if "test_" in filename and filename.endswith(".py"):
                 # 提取文件名（不含路径）
                 module_name = Path(filename).stem
                 return get_test_logger(module_name)

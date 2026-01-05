@@ -81,7 +81,9 @@ def completion(
         # 合并用户提供的额外参数
         call_kwargs.update(kwargs)
 
-        logger.info(f"调用LLM: {settings.get_llm_model_id()}, 消息数量: {len(messages)}")
+        logger.info(
+            f"调用LLM: {settings.get_llm_model_id()}, 消息数量: {len(messages)}"
+        )
 
         # 调用模型
         response = litellm.completion(**call_kwargs)

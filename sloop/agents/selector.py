@@ -10,7 +10,6 @@ from typing import List, Optional
 from sloop.config import get_settings
 from sloop.models import ToolDefinition
 from sloop.utils.llm import chat_completion
-from sloop.utils.logger import logger
 from sloop.utils.template import render_selector_prompt
 
 
@@ -28,9 +27,7 @@ class SelectorAgent:
         self.settings = get_settings()
 
     def select_next_tool(
-        self,
-        current_chain: List[str],
-        candidates: List[ToolDefinition]
+        self, current_chain: List[str], candidates: List[ToolDefinition]
     ) -> Optional[str]:
         """
         选择下一个工具

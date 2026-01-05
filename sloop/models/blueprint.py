@@ -25,7 +25,9 @@ class Blueprint(BaseModel):
     )
     initial_state: Dict[str, Any] = Field(..., description="环境初始状态字典")
     expected_state: Dict[str, Any] = Field(..., description="结束时期望状态字典")
-    persona: Optional[UserPersona] = Field(None, description="用户画像，用于生成多样化的用户行为")
+    persona: Optional[UserPersona] = Field(
+        None, description="用户画像，用于生成多样化的用户行为"
+    )
 
     class Config:
         extra = "allow"  # 允许额外字段以支持扩展

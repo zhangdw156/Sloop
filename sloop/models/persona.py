@@ -36,12 +36,12 @@ class PersonaManager:
                     "表达不清，使用模糊的描述",
                     "容易被复杂的技术术语吓到",
                     "需要手把手指导",
-                    "经常问一些基础问题"
+                    "经常问一些基础问题",
                 ],
                 communication_style="啰嗦而犹豫，经常使用'嗯...'，'这个...'等语气词",
                 expertise_level="novice",
                 patience_level="patient",
-                complexity_threshold=1
+                complexity_threshold=1,
             ),
             UserPersona(
                 name="intermediate_user",
@@ -50,12 +50,12 @@ class PersonaManager:
                     "知道基本概念但经常记不清细节",
                     "会尝试自己解决问题但有时需要提示",
                     "关心效率，希望尽快完成任务",
-                    "偶尔会提供不完整的参数"
+                    "偶尔会提供不完整的参数",
                 ],
                 communication_style="直接而务实，使用日常口语",
                 expertise_level="intermediate",
                 patience_level="normal",
-                complexity_threshold=2
+                complexity_threshold=2,
             ),
             UserPersona(
                 name="expert_user",
@@ -64,12 +64,12 @@ class PersonaManager:
                     "提供准确的参数和要求",
                     "使用专业术语",
                     "关注细节和最佳实践",
-                    "可能提供额外的优化建议"
+                    "可能提供额外的优化建议",
                 ],
                 communication_style="简洁而精确，使用专业术语",
                 expertise_level="expert",
                 patience_level="impatient",
-                complexity_threshold=5
+                complexity_threshold=5,
             ),
             UserPersona(
                 name="impatient_user",
@@ -78,12 +78,12 @@ class PersonaManager:
                     "经常催促和表达不满",
                     "不愿意等待复杂的解释",
                     "优先选择最简单的解决方案",
-                    "如果遇到问题可能会放弃"
+                    "如果遇到问题可能会放弃",
                 ],
                 communication_style="简短而直接，带有命令语气",
                 expertise_level="intermediate",
                 patience_level="impatient",
-                complexity_threshold=3
+                complexity_threshold=3,
             ),
             UserPersona(
                 name="confused_user",
@@ -92,12 +92,12 @@ class PersonaManager:
                     "经常需要重复确认",
                     "忘记之前说过的话",
                     "容易被过多信息 overwhelm",
-                    "需要简单明了的指导"
+                    "需要简单明了的指导",
                 ],
                 communication_style="犹豫不决，经常重复自己的问题",
                 expertise_level="novice",
                 patience_level="patient",
-                complexity_threshold=1
+                complexity_threshold=1,
             ),
             UserPersona(
                 name="curious_user",
@@ -106,16 +106,18 @@ class PersonaManager:
                     "经常问为什么和怎么做",
                     "对技术细节感兴趣",
                     "可能会偏离主任务去探索相关功能",
-                    "学习能力强但容易分心"
+                    "学习能力强但容易分心",
                 ],
                 communication_style="充满疑问，喜欢追根究底",
                 expertise_level="intermediate",
                 patience_level="patient",
-                complexity_threshold=3
-            )
+                complexity_threshold=3,
+            ),
         ]
 
-    def select_persona_by_complexity(self, chain_length: int, tool_complexity: str = "medium") -> UserPersona:
+    def select_persona_by_complexity(
+        self, chain_length: int, tool_complexity: str = "medium"
+    ) -> UserPersona:
         """
         根据工具链复杂度选择合适的用户画像
 
@@ -148,6 +150,7 @@ class PersonaManager:
         if suitable_personas:
             # 如果有多个合适的选择，随机选择一个
             import random
+
             return random.choice(suitable_personas)
         else:
             # 如果没有合适的，默认选择intermediate用户

@@ -5,7 +5,7 @@ Sloop CLI 入口
 """
 
 import json
-from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 from typing import List, Optional
 
@@ -69,7 +69,7 @@ def _generate_single_dialog(
     generator: BlueprintGenerator,
     chain_length: int,
     tools: List[ToolDefinition],
-    max_turns: int
+    max_turns: int,
 ) -> Optional[dict]:
     """
     生成单个对话数据
@@ -89,9 +89,7 @@ def _generate_single_dialog(
         blueprint = generator.generate(chain_length=chain_length)
 
         # 根据blueprint.required_tools筛选active_tools
-        active_tools = [
-            tool for tool in tools if tool.name in blueprint.required_tools
-        ]
+        active_tools = [tool for tool in tools if tool.name in blueprint.required_tools]
 
         # 创建对话循环（只传入active_tools，防止Context溢出）
         conversation_id = f"conv_{i + 1:04d}"
@@ -103,9 +101,7 @@ def _generate_single_dialog(
         loop.run()
 
         # 转换为训练数据格式
-        training_data = convert_to_training_format(
-            active_tools, loop.context.messages
-        )
+        training_data = convert_to_training_format(active_tools, loop.context.messages)
 
         return training_data
 
@@ -178,8 +174,15 @@ def generate(
     with ThreadPoolExecutor(max_workers=concurrency) as executor:
         # 初始提交 count 个任务
         futures = {}
-        for i in range(count):
-            future = executor.submit(_generate_single_dialog, task_counter, generator, chain_length, tools, max_turns)
+        for _i in range(count):
+            future = executor.submit(
+                _generate_single_dialog,
+                task_counter,
+                generator,
+                chain_length,
+                tools,
+                max_turns,
+            )
             futures[future] = task_counter
             task_counter += 1
 
@@ -200,7 +203,14 @@ def generate(
                     else:
                         # 生成失败，补充一个新任务
                         logger.warning(f"对话 {task_id} 生成失败，补充新任务...")
-                        new_future = executor.submit(_generate_single_dialog, task_counter, generator, chain_length, tools, max_turns)
+                        new_future = executor.submit(
+                            _generate_single_dialog,
+                            task_counter,
+                            generator,
+                            chain_length,
+                            tools,
+                            max_turns,
+                        )
                         futures[new_future] = task_counter
                         task_counter += 1
 
@@ -210,7 +220,9 @@ def generate(
         for training_data in results:
             f.write(json.dumps(training_data, ensure_ascii=False) + "\n")
 
-    typer.echo(f"✅ 生成完成！成功生成 {len(results)} 个对话数据，输出文件: {output_file}")
+    typer.echo(
+        f"✅ 生成完成！成功生成 {len(results)} 个对话数据，输出文件: {output_file}"
+    )
 
 
 if __name__ == "__main__":

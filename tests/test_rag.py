@@ -1,12 +1,11 @@
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
-import numpy as np
 
 from sloop.engine.rag import ToolRetrievalEngine
 from sloop.models import ToolDefinition
+
 
 class TestToolRetrievalEngine:
     """ToolRetrievalEngine 测试类"""
@@ -24,12 +23,20 @@ class TestToolRetrievalEngine:
             ToolDefinition(
                 name="get_weather",
                 description="获取天气",
-                parameters={"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
+                parameters={
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
             ),
             ToolDefinition(
                 name="book_hotel",
                 description="预订酒店",
-                parameters={"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]},
+                parameters={
+                    "type": "object",
+                    "properties": {"city": {"type": "string"}},
+                    "required": ["city"],
+                },
             ),
         ]
 
@@ -50,7 +57,9 @@ class TestToolRetrievalEngine:
                 # 批量输入，返回向量列表
                 return [fake_vector] * len(text)
 
-        return mocker.patch.object(ToolRetrievalEngine, '_get_embedding', side_effect=mock_get_embedding)
+        return mocker.patch.object(
+            ToolRetrievalEngine, "_get_embedding", side_effect=mock_get_embedding
+        )
 
     def test_build_and_search(self, temp_cache_dir, mock_tools, mock_embedding):
         """测试构建和搜索 (使用 Mock)"""
@@ -61,14 +70,14 @@ class TestToolRetrievalEngine:
 
         assert engine.index is not None
         assert len(engine.tool_names) == 2
-        
+
         # 验证 Mock 被调用了 (说明逻辑走通了)
         assert mock_embedding.called
 
         # 测试搜索
         query_tool = mock_tools[0]
         results = engine.search(query_tool, top_k=1)
-        
+
         assert len(results) == 1
         assert results[0] in [t.name for t in mock_tools]
 

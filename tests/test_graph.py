@@ -234,16 +234,18 @@ def test_calculate_domain_stickiness():
     test_logger.info("✅ 领域粘性测试通过")
 
 
-@patch('litellm.embedding')
+@patch("litellm.embedding")
 def test_are_related_categories(mock_embedding):
     """测试类别相关性检查"""
     test_logger.info("🔗 测试类别相关性")
     builder = get_builder()
 
     # Mock embedding响应 - 返回模拟的向量
-    mock_embedding.return_value = type('MockResponse', (), {
-        'data': [type('MockItem', (), {'embedding': [0.1, 0.2, 0.3]})()]
-    })()
+    mock_embedding.return_value = type(
+        "MockResponse",
+        (),
+        {"data": [type("MockItem", (), {"embedding": [0.1, 0.2, 0.3]})()]},
+    )()
 
     # 相同类别
     assert builder._are_related_categories("finance", "finance")
@@ -258,15 +260,19 @@ def test_are_related_categories(mock_embedding):
     assert builder._are_related_categories("food", "restaurant")
 
     # Mock不同的向量来测试低相似度
-    mock_embedding.return_value = type('MockResponse', (), {
-        'data': [type('MockItem', (), {'embedding': [1.0, 0.0, 0.0]})()]
-    })()
+    mock_embedding.return_value = type(
+        "MockResponse",
+        (),
+        {"data": [type("MockItem", (), {"embedding": [1.0, 0.0, 0.0]})()]},
+    )()
     builder.category_embeddings.clear()  # 清空缓存
     builder._get_category_embedding("finance")  # 缓存第一个向量
 
-    mock_embedding.return_value = type('MockResponse', (), {
-        'data': [type('MockItem', (), {'embedding': [0.0, 1.0, 0.0]})()]
-    })()
+    mock_embedding.return_value = type(
+        "MockResponse",
+        (),
+        {"data": [type("MockItem", (), {"embedding": [0.0, 1.0, 0.0]})()]},
+    )()
     # 两个向量[1.0, 0.0, 0.0]和[0.0, 1.0, 0.0]的余弦相似度为0，应该低于阈值
     assert not builder._are_related_categories("finance", "music")
 

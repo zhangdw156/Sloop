@@ -41,7 +41,9 @@ class BlueprintGenerator:
 
         # 获取并打印图谱统计信息
         stats = self.graph_builder.get_graph_stats()
-        logger.info(f"📊 工具图谱构建完成:\n   - 节点数量: {stats['nodes']}\n   - 边数量: {stats['edges']}\n   - 起始节点 (入度为0): {stats['start_nodes']}\n   - 结束节点 (出度为0): {stats['end_nodes']}")
+        logger.info(
+            f"📊 工具图谱构建完成:\n   - 节点数量: {stats['nodes']}\n   - 边数量: {stats['edges']}\n   - 起始节点 (入度为0): {stats['start_nodes']}\n   - 结束节点 (出度为0): {stats['end_nodes']}"
+        )
 
         # 初始化全局不放回采样状态
         self.all_start_nodes = self.graph_builder.get_start_nodes()
@@ -54,8 +56,8 @@ class BlueprintGenerator:
 
         # 初始化 RAG 相关组件（如果启用）
         if self.mode == "rag":
-            from sloop.engine.rag import ToolRetrievalEngine
             from sloop.agents.selector import SelectorAgent
+            from sloop.engine.rag import ToolRetrievalEngine
 
             logger.info("🔍 初始化 RAG 引擎...")
             self.rag_engine = ToolRetrievalEngine()
@@ -72,7 +74,9 @@ class BlueprintGenerator:
         # 初始化线程锁
         self.lock = threading.Lock()
 
-        logger.info(f"BlueprintGenerator initialized with {len(tools)} tools (mode: {mode})")
+        logger.info(
+            f"BlueprintGenerator initialized with {len(tools)} tools (mode: {mode})"
+        )
 
     def _select_diverse_start_node(self) -> str:
         """
@@ -85,25 +89,36 @@ class BlueprintGenerator:
         """
         with self.lock:
             # 计算当前未使用的起始节点
-            available = [node for node in self.all_start_nodes if node not in self.used_start_nodes]
+            available = [
+                node
+                for node in self.all_start_nodes
+                if node not in self.used_start_nodes
+            ]
 
             # 重置机制：如果所有节点都已使用，重置状态
             if not available:
-                logger.info(f"🔄 重置起始节点使用状态 (已遍历 {len(self.used_start_nodes)} 个节点)")
+                logger.info(
+                    f"🔄 重置起始节点使用状态 (已遍历 {len(self.used_start_nodes)} 个节点)"
+                )
                 self.used_start_nodes.clear()
                 available = self.all_start_nodes.copy()
 
             # 随机选择一个未使用的节点
             import random
+
             selected_node = random.choice(available)
 
             # 记录使用状态
             self.used_start_nodes.add(selected_node)
 
-            logger.info(f"🎯 选择起始节点: {selected_node} (剩余未使用: {len(available) - 1})")
+            logger.info(
+                f"🎯 选择起始节点: {selected_node} (剩余未使用: {len(available) - 1})"
+            )
             return selected_node
 
-    def _sample_rag_tool_chain(self, chain_length: int, rag_top_k: int = 5) -> List[str]:
+    def _sample_rag_tool_chain(
+        self, chain_length: int, rag_top_k: int = 5
+    ) -> List[str]:
         """
         使用 RAG 增强采样工具链
 
@@ -126,18 +141,26 @@ class BlueprintGenerator:
 
             # 获取 Graph 邻居（显式候选）
             graph_neighbors = self.graph_builder.get_neighbors(current_tool_name)
-            graph_candidates = [self.tool_map[name] for name in graph_neighbors if name in self.tool_map]
+            graph_candidates = [
+                self.tool_map[name] for name in graph_neighbors if name in self.tool_map
+            ]
 
             # 获取 RAG 相似工具（隐式候选）
             rag_candidates = []
             if self.rag_engine:
                 rag_names = self.rag_engine.search(current_tool, top_k=5)
-                rag_candidates = [self.tool_map[name] for name in rag_names if name in self.tool_map and name not in graph_neighbors]
+                rag_candidates = [
+                    self.tool_map[name]
+                    for name in rag_names
+                    if name in self.tool_map and name not in graph_neighbors
+                ]
 
             # 合并候选，去重
             all_candidates = graph_candidates + rag_candidates
             # 排除已在链条中的工具
-            available_candidates = [tool for tool in all_candidates if tool.name not in tool_chain]
+            available_candidates = [
+                tool for tool in all_candidates if tool.name not in tool_chain
+            ]
 
             if not available_candidates:
                 logger.info("⚠️ 没有更多可用候选，提前结束")
@@ -146,7 +169,9 @@ class BlueprintGenerator:
             logger.info(f"📋 候选工具: {[t.name for t in available_candidates]}")
 
             # 调用 Selector 做决策
-            selected_name = self.selector_agent.select_next_tool(tool_chain, available_candidates)
+            selected_name = self.selector_agent.select_next_tool(
+                tool_chain, available_candidates
+            )
 
             if selected_name is None:
                 logger.info("🏁 Selector 决定结束任务")
@@ -188,7 +213,7 @@ class BlueprintGenerator:
             # 获取图谱采样的后续链（从起始工具开始）
             extended_chain = self.graph_builder.sample_tool_chain(
                 min_length=chain_length,  # 让图谱采样器自己处理起始节点
-                max_length=chain_length
+                max_length=chain_length,
             )
             if extended_chain:
                 # 替换我们的起始节点，使用图谱采样器的完整链
@@ -197,7 +222,9 @@ class BlueprintGenerator:
         logger.info(f"🎯 图谱采样完成，最终链条: {' -> '.join(tool_chain)}")
         return tool_chain
 
-    def generate(self, chain_length: int = 3, max_retries: int = 3, rag_top_k: int = 5) -> Blueprint:
+    def generate(
+        self, chain_length: int = 3, max_retries: int = 3, rag_top_k: int = 5
+    ) -> Blueprint:
         """
         生成对话蓝图，包含合理性验证和重试机制
 
@@ -259,19 +286,30 @@ class BlueprintGenerator:
                 except Exception as llm_e:
                     # 捕获 LiteLLM 特定异常，避免打印长 traceback 到控制台
                     import litellm
+
                     if isinstance(llm_e, litellm.ContextWindowExceededError):
                         # 智能降级重试：减小 rag_top_k 重新尝试
                         if rag_top_k > 1:
                             new_rag_top_k = max(1, rag_top_k // 2)
-                            logger.warning(f"Attempt {attempt + 1}: Token limit exceeded, retrying with top_k={new_rag_top_k}")
+                            logger.warning(
+                                f"Attempt {attempt + 1}: Token limit exceeded, retrying with top_k={new_rag_top_k}"
+                            )
                             # 递归调用自身，使用更小的 rag_top_k
-                            return self.generate(chain_length, max_retries, new_rag_top_k)
+                            return self.generate(
+                                chain_length, max_retries, new_rag_top_k
+                            )
                         else:
-                            logger.warning(f"Attempt {attempt + 1}: Token limit exceeded and rag_top_k <= 1, skipping this task")
+                            logger.warning(
+                                f"Attempt {attempt + 1}: Token limit exceeded and rag_top_k <= 1, skipping this task"
+                            )
                     elif isinstance(llm_e, litellm.BadRequestError):
-                        logger.warning(f"Attempt {attempt + 1}: Bad request to LLM API, skipping this task")
+                        logger.warning(
+                            f"Attempt {attempt + 1}: Bad request to LLM API, skipping this task"
+                        )
                     else:
-                        logger.warning(f"Attempt {attempt + 1}: LLM call failed: {str(llm_e)}, retrying...")
+                        logger.warning(
+                            f"Attempt {attempt + 1}: LLM call failed: {str(llm_e)}, retrying..."
+                        )
 
                     # 对于这些异常，不重试，直接跳过
                     continue
@@ -307,13 +345,17 @@ class BlueprintGenerator:
 
                 # 8. 根据工具链复杂度选择用户画像
                 persona_manager = get_persona_manager()
-                tool_complexity = persona_manager.estimate_tool_complexity(tool_chain, tool_definitions)
+                tool_complexity = persona_manager.estimate_tool_complexity(
+                    tool_chain, tool_definitions
+                )
                 selected_persona = persona_manager.select_persona_by_complexity(
                     chain_length, tool_complexity
                 )
                 validated_data["persona"] = selected_persona
 
-                logger.info(f"Selected persona: {selected_persona.name} (complexity: {tool_complexity}, chain_length: {chain_length})")
+                logger.info(
+                    f"Selected persona: {selected_persona.name} (complexity: {tool_complexity}, chain_length: {chain_length})"
+                )
 
                 # 9. 创建Blueprint对象
                 blueprint = Blueprint(**validated_data)
