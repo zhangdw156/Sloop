@@ -17,12 +17,13 @@ export ARTIFACT_DIR="/dfs/data/work/Sloop/gorilla_bfcl_results/$OUTPUT_DIR_NAME"
 
 # 3. 模型配置
 export MODEL_NAME="Qwen/Qwen3-8B-FC"
-export LOCAL_MODEL_PATH="/dfs/data/models/Qwen3-8B"
+# export LOCAL_MODEL_PATH="/dfs/data/models/Qwen3-8B"
+export LOCAL_MODEL_PATH="/dfs/data/models/qwen3-8b-looptool"
 
 # 4. LoRA 配置
-export ENABLE_LORA="true"
-export MAX_LORA_RANK=128
-export LORA_MODULES="bfclv3=/dfs/data/work/Sloop/checkpoints/swift-qwen3-looptool-.v1.1766635255394-20251225_1201/v0-20251225-120127/checkpoint-86"
+# export ENABLE_LORA="true"
+# export MAX_LORA_RANK=128
+# export LORA_MODULES="bfclv3=/dfs/data/work/Sloop/checkpoints/swift-qwen3-looptool-.v1.1766635255394-20251225_1201/v0-20251225-120127/checkpoint-86"
 
 # 5. 评测参数
 export TEST_CATEGORY="single_turn,multi_turn"
