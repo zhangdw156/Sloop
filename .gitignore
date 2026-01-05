@@ -13,3 +13,4 @@ tmp/
 .cache/
 .DS_Store
 gorilla_bfcl_results/
+.ruff_cache/

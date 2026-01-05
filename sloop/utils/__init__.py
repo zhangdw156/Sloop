@@ -4,8 +4,6 @@
 导出各种实用工具函数。
 """
 
-from sloop.utils.llm import completion
+from sloop.utils.logger import logger, setup_logging
 
-__all__ = [
-    "completion",
-]
+__all__ = ["logger", "setup_logging"]
