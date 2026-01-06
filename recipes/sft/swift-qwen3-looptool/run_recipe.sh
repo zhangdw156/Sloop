@@ -45,6 +45,7 @@ fi
 : "${LORA_ALPHA:=32}"
 : "${TARGET_MODULES:=all-linear}"
 : "${LOSS_SCALE:=default+qwen}"
+: "${ZERO_STAGE:=2}"
 
 # --- C. 自动计算 Accum (为了保持代码整洁，计算逻辑也可以放这里) ---
 TARGET_GLOBAL_BATCH=64

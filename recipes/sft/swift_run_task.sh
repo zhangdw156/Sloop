@@ -10,6 +10,18 @@ mkdir -p "$OUTPUT_DIR"
 export SWANLAB_LOG_DIR="$OUTPUT_DIR/swanlab_logs"
 mkdir -p "$SWANLAB_LOG_DIR"
 
+# =========================================================
+# 处理 ZERO_STAGE 环境变量
+# =========================================================
+# 设置默认值为 2（zero2），如果用户没设置该环境变量则使用默认值
+ZERO_STAGE=${ZERO_STAGE:-2}
+# 校验输入合法性，只允许 2 或 3
+if [[ "$ZERO_STAGE" != "2" && "$ZERO_STAGE" != "3" ]]; then
+    echo "⚠️  无效的 ZERO_STAGE=$ZERO_STAGE，仅支持 2 或 3，将使用默认值 2（zero2）"
+    ZERO_STAGE=2
+fi
+echo "🔧 DeepSpeed Zero Stage: $ZERO_STAGE (zero$ZERO_STAGE)"
+
 # 2. 自动生成 DeepSpeed Config
 DS_CONFIG_PATH="$OUTPUT_DIR/ds_config.json"
 cat <<EOF > "$DS_CONFIG_PATH"
@@ -19,7 +31,7 @@ cat <<EOF > "$DS_CONFIG_PATH"
   "gradient_accumulation_steps": "auto",
   "gradient_clipping": "auto",
   "zero_optimization": {
-    "stage": 2,
+    "stage": $ZERO_STAGE,  # 替换为动态变量
     "offload_optimizer": {
       "device": "cpu",
       "pin_memory": true
@@ -46,7 +58,7 @@ export NPROC_PER_NODE=$GPU_COUNT
 export MASTER_PORT=$(($RANDOM + 20000))
 
 # =========================================================
-# NEW: 动态构建参数 (Handle LoRA vs Full)
+# 动态构建参数 (Handle LoRA vs Full)
 # =========================================================
 LORA_ARGS=""
 if [ "$TRAIN_TYPE" == "lora" ]; then
