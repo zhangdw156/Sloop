@@ -1,6 +1,7 @@
 import json
 import os
 
+
 def convert_to_openai_tool_format(input_file="source_tools.json", output_file="openai_tools.jsonl"):
     # 1. 检查输入文件
     if not os.path.exists(input_file):
@@ -24,7 +25,7 @@ def convert_to_openai_tool_format(input_file="source_tools.json", output_file="o
         with open(output_file, 'w', encoding='utf-8') as f_out:
             for item in data:
                 # --- 核心转换逻辑 ---
-                
+
                 # 1. 清洗 parameters (移除 OpenAI 不支持的字段，如 'optional')
                 raw_params = item.get("parameters", {})
                 clean_params = {
@@ -32,7 +33,7 @@ def convert_to_openai_tool_format(input_file="source_tools.json", output_file="o
                     "properties": raw_params.get("properties", {}),
                     "required": raw_params.get("required", [])
                 }
-                
+
                 # 2. 组装 Function 结构
                 function_body = {
                     "name": item.get("name"),
@@ -49,7 +50,7 @@ def convert_to_openai_tool_format(input_file="source_tools.json", output_file="o
 
                 # 4. 直接写入 JSON 对象 (不二次序列化，不加外层 wrapper)
                 f_out.write(json.dumps(openai_tool, ensure_ascii=False) + "\n")
-                
+
                 count += 1
 
         print(f"✅ 成功! 已生成: {output_file}")

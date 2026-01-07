@@ -8,3 +8,7 @@ bfcl generate \
     --test-category all \
     --skip-server-setup \
     --local-tokenizer-path /dfs/data/models/Qwen3-0.6B
+
+bfcl evaluate \
+    --model Qwen3-8B-LoopTool \
+    --test-category all

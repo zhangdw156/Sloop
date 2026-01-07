@@ -1,6 +1,8 @@
 # sloop/models/tool.py
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List
+
 from pydantic import BaseModel, Field
+
 
 class ToolParameters(BaseModel):
     """定义工具的参数结构 (JSON Schema)"""
