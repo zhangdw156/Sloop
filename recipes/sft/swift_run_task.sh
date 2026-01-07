@@ -31,7 +31,7 @@ cat <<EOF > "$DS_CONFIG_PATH"
   "gradient_accumulation_steps": "auto",
   "gradient_clipping": "auto",
   "zero_optimization": {
-    "stage": $ZERO_STAGE,  # 替换为动态变量
+    "stage": $ZERO_STAGE,
     "offload_optimizer": {
       "device": "cpu",
       "pin_memory": true
