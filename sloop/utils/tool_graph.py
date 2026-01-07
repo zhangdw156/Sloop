@@ -33,32 +33,46 @@ class ToolGraphBuilder:
                     continue
                 
                 try:
-                    # 1. 解析外层 JSON
+                    # 解析 JSON 行
                     data = json.loads(line)
                     
-                    # 2. 提取并解析 tools 字段 (它是字符串形式的 JSON)
-                    if "tools" in data and isinstance(data["tools"], str):
-                        tools_list = json.loads(data["tools"])
-                        
-                        for tool_dict in tools_list:
-                            # 适配 OpenAI 格式: {"type": "function", "function": {...}}
-                            if "function" in tool_dict:
-                                func_data = tool_dict["function"]
-                            else:
-                                func_data = tool_dict
+                    # 处理两种格式：
+                    # 1. 直接的工具定义 {"type": "function", "function": {...}}
+                    # 2. 包含字符串化 tools 列表的格式 {"tools": "[{...}]"}
 
-                            # 转换为 Pydantic 模型
-                            tool = ToolDefinition(
-                                name=func_data.get("name"),
-                                description=func_data.get("description", ""),
-                                parameters=ToolParameters(**func_data.get("parameters", {}))
-                            )
-                            
-                            # 去重：如果同名工具已存在，跳过
-                            if tool.name not in self.tools:
-                                self.tools[tool.name] = tool
+                    tools_list = []
+
+                    # 检查是否是包含字符串化 tools 列表的格式
+                    if "tools" in data and isinstance(data["tools"], str):
+                        try:
+                            tools_list = json.loads(data["tools"])
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"Failed to parse tools string: {e}")
+                            continue
+                    else:
+                        # 直接将单个工具作为列表处理
+                        tools_list = [data]
+
+                    # 处理每个工具定义
+                    for tool_dict in tools_list:
+                        # 适配 OpenAI 格式: {"type": "function", "function": {...}}
+                        if "function" in tool_dict:
+                            func_data = tool_dict["function"]
+                        else:
+                            func_data = tool_dict
+
+                        # 转换为 Pydantic 模型
+                        tool = ToolDefinition(
+                            name=func_data.get("name"),
+                            description=func_data.get("description", ""),
+                            parameters=ToolParameters(**func_data.get("parameters", {}))
+                        )
                         
-                        processed_lines += 1  # 仅统计有效处理的行数
+                        # 去重：如果同名工具已存在，跳过
+                        if tool.name and tool.name not in self.tools:
+                            self.tools[tool.name] = tool
+                    
+                    processed_lines += 1  # 统计处理的行数
                 except json.JSONDecodeError as e:
                     logger.warning(f"Skipping invalid JSON line: {e}")
                 except Exception as e:
