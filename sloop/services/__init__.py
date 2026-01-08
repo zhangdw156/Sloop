@@ -1,5 +1,5 @@
 # FILE: sloop/services/__init__.py
-from .embedding import EmbeddingService
-from .llm import LLMService
+from sloop.services.embedding import EmbeddingService
+from sloop.services.llm import LLMService
 
 __all__ = ["EmbeddingService", "LLMService"]
