@@ -2,11 +2,12 @@
 from typing import List, Union
 
 import numpy as np
-from openai import OpenAI, APIError
+from openai import OpenAI
+from sklearn.metrics.pairwise import cosine_similarity
 
 from sloop.configs import env_config
 from sloop.utils.logger import logger
-from sklearn.metrics.pairwise import cosine_similarity
+
 
 class EmbeddingService:
     def __init__(self):
@@ -34,12 +35,14 @@ class EmbeddingService:
             logger.error(f"Failed to initialize Embedding client: {e}")
             raise e
 
-    def get_embedding(self, text: Union[str, List[str]]) -> Union[List[float], List[List[float]]]:
+    def get_embedding(
+        self, text: Union[str, List[str]]
+    ) -> Union[List[float], List[List[float]]]:
         """获取文本向量，支持单条或批量"""
         # OpenAI SDK 的 embedding 输入如果是一维列表，返回也是列表对象
         # 需要处理单条和批量的情况
         if not self.client:
-             raise RuntimeError("Embedding client not initialized")
+            raise RuntimeError("Embedding client not initialized")
 
         # 确保输入不为空
         if not text:
@@ -47,11 +50,8 @@ class EmbeddingService:
 
         try:
             # 这里的 text 可以是 string 或 list of strings
-            response = self.client.embeddings.create(
-                input=text,
-                model=self.model_name
-            )
-            
+            response = self.client.embeddings.create(input=text, model=self.model_name)
+
             # 提取向量数据
             # response.data 是一个 Embedding 对象列表，按 index 排序
             # 为了保险，我们按 index 排序提取 embedding
@@ -61,7 +61,7 @@ class EmbeddingService:
             # 如果输入是单条字符串，返回单条向量
             if isinstance(text, str):
                 return embeddings[0]
-            
+
             return embeddings
 
         except Exception as e:
@@ -72,7 +72,9 @@ class EmbeddingService:
         """计算余弦相似度"""
         vec_a = np.array(vec_a)
         vec_b = np.array(vec_b)
-        if vec_a.ndim == 1: vec_a = vec_a.reshape(1, -1)
-        if vec_b.ndim == 1: vec_b = vec_b.reshape(1, -1)
+        if vec_a.ndim == 1:
+            vec_a = vec_a.reshape(1, -1)
+        if vec_b.ndim == 1:
+            vec_b = vec_b.reshape(1, -1)
 
         return cosine_similarity(vec_a, vec_b)[0][0]
