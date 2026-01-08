@@ -1,5 +1,4 @@
-from sloop.utils import setup_logging
-from sloop.utils.tool_graph import ToolGraphBuilder
+from sloop.utils import ToolGraphBuilder, setup_logging
 
 setup_logging()
 
