@@ -3,8 +3,7 @@ import os
 from collections import Counter
 from typing import Dict, List
 
-from sloop.utils import ToolGraphBuilder, logger, setup_logging
-from sloop.utils.graph_sampler import GraphSampler
+from sloop.utils import GraphBuilder, GraphSampler, logger, setup_logging
 
 
 def save_skeletons(skeletons: List[Dict], filename: str):
@@ -56,7 +55,7 @@ def main():
 
     # 2. 加载图谱
     checkpoint_path = "/dfs/data/work/Sloop/data/graph_checkpoint.pkl"
-    builder = ToolGraphBuilder()
+    builder = GraphBuilder()
     if not builder.load_checkpoint(checkpoint_path):
         logger.error("Failed to load graph checkpoint.")
         return

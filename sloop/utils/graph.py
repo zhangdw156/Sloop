@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from sloop.models import ToolDefinition, ToolParameters
 from sloop.services import EmbeddingService, LLMService
-from sloop.utils import logger
+from sloop.utils.logger import logger
 
 
 class GraphBuilder:
@@ -148,60 +148,88 @@ class GraphBuilder:
                         self.param_embeddings[t_name] = {}
                     self.param_embeddings[t_name][p_name] = vec
 
-    def _verify_batch_edges(self, candidates: List[Dict]) -> List[Dict]:
-        """使用 LLM 批量验证边"""
-        if not self.llm_service.client or not candidates:
-            return []
+    def _verify_edge_single(self, edge: Dict) -> bool:
+        """[新增] 验证单条边的逻辑 (线程安全)"""
+        if not self.llm_service.client:
+            return False
 
-        # 构造 Prompt
-        prompt_items = []
-        for idx, item in enumerate(candidates):
-            p_tool = self.tools[item["producer"]]
-            c_tool = self.tools[item["consumer"]]
-            c_param_desc = c_tool.parameters.properties.get(item["param"], {}).get(
-                "description", ""
-            )
-
-            prompt_items.append(
-                f"ID {idx}:\n"
-                f" - Producer Tool: {p_tool.name} (Desc: {p_tool.description})\n"
-                f" - Consumer Tool: {c_tool.name}\n"
-                f" - Consumer Parameter to Fill: '{item['param']}' (Desc: {c_param_desc})\n"
-            )
-
-        items_text = "\n".join(prompt_items)
-
-        system_prompt = """You are an expert in API integration.
-Your task is to verify if the output of the 'Producer Tool' can logically and semantically serve as the input for the 'Consumer Parameter'.
-Ignore weak or coincidental connections (e.g., both involving 'date' but for unrelated events).
-Focus on business logic flow (e.g., search product -> get details -> get reviews).
-
-Return a JSON object with a single key 'valid_ids' containing the list of integer IDs for valid connections.
-Example: {"valid_ids": [1, 3, 5]}"""
-
-        user_prompt = f"Verify the following connections:\n\n{items_text}"
-
-        content = self.llm_service.chat_completion(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.1,
-            response_format={"type": "json_object"},
+        p_tool = self.tools[edge["producer"]]
+        c_tool = self.tools[edge["consumer"]]
+        c_param_desc = c_tool.parameters.properties.get(edge["param"], {}).get(
+            "description", ""
         )
 
-        if content:
-            try:
-                clean_content = (
-                    content.replace("```json", "").replace("```", "").strip()
-                )
-                result = json.loads(clean_content)
-                valid_ids = set(result.get("valid_ids", []))
-                return [candidates[i] for i in valid_ids if i < len(candidates)]
-            except json.JSONDecodeError:
-                logger.error("Failed to parse LLM JSON response")
+        # 针对单条边的 Prompt
+        item_text = (
+            f"- Producer Tool: {p_tool.name} (Desc: {p_tool.description})\n"
+            f"- Consumer Tool: {c_tool.name}\n"
+            f"- Consumer Parameter to Fill: '{edge['param']}' (Desc: {c_param_desc})"
+        )
 
-        return []
+        from sloop.prompts.graph import VERIFY_SINGLE_EDGE_SYSTEM_PROMPT
+
+        try:
+            resp = self.llm_service.chat_completion(
+                messages=[
+                    {"role": "system", "content": VERIFY_SINGLE_EDGE_SYSTEM_PROMPT},
+                    {"role": "user", "content": item_text},
+                ],
+                temperature=0.0,  # 验证任务用 0 温度最稳
+                response_format={"type": "json_object"},
+            )
+
+            if resp:
+                import json
+
+                clean_resp = resp.replace("```json", "").replace("```", "").strip()
+                result = json.loads(clean_resp)
+                # 假设返回 {"valid": true/false}
+                return result.get("valid", False)
+        except Exception as e:
+            logger.warning(
+                f"Edge verification failed for {p_tool.name}->{c_tool.name}: {e}"
+            )
+
+        return False
+
+    def _verify_edges_concurrent(
+        self, candidates: List[Dict], max_workers=20
+    ) -> List[Dict]:
+        """使用多线程并发验证边"""
+        if not candidates:
+            return []
+
+        logger.info(
+            f"Verifying {len(candidates)} edges concurrently (Max Workers: {max_workers})..."
+        )
+        valid_edges = []
+
+        import concurrent.futures
+
+        # 使用 ThreadPoolExecutor 并发调用
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 提交所有任务
+            # future -> edge_info 映射
+            future_to_edge = {
+                executor.submit(self._verify_edge_single, edge): edge
+                for edge in candidates
+            }
+
+            # 使用 tqdm 显示进度
+            for future in tqdm(
+                concurrent.futures.as_completed(future_to_edge),
+                total=len(candidates),
+                desc="LLM Verify",
+            ):
+                edge = future_to_edge[future]
+                try:
+                    is_valid = future.result()
+                    if is_valid:
+                        valid_edges.append(edge)
+                except Exception as exc:
+                    logger.error(f"Verification thread generated an exception: {exc}")
+
+        return valid_edges
 
     def build(
         self,
@@ -223,6 +251,7 @@ Example: {"valid_ids": [1, 3, 5]}"""
             logger.warning("No tools loaded.")
             return self.graph
 
+        self._auto_categorize_concurrent(max_workers=50)
         self._precompute_embeddings()
 
         logger.info(
@@ -348,22 +377,12 @@ Example: {"valid_ids": [1, 3, 5]}"""
 
         # 6. 执行批量 LLM 验证
         if candidates_to_verify:
-            batch_size = 10  # 每批验证 10 条，避免 Context 过长
-            logger.info(
-                f"Verifying {len(candidates_to_verify)} ambiguous edges with LLM (Batch size: {batch_size})..."
+            valid_batch = self._verify_edges_concurrent(
+                candidates_to_verify, max_workers=50
             )
-
-            with tqdm(
-                total=len(candidates_to_verify), desc="LLM Verification", unit="edge"
-            ) as pbar:
-                for i in range(0, len(candidates_to_verify), batch_size):
-                    batch = candidates_to_verify[i : i + batch_size]
-                    valid_batch = self._verify_batch_edges(batch)
-
-                    edges_to_add.extend(valid_batch)
-                    stats["verified"] += len(valid_batch)
-                    stats["rejected"] += len(batch) - len(valid_batch)
-                    pbar.update(len(batch))
+            edges_to_add.extend(valid_batch)
+            stats["verified"] += len(valid_batch)
+            stats["rejected"] += len(candidates_to_verify) - len(valid_batch)
 
         # 7. 最终添加边到图谱
         logger.info(f"Adding {len(edges_to_add)} edges to graph...")
@@ -409,13 +428,13 @@ Example: {"valid_ids": [1, 3, 5]}"""
         plt.close()
         logger.info(f"Graph saved to {output_path}")
 
-    def export_graph_json(self, output_path: str = "data/tool_graph.json"):
+    def export_graph_json(self, output_path: str = "data/graph.json"):
         data = nx.node_link_data(self.graph)
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         logger.info(f"Graph exported to {output_path}")
 
-    def export_graphml(self, output_path: str = "data/tool_graph.graphml"):
+    def export_graphml(self, output_path: str = "data/graph.graphml"):
         G_export = self.graph.copy()
         for _node, data in G_export.nodes(data=True):
             for k, v in data.items():
@@ -553,3 +572,97 @@ Example: {"valid_ids": [1, 3, 5]}"""
         table.add_row("Top Parameters", top_params_str)
 
         console.print(table)
+
+    def _categorize_single_tool(self, tool: ToolDefinition, category_pool: set) -> str:
+        """[新增] 对单个工具进行分类 (线程安全)"""
+        if not self.llm_service.client:
+            return None
+
+        # 每次取当前的 pool 快照
+        existing_cats_str = ", ".join(sorted(category_pool))
+
+        tool_info = f"- Name: {tool.name}\n  Desc: {tool.description[:200]}"
+
+        from sloop.prompts.graph import AUTO_CATEGORIZE_SINGLE_SYSTEM_PROMPT
+
+        system_prompt = AUTO_CATEGORIZE_SINGLE_SYSTEM_PROMPT.format(
+            existing_cats_str=existing_cats_str
+        )
+
+        try:
+            resp = self.llm_service.chat_completion(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": tool_info},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.1,
+            )
+
+            if resp:
+                import json
+
+                clean_resp = resp.replace("```json", "").replace("```", "").strip()
+                data = json.loads(clean_resp)
+                cat = data.get("category")
+                if cat:
+                    return cat.strip().title()
+        except Exception as e:
+            logger.warning(f"Categorization failed for {tool.name}: {e}")
+
+        return None
+
+    def _auto_categorize_concurrent(self, max_workers=20):
+        """[修改] 多线程动态分类"""
+        if not self.llm_service or not self.llm_service.client:
+            return
+
+        tools_to_process = [t for t in self.tools.values() if t.category == "general"]
+        if not tools_to_process:
+            return
+
+        # 初始池
+        category_pool = {
+            "Sports",
+            "Finance",
+            "Weather",
+            "Utilities",
+            "Entertainment",
+            "Shopping",
+            "Education",
+        }
+
+        logger.info(f"Categorizing {len(tools_to_process)} tools concurrently...")
+
+        import concurrent.futures
+
+        # 注意：这里有个并发写 pool 的问题
+        # 虽然 set 不是线程安全的，但在 Python GIL 下简单的 add 操作通常没问题。
+        # 且即使有一两个 update 冲突了，对于分类池的影响微乎其微（顶多 LLM 没看到最新的那个 tag）。
+        # 为了稳妥，我们可以把 pool 的更新放在主线程。
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # 这里的 pool 是传值（快照），随着循环进行，后面的任务可能会拿到旧的 pool
+            # 但这对 "Reuse First" 影响不大，因为初始池已经够大了。
+            future_to_tool = {
+                executor.submit(self._categorize_single_tool, tool, category_pool): tool
+                for tool in tools_to_process
+            }
+
+            for future in tqdm(
+                concurrent.futures.as_completed(future_to_tool),
+                total=len(tools_to_process),
+                desc="Auto Categorizing",
+            ):
+                tool = future_to_tool[future]
+                try:
+                    cat = future.result()
+                    if cat:
+                        tool.category = cat
+                        category_pool.add(cat)  # 更新池子
+                except Exception as exc:
+                    logger.error(f"Categorization thread exception: {exc}")
+
+        logger.info(
+            f"Categorization complete. Final Pool ({len(category_pool)}): {list(category_pool)}"
+        )
