@@ -7,5 +7,6 @@
 from sloop.utils.graph import GraphBuilder
 from sloop.utils.graph_sampler import GraphSampler
 from sloop.utils.logger import logger, setup_logging
+from sloop.utils.intent_generator import IntentGenerator
 
-__all__ = ["logger", "setup_logging", "GraphBuilder", "GraphSampler"]
+__all__ = ["logger", "setup_logging", "GraphBuilder", "GraphSampler", "IntentGenerator"]

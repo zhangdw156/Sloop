@@ -6,6 +6,8 @@ from sloop.models.skeleton import (
     Dependency, 
     SkeletonMeta
 )
+from sloop.models.intent import UserIntent
+
 
 __all__ = [
     "ToolDefinition",
@@ -17,4 +19,5 @@ __all__ = [
     "SkeletonMeta",
     "ToolDefinition",
     "ToolParameters",
+    "UserIntent",
 ]
