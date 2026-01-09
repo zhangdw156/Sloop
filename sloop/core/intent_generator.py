@@ -1,3 +1,4 @@
+import hashlib
 import json
 from typing import Any, Dict, List
 
@@ -85,13 +86,15 @@ class IntentGenerator:
 
             # 使用骨架 ID 作为 Intent ID 的前缀，保证血缘
             # 但不传 id 参数，让 UserIntent 内部逻辑基于 Query 再次 Hash 去重
+            sig = skeleton.get_edges_signature()
+            skel_id = f"skel_{hashlib.md5(sig.encode()).hexdigest()}"
             intent = UserIntent(
                 query=intent_data.get("query"),
                 initial_state=intent_data.get("initial_state", {}),
                 final_state=intent_data.get("final_state", {}),
                 available_tools=all_tool_names,
                 meta={
-                    "skeleton_id": f"skel_{hash(skeleton.get_edges_signature())}",
+                    "skeleton_id": skel_id,
                     "scenario": intent_data.get("scenario_summary", ""),
                     "pattern": skeleton.pattern,
                     "generated_by": "sloop_v0.2",
