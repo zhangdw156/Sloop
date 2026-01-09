@@ -1,18 +1,18 @@
 import hashlib
 import random
 from collections import defaultdict
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple
 
 import networkx as nx
 import numpy as np
 from tqdm import tqdm
 
 from sloop.models import (
-    TaskSkeleton, 
-    SkeletonNode, 
-    SkeletonEdge, 
-    Dependency, 
-    SkeletonMeta
+    Dependency,
+    SkeletonEdge,
+    SkeletonMeta,
+    SkeletonNode,
+    TaskSkeleton,
 )
 from sloop.utils.logger import logger
 
@@ -123,74 +123,73 @@ class GraphSampler:
     # =========================================================================
 
     def _format_skeleton(
-        self, 
-        pattern: str, 
-        nodes: List[str], 
-        edges: List[Tuple],
-        meta_info: Dict = None
+        self, pattern: str, nodes: List[str], edges: List[Tuple], meta_info: Dict = None
     ) -> TaskSkeleton:
         """将路径格式化为 TaskSkeleton 对象"""
-        
+
         # 1. 构建 Nodes
         skel_nodes = []
         distractors = set(meta_info.get("distractor_nodes", [])) if meta_info else set()
-        
+
         for node in nodes:
             attrs = self.graph.nodes[node]
             role = "distractor" if node in distractors else "core"
-            
-            skel_nodes.append(SkeletonNode(
-                name=node,
-                description=attrs.get("desc", ""),
-                category=attrs.get("category", "general"),
-                role=role
-            ))
+
+            skel_nodes.append(
+                SkeletonNode(
+                    name=node,
+                    description=attrs.get("desc", ""),
+                    category=attrs.get("category", "general"),
+                    role=role,
+                )
+            )
 
         # 2. 构建 Edges
         skel_edges = []
         for i, (u, v, key) in enumerate(edges):
             edge_data = self.graph.get_edge_data(u, v)[key]
-            skel_edges.append(SkeletonEdge(
-                step=i + 1,
-                from_tool=u, # Pydantic 会自动映射到 alias "from"
-                to_tool=v,   # Pydantic 会自动映射到 alias "to"
-                dependency=Dependency(
-                    parameter=edge_data.get("parameter"),
-                    relation="provides_input_for"
+            skel_edges.append(
+                SkeletonEdge(
+                    step=i + 1,
+                    from_tool=u,  # Pydantic 会自动映射到 alias "from"
+                    to_tool=v,  # Pydantic 会自动映射到 alias "to"
+                    dependency=Dependency(
+                        parameter=edge_data.get("parameter"),
+                        relation="provides_input_for",
+                    ),
                 )
-            ))
-            
+            )
+
         # 3. 构建 Meta
         meta_obj = None
         if meta_info:
             meta_obj = SkeletonMeta(
                 core_chain_nodes=meta_info.get("core_chain_nodes", []),
-                distractor_nodes=meta_info.get("distractor_nodes", [])
+                distractor_nodes=meta_info.get("distractor_nodes", []),
             )
 
         # 4. 返回完整对象
         return TaskSkeleton(
-            pattern=pattern,
-            nodes=skel_nodes,
-            edges=skel_edges,
-            meta=meta_obj
+            pattern=pattern, nodes=skel_nodes, edges=skel_edges, meta=meta_obj
         )
 
     # =========================================================================
     # 公开采样接口 (Public Sampling API)
     # =========================================================================
 
-    def sample_sequential_chain(self, min_len: int = 3, max_len: int = 6) -> Tuple[TaskSkeleton, List, str]:
+    def sample_sequential_chain(
+        self, min_len: int = 3, max_len: int = 6
+    ) -> Tuple[TaskSkeleton, List, str]:
         """[模式 A] 线性链"""
         result = self._walk_sequential_chain(min_len, max_len)
         if not result:
             return None
 
         path_nodes, edges_taken, start_node = result
-        
+
         # 构造对象
         skeleton = self._format_skeleton("sequential", path_nodes, edges_taken)
-        
+
         return skeleton, edges_taken, start_node
 
     def sample_neighborhood_subgraph(
@@ -212,10 +211,10 @@ class GraphSampler:
         for tool_name in core_tools:
             candidates.update(self.graph.successors(tool_name))
             candidates.update(self.graph.predecessors(tool_name))
-        
+
         # 排除核心链本身
         hard_pool = list(candidates - core_tools)
-        
+
         if hard_pool:
             # 如果邻居比需要的少，就全拿走；否则随机选
             take_k = min(len(hard_pool), num_extras)
@@ -229,7 +228,7 @@ class GraphSampler:
             # 排除掉核心链和已经选中的干扰项
             exclude_set = core_tools.union(set(selected_distractors))
             random_pool = [n for n in all_nodes if n not in exclude_set]
-            
+
             if len(random_pool) >= needed:
                 selected_distractors.extend(random.sample(random_pool, needed))
             else:
@@ -245,13 +244,13 @@ class GraphSampler:
             "core_chain_nodes": path_nodes,
             "distractor_nodes": selected_distractors,
         }
-        
+
         # 注意：edges_taken 只包含核心链的边，干扰项是孤立的点（在当前子图中无连接）或者仅作为上下文存在
         skeleton = self._format_skeleton(
             pattern="neighborhood_subgraph",
             nodes=all_nodes,
             edges=edges_taken,
-            meta_info=meta_info
+            meta_info=meta_info,
         )
 
         return skeleton, edges_taken, start_node

@@ -1,19 +1,23 @@
-from typing import List, Optional, Literal
+from typing import List, Literal, Optional
+
 from pydantic import BaseModel, Field
+
 
 class Dependency(BaseModel):
     parameter: Optional[str] = None
     relation: str = "provides_input_for"
 
+
 class SkeletonEdge(BaseModel):
     step: int
     # 使用 alias 允许 Python 属性为 from_tool，序列化 JSON 时为 "from"
-    from_tool: str = Field(..., alias="from") 
+    from_tool: str = Field(..., alias="from")
     to_tool: str = Field(..., alias="to")
     dependency: Dependency
-    
+
     class Config:
         populate_by_name = True  # 允许通过字段名(from_tool)实例化
+
 
 class SkeletonNode(BaseModel):
     name: str
@@ -21,15 +25,18 @@ class SkeletonNode(BaseModel):
     category: str = "general"
     role: Literal["core", "distractor"] = "core"
 
+
 class SkeletonMeta(BaseModel):
     core_chain_nodes: List[str]
     distractor_nodes: List[str] = Field(default_factory=list)
+
 
 class TaskSkeleton(BaseModel):
     """
     任务骨架实体类
     代表一个抽象的任务逻辑，不包含具体的用户意图(Intent)。
     """
+
     pattern: Literal["sequential", "neighborhood_subgraph", "chain"]
     nodes: List[SkeletonNode]
     edges: List[SkeletonEdge]

@@ -3,17 +3,20 @@ import os
 from collections import Counter
 from typing import List
 
+from sloop.core import GraphBuilder, GraphSampler
 from sloop.models import TaskSkeleton
-from sloop.utils import GraphBuilder, GraphSampler, logger, setup_logging
+from sloop.utils import logger, setup_logging
 
 
 def save_skeletons(skeletons: List[TaskSkeleton], filename: str):
     """辅助函数：保存生成的 TaskSkeleton 到文件"""
     os.makedirs("data/samples", exist_ok=True)
     path = f"data/samples/{filename}"
-    
-    data_to_save = [skel.model_dump(by_alias=True, exclude_none=True) for skel in skeletons]
-    
+
+    data_to_save = [
+        skel.model_dump(by_alias=True, exclude_none=True) for skel in skeletons
+    ]
+
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data_to_save, f, indent=2, ensure_ascii=False)
     logger.info(f"Saved {len(skeletons)} skeletons to {path}")
@@ -53,7 +56,9 @@ def main():
     setup_logging()
 
     # 2. 加载图谱
-    checkpoint_path = "data/graph_checkpoint.pkl" # 建议使用相对路径，或者根据你的环境修改
+    checkpoint_path = (
+        "data/graph_checkpoint.pkl"  # 建议使用相对路径，或者根据你的环境修改
+    )
     builder = GraphBuilder()
     if not builder.load_checkpoint(checkpoint_path):
         logger.error("Failed to load graph checkpoint.")

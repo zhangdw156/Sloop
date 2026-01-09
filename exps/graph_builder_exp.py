@@ -1,4 +1,5 @@
-from sloop.utils import GraphBuilder, setup_logging
+from sloop.core import GraphBuilder
+from sloop.utils import setup_logging
 
 setup_logging()
 
