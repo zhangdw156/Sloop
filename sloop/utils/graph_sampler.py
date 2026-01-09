@@ -1,7 +1,7 @@
 import hashlib
 import random
 from collections import defaultdict
-from typing import Dict, List, Tuple, Set
+from typing import Dict, List, Tuple
 
 import networkx as nx
 import numpy as np
@@ -54,7 +54,7 @@ class GraphSampler:
         candidates = [n for n in self.graph.nodes() if self.graph.out_degree(n) > 0]
         if not candidates:
             return None
-        
+
         # 排序策略：启动次数越少越靠前 + 随机扰动 (Exploration)
         # 避免每次都选同一个“最冷门”的节点，增加随机性
         candidates.sort(key=lambda n: self.node_starts[n] + random.random())
@@ -77,13 +77,13 @@ class GraphSampler:
             edge_data = self.graph.get_edge_data(current_node, succ)
             for key, attr in edge_data.items():
                 original_score = attr.get("weight", 0.5)
-                
+
                 # --- 核心衰减公式 ---
                 # 1 / (1 + 访问次数)
                 # 访问次数越多，权重越低，强迫采样器去探索未走过的路
                 visit_count = self.edge_visits[(current_node, succ, key)]
                 decay_factor = 1.0 / (1.0 + visit_count)
-                
+
                 final_weight = original_score * decay_factor
 
                 candidates.append((succ, key, attr))
@@ -114,7 +114,7 @@ class GraphSampler:
 
         # 随机决定目标长度，保证长短数据分布均匀
         target_len = random.randint(min_len, max_len)
-        
+
         path_nodes = [start_node]
         edges_taken = []
         visited = {start_node}
@@ -123,7 +123,7 @@ class GraphSampler:
         for _ in range(target_len - 1):
             hop = self._get_next_hop(curr)
             if not hop:
-                break # 死胡同
+                break  # 死胡同
 
             next_node, key, _ = hop
             if next_node in visited:
@@ -155,16 +155,17 @@ class GraphSampler:
         result = self._walk_sequential_chain(min_len, max_len)
         if not result:
             return None
-        
+
         path_nodes, edges_taken, start_node = result
         # 包装成 Skeleton (不在此处更新计数，由 generate_skeletons 统一管理)
-        return self._format_skeleton("sequential", path_nodes, edges_taken), edges_taken, start_node
+        return (
+            self._format_skeleton("sequential", path_nodes, edges_taken),
+            edges_taken,
+            start_node,
+        )
 
     def sample_neighborhood_subgraph(
-        self, 
-        min_len: int = 2, 
-        max_len: int = 4, 
-        expansion_ratio: float = 0.5
+        self, min_len: int = 2, max_len: int = 4, expansion_ratio: float = 0.5
     ) -> Dict:
         """
         [模式 B] 邻域子图 (Neighborhood Subgraph)
@@ -176,41 +177,41 @@ class GraphSampler:
         if not result:
             return None
         path_nodes, edges_taken, start_node = result
-        
+
         core_tools = set(path_nodes)
-        
+
         # 2. 扩充子图 (Expansion / Noise Injection)
         # 获取核心链上所有工具的邻居 (作为干扰项候选池)
         candidates = set()
         for tool_name in core_tools:
             candidates.update(self.graph.successors(tool_name))
             candidates.update(self.graph.predecessors(tool_name))
-            
+
         # 排除骨架本身，剩下的就是干扰项
         distractors_pool = list(candidates - core_tools)
-        
+
         # 随机选择一部分干扰项加入
         num_extras = int(len(core_tools) * expansion_ratio) + 1
         if len(distractors_pool) > num_extras:
             selected_distractors = random.sample(distractors_pool, num_extras)
         else:
             selected_distractors = distractors_pool
-            
+
         # 3. 组装 Skeleton
         # all_nodes = Core + Noise
         all_nodes = list(core_tools) + selected_distractors
-        random.shuffle(all_nodes) # 打乱物理顺序，防止模型根据位置作弊
-        
+        random.shuffle(all_nodes)  # 打乱物理顺序，防止模型根据位置作弊
+
         skeleton = {
             "pattern": "neighborhood_subgraph",
-            "nodes": [], 
-            "edges": [], # 这里的 edges 只包含 core chain 的有效逻辑
+            "nodes": [],
+            "edges": [],  # 这里的 edges 只包含 core chain 的有效逻辑
             "meta": {
-                "core_chain_nodes": path_nodes, # 标记答案路径
-                "distractor_nodes": selected_distractors  # 标记干扰项
-            }
+                "core_chain_nodes": path_nodes,  # 标记答案路径
+                "distractor_nodes": selected_distractors,  # 标记干扰项
+            },
         }
-        
+
         # 填充节点
         for node in all_nodes:
             attrs = self.graph.nodes[node]
@@ -219,9 +220,9 @@ class GraphSampler:
                 "description": attrs.get("desc", ""),
                 "category": attrs.get("category", "general"),
                 # 在 Skeleton 中显式标记角色，方便 DataFactory 使用
-                "role": "core" if node in core_tools else "distractor"
+                "role": "core" if node in core_tools else "distractor",
             })
-            
+
         # 填充边 (只包含 Core Chain 的逻辑依赖)
         for i, (u, v, key) in enumerate(edges_taken):
             edge_data = self.graph.get_edge_data(u, v)[key]
@@ -234,20 +235,18 @@ class GraphSampler:
                     "relation": "provides_input_for",
                 },
             })
-            
+
         return skeleton, edges_taken, start_node
 
     # =========================================================================
     # 格式化工具 (Formatting)
     # =========================================================================
 
-    def _format_skeleton(self, pattern: str, nodes: List[str], edges: List[Tuple]) -> Dict:
+    def _format_skeleton(
+        self, pattern: str, nodes: List[str], edges: List[Tuple]
+    ) -> Dict:
         """将路径格式化为标准的 TaskSkeleton 字典"""
-        skeleton = {
-            "pattern": pattern,
-            "nodes": [],
-            "edges": []
-        }
+        skeleton = {"pattern": pattern, "nodes": [], "edges": []}
         # 填充节点
         for node in nodes:
             attrs = self.graph.nodes[node]
@@ -255,7 +254,7 @@ class GraphSampler:
                 "name": node,
                 "description": attrs.get("desc", ""),
                 "category": attrs.get("category", "general"),
-                "role": "core" # 在纯 Chain 模式下，全都是 Core
+                "role": "core",  # 在纯 Chain 模式下，全都是 Core
             })
         # 填充边
         for i, (u, v, key) in enumerate(edges):
@@ -277,12 +276,12 @@ class GraphSampler:
 
     def generate_skeletons(
         self,
-        mode: str = "neighborhood", # Options: 'chain', 'neighborhood'
+        mode: str = "neighborhood",  # Options: 'chain', 'neighborhood'
         count: int = 10,
         min_len: int = 3,
         max_len: int = 6,
         max_retries: int = 500,
-        **kwargs
+        **kwargs,
     ) -> List[Dict]:
         """
         统一的批量生成入口。
@@ -296,9 +295,10 @@ class GraphSampler:
         unique_hashes = set()
         fail_streak = 0
 
-        with tqdm(total=count, desc=f"Sampling {mode.capitalize()}", unit="skel") as pbar:
+        with tqdm(
+            total=count, desc=f"Sampling {mode.capitalize()}", unit="skel"
+        ) as pbar:
             while len(skeletons) < count:
-                
                 # 1. 策略分发
                 result = None
                 if mode == "chain":
@@ -306,15 +306,17 @@ class GraphSampler:
                 elif mode == "neighborhood":
                     ratio = kwargs.get("expansion_ratio", 0.5)
                     result = self.sample_neighborhood_subgraph(min_len, max_len, ratio)
-                
+
                 # 2. 结果处理
                 if result:
                     skeleton, edges_taken, start_node = result
-                    
+
                     # 生成唯一指纹
                     # 只要 edges (核心逻辑流) 是独一无二的，这就是一个新任务
                     # 将 edges 排序后 hash，确保无视顺序
-                    edge_sig = "|".join(sorted([f"{e['from']}->{e['to']}" for e in skeleton['edges']]))
+                    edge_sig = "|".join(
+                        sorted([f"{e['from']}->{e['to']}" for e in skeleton["edges"]])
+                    )
                     skel_hash = hashlib.md5(edge_sig.encode()).hexdigest()
 
                     if skel_hash not in unique_hashes:
@@ -330,17 +332,21 @@ class GraphSampler:
                         fail_streak = 0
                         pbar.update(1)
                     else:
-                        fail_streak += 1 # 重复了
+                        fail_streak += 1  # 重复了
                 else:
-                    fail_streak += 1 # 采样失败(路太短)
+                    fail_streak += 1  # 采样失败(路太短)
 
                 # 3. 防卡死机制
                 if fail_streak >= max_retries:
-                    logger.warning(f"Hit max retries ({max_retries}). Graph might be saturated.")
+                    logger.warning(
+                        f"Hit max retries ({max_retries}). Graph might be saturated."
+                    )
                     break
 
         stats = self.get_coverage_stats()
-        logger.info(f"Generated {len(skeletons)} skeletons. Coverage: {stats['coverage_ratio']}")
+        logger.info(
+            f"Generated {len(skeletons)} skeletons. Coverage: {stats['coverage_ratio']}"
+        )
         return skeletons
 
     # =========================================================================

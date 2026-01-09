@@ -13,10 +13,10 @@ from tqdm import tqdm
 
 from sloop.models import ToolDefinition, ToolParameters
 from sloop.services import EmbeddingService, LLMService
-from sloop.utils.logger import logger
+from sloop.utils import logger
 
 
-class ToolGraphBuilder:
+class GraphBuilder:
     def __init__(self):
         # 使用 MultiDiGraph 以支持同一对节点间存在多种关系（如不同参数的依赖）
         self.graph = nx.MultiDiGraph()

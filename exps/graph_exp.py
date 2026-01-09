@@ -1,8 +1,8 @@
-from sloop.utils import ToolGraphBuilder, setup_logging
+from sloop.utils import GraphBuilder, setup_logging
 
 setup_logging()
 
-graph = ToolGraphBuilder()
+graph = GraphBuilder()
 # graph.load_from_jsonl("/root/work/Sloop/tests/data/tools.jsonl")
 # graph.build()
 # graph.visualize()
