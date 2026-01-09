@@ -1,51 +1,50 @@
 import json
 import os
 from collections import Counter
-from typing import Dict, List
+from typing import List
 
+from sloop.models import TaskSkeleton
 from sloop.utils import GraphBuilder, GraphSampler, logger, setup_logging
 
 
-def save_skeletons(skeletons: List[Dict], filename: str):
+def save_skeletons(skeletons: List[TaskSkeleton], filename: str):
     """辅助函数：保存生成的 TaskSkeleton 到文件"""
     os.makedirs("data/samples", exist_ok=True)
     path = f"data/samples/{filename}"
+    
+    data_to_save = [skel.model_dump(by_alias=True, exclude_none=True) for skel in skeletons]
+    
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(skeletons, f, indent=2, ensure_ascii=False)
+        json.dump(data_to_save, f, indent=2, ensure_ascii=False)
     logger.info(f"Saved {len(skeletons)} skeletons to {path}")
 
 
-def analyze_batch(batch: List[Dict], name: str):
+def analyze_batch(batch: List[TaskSkeleton], name: str):
     """分析批次数据的分布"""
     if not batch:
         logger.warning(f"Batch {name} is empty.")
         return
 
-    # [Schema Update] tools_involved -> nodes
-    # 统计节点数量
-    lengths = [len(b["nodes"]) for b in batch]
+    # 使用对象属性访问
+    lengths = [len(b.nodes) for b in batch]
     dist = dict(Counter(lengths))
 
-    # 按节点数排序打印分布
     sorted_dist = dict(sorted(dist.items()))
     logger.info(f"[{name}] Node Count Distribution: {sorted_dist}")
 
-    # 打印一条示例
     example = batch[0]
 
-    # 根据不同模式展示不同的摘要
-    if "meta" in example and "core_chain_nodes" in example["meta"]:
-        # Neighborhood 模式：展示核心链 + 噪音数量
-        core_path = example["meta"]["core_chain_nodes"]
-        noise_count = len(example["meta"]["distractor_nodes"])
+    # 使用对象属性访问
+    if example.meta and example.meta.core_chain_nodes:
+        # Neighborhood 模式
+        core_path = example.meta.core_chain_nodes
+        noise_count = len(example.meta.distractor_nodes)
         chain_str = " -> ".join(core_path)
         logger.info(f"[{name}] Core Path: {chain_str} (+ {noise_count} distractors)")
     else:
-        # Chain 模式：展示完整链条
-        # 注意：nodes 列表顺序可能被 shuffle (取决于 sampler 实现)，
-        # 最准确的顺序应该从 edges 里的 step 推导，或者直接打印 edges
-        # 这里简单起见，打印 edges 的连接关系
-        edges_str = " -> ".join([f"{e['from']}..{e['to']}" for e in example["edges"]])
+        # Chain 模式
+        # 这里的 edges 是 List[SkeletonEdge] 对象
+        edges_str = " -> ".join([f"{e.from_tool}..{e.to_tool}" for e in example.edges])
         logger.info(f"[{name}] Logic Flow: {edges_str}")
 
 
@@ -54,7 +53,7 @@ def main():
     setup_logging()
 
     # 2. 加载图谱
-    checkpoint_path = "/dfs/data/work/Sloop/data/graph_checkpoint.pkl"
+    checkpoint_path = "data/graph_checkpoint.pkl" # 建议使用相对路径，或者根据你的环境修改
     builder = GraphBuilder()
     if not builder.load_checkpoint(checkpoint_path):
         logger.error("Failed to load graph checkpoint.")
@@ -69,7 +68,6 @@ def main():
     # --- 实验阶段 1: 纯线性链采样 (验证 Slot Filling) ---
     logger.info("\n>>> Stage 1: Sequential Chains (Short: 2-3) <<<")
 
-    # 使用 mode="chain"
     batch_short = sampler.generate_skeletons(
         mode="chain", count=10, min_len=2, max_len=3
     )
@@ -95,12 +93,12 @@ def main():
     logger.info("\n>>> Stage 3: Stress Test (Chain Mode, Mixed Lengths) <<<")
     logger.info("Generating 1000 unique chain skeletons...")
 
-    # 使用我们在上一轮实验中验证过的最佳参数 min_len=2
     batch_stress = sampler.generate_skeletons(
         mode="chain", count=1000, min_len=2, max_len=5
     )
 
-    lengths = [len(b["nodes"]) for b in batch_stress]
+    # 使用对象属性
+    lengths = [len(b.nodes) for b in batch_stress]
     logger.info(f"Stress Batch Node Dist: {dict(sorted(Counter(lengths).items()))}")
 
     save_skeletons(batch_stress, "skeletons_stress.json")
@@ -112,7 +110,6 @@ def main():
     logger.info("\n>>> Stage 4: Neighborhood Subgraphs (Core + Noise) <<<")
     logger.info("Generating samples with 50% noise ratio...")
 
-    # 使用 mode="neighborhood"
     batch_neighborhood = sampler.generate_skeletons(
         mode="neighborhood", count=5, min_len=2, max_len=4, expansion_ratio=0.5
     )
@@ -121,13 +118,14 @@ def main():
         analyze_batch(batch_neighborhood, "Neighborhood")
         save_skeletons(batch_neighborhood, "skeletons_neighborhood.json")
 
-        # 详细透视第一条数据，验证结构是否正确
+        # 详细透视第一条数据
         ex = batch_neighborhood[0]
-        core_nodes = ex["meta"]["core_chain_nodes"]
-        distractors = ex["meta"]["distractor_nodes"]
-        all_presented = [n["name"] for n in ex["nodes"]]
+        # 使用对象属性
+        core_nodes = ex.meta.core_chain_nodes
+        distractors = ex.meta.distractor_nodes
+        all_presented = [n.name for n in ex.nodes]
 
-        logger.info(f"\n[Deep Dive] Skeleton Pattern: {ex.get('pattern')}")
+        logger.info(f"\n[Deep Dive] Skeleton Pattern: {ex.pattern}")
         logger.info(
             f"[Deep Dive] Core Solution ({len(core_nodes)}): {' -> '.join(core_nodes)}"
         )
