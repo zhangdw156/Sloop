@@ -4,7 +4,7 @@
 导出各种实用工具函数。
 """
 
-from sloop.utils.graph import GraphBuilder
+from sloop.utils.graph_builder import GraphBuilder
 from sloop.utils.graph_sampler import GraphSampler
 from sloop.utils.logger import logger, setup_logging
 from sloop.utils.intent_generator import IntentGenerator
