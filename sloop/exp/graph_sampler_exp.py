@@ -1,11 +1,12 @@
 import json
 import os
 from collections import Counter
-from typing import List, Dict
+from typing import Dict, List
 
 from sloop.utils import ToolGraphBuilder, setup_logging
 from sloop.utils.graph_sampler import GraphSampler
 from sloop.utils.logger import logger
+
 
 def save_blueprints(blueprints: List[Dict], filename: str):
     """辅助函数：保存生成的蓝图到文件"""
@@ -15,75 +16,86 @@ def save_blueprints(blueprints: List[Dict], filename: str):
         json.dump(blueprints, f, indent=2, ensure_ascii=False)
     logger.info(f"Saved {len(blueprints)} blueprints to {path}")
 
+
+def analyze_batch(batch: List[Dict], name: str):
+    """分析批次数据的长度分布"""
+    if not batch:
+        logger.warning(f"Batch {name} is empty.")
+        return
+
+    # 统计工具链长度 (tools_involved 的数量)
+    lengths = [len(b["tools_involved"]) for b in batch]
+    dist = dict(Counter(lengths))
+
+    # 按长度排序打印分布
+    sorted_dist = dict(sorted(dist.items()))
+    logger.info(f"[{name}] Length Distribution (Nodes): {sorted_dist}")
+
+    # 打印一条具体的路径示例 (Tool A -> Tool B -> ...)
+    example = batch[0]
+    chain_str = " -> ".join([t["name"] for t in example["tools_involved"]])
+    logger.info(f"[{name}] Example Chain: {chain_str}")
+
+
 def main():
     # 1. 初始化日志
     setup_logging()
-    
-    # 2. 加载图谱 (从 Checkpoint 极速加载)
+
+    # 2. 加载图谱
     checkpoint_path = "/dfs/data/work/Sloop/data/graph_checkpoint.pkl"
     builder = ToolGraphBuilder()
     if not builder.load_checkpoint(checkpoint_path):
-        logger.error("Failed to load graph checkpoint. Please run tool_graph_exp.py first.")
+        logger.error("Failed to load graph checkpoint.")
         return
 
-    # 展示一下图的基本情况
     builder.show()
-    
+
     # 3. 初始化采样器
-    logger.info("Initializing Graph Sampler...")
+    logger.info("Initializing Graph Sampler (Sequential Mode)...")
     sampler = GraphSampler(builder.graph)
-    
-    # --- 实验阶段 1: 混合模式采样 (验证 DAG 结构) ---
-    logger.info(">>> Stage 1: Mixed Pattern Sampling (Smoke Test) <<<")
-    # 采样 20 条，足够覆盖 sequential, branching, parallel 三种模式
-    batch_1 = sampler.generate_blueprints(count=20)
-    
-    if batch_1:
-        # 统计分布情况
-        patterns = [b.get('pattern', 'unknown') for b in batch_1]
-        counts = dict(Counter(patterns))
-        logger.info(f"Pattern Distribution: {counts}") 
-        # 预期: {'sequential': ~10, 'branching': ~6, 'parallel': ~4}
 
-        # 找到并打印一个 非线性 (DAG) 的例子来展示
-        dag_examples = [b for b in batch_1 if b.get('pattern') in ('branching', 'parallel')]
-        example = dag_examples[0] if dag_examples else batch_1[0]
-        
-        logger.info(f"\n--- Example Blueprint ({example.get('pattern', 'unknown').upper()}) ---")
-        logger.info(json.dumps(example, indent=2, ensure_ascii=False))
-        logger.info("-------------------------------------\n")
-        
-        save_blueprints(batch_1, "batch_1_mixed_patterns.json")
-    
-    # 查看当前覆盖率
-    stats = sampler.get_coverage_stats()
-    logger.info(f"Stage 1 Stats: Covered {stats['visited_edges']}/{stats['total_edges']} edges ({stats['coverage_ratio']})")
+    # --- 实验阶段 1: 短链采样 (验证 Slot Filling 能力数据) ---
+    logger.info("\n>>> Stage 1: Short Chains (Min=2, Max=3) <<<")
 
-    # --- 实验阶段 2: 大批量“衰减”采样 (验证覆盖率提升) ---
-    logger.info("\n>>> Stage 2: Stress Test (Coverage Guided Walk) <<<")
-    logger.info("Generating 100 more unique blueprints to expand coverage...")
-    
-    # 增加数量以测试深层覆盖
-    batch_2 = sampler.generate_blueprints(count=100)
-    save_blueprints(batch_2, "batch_2_decay_test.json")
-    
-    # 再次查看覆盖率，应该会有显著提升
-    stats = sampler.get_coverage_stats()
-    logger.info(f"Stage 2 Stats: Covered {stats['visited_edges']}/{stats['total_edges']} edges ({stats['coverage_ratio']})")
-    
-    # --- 实验阶段 3: 强制重置与对比 (验证记忆功能) ---
-    logger.info("\n>>> Stage 3: Reset & Re-sample <<<")
-    
-    # 重置记忆
-    sampler.reset_coverage()
-    
-    batch_3 = sampler.generate_blueprints(count=10)
-    save_blueprints(batch_3, "batch_3_after_reset.json")
-    
-    stats = sampler.get_coverage_stats()
-    logger.info(f"Stage 3 Stats (Reset): {stats['coverage_ratio']}")
+    batch_short = sampler.generate_chains(count=10, min_len=2, max_len=3)
+    analyze_batch(batch_short, "Short")
+    save_blueprints(batch_short, "chains_short.json")
 
-    logger.success("Graph Sampling Experiment Completed Successfully!")
+    stats = sampler.get_coverage_stats()
+    logger.info(
+        f"Stage 1 Stats: Covered {stats['visited_edges']}/{stats['total_edges']} edges ({stats['coverage_ratio']})"
+    )
+
+    # --- 实验阶段 2: 长链采样 (验证 Reasoning / Long Context 数据) ---
+    logger.info("\n>>> Stage 2: Long Chains (Min=4, Max=6) <<<")
+
+    batch_long = sampler.generate_chains(count=10, min_len=4, max_len=6)
+    analyze_batch(batch_long, "Long")
+    save_blueprints(batch_long, "chains_long.json")
+
+    stats = sampler.get_coverage_stats()
+    logger.info(
+        f"Stage 2 Stats: Covered {stats['visited_edges']}/{stats['total_edges']} edges ({stats['coverage_ratio']})"
+    )
+
+    # --- 实验阶段 3: 大规模覆盖率测试 (验证 Decay 算法) ---
+    logger.info("\n>>> Stage 3: Coverage Stress Test (Mixed Lengths) <<<")
+    logger.info("Generating 1000 mixed chains (Len 3-5) to expand coverage...")
+
+    batch_stress = sampler.generate_chains(count=1000, min_len=2, max_len=5)
+
+    lengths = [len(b["tools_involved"]) for b in batch_stress]
+    logger.info(f"Stress Batch Length Dist: {dict(sorted(Counter(lengths).items()))}")
+
+    save_blueprints(batch_stress, "chains_stress_test.json")
+
+    stats = sampler.get_coverage_stats()
+    logger.info(
+        f"Stage 3 Stats: Covered {stats['visited_edges']}/{stats['total_edges']} edges ({stats['coverage_ratio']})"
+    )
+
+    logger.success("Sequential Graph Sampling Experiment Completed!")
+
 
 if __name__ == "__main__":
     main()

@@ -32,6 +32,9 @@ def setup_logging():
     rich_handler = RichHandler(
         console=tqdm_console,
         show_time=True,
+        # [修改点] 设置时间格式为 年-月-日 时:分:秒
+        log_time_format="[%Y-%m-%d %H:%M:%S]",
+        omit_repeated_times=False,  # 建议关闭，保证每行都有完整时间
         show_level=True,
         show_path=False,
         markup=True,
