@@ -97,12 +97,12 @@ graph TD
 
 3. **运行流水线**
 
-   ```bash
+```bash
  uv run exps/graph_builder_exp.py
  uv run exps/graph_sampler_exp.py
  uv run exps/intent_generator_exp.py
  uv run exps/verify_agents.py
-   ```
+```
 
 ## 许可证
 
