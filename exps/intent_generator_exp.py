@@ -49,7 +49,7 @@ def main():
 
     # 1. 路径配置
     GRAPH_CHECKPOINT = "data/graph_checkpoint.pkl"  # 或绝对路径
-    SKELETON_INPUT = "/dfs/data/work/Sloop/data/samples/skeletons_neighborhood.json"
+    SKELETON_INPUT = "data/samples/skeletons_neighborhood.json"
 
     # 2. 初始化 GraphBuilder (作为 Knowledge Base)
     # Generator 需要查阅工具的 Description 和 Parameters 才能编造故事

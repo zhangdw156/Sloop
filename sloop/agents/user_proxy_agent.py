@@ -1,30 +1,25 @@
 import json
-from typing import Union, Sequence
+from typing import List, Union, cast
+
 try:
     from typing import override
 except ImportError:
     from typing_extensions import override
 
 from agentscope.agent import AgentBase
-from agentscope.message import Msg
 from agentscope.memory import InMemoryMemory
-from agentscope.model import OpenAIChatModel
+from agentscope.message import Msg
+from agentscope.model import ChatResponse, OpenAIChatModel
 
-from sloop.models import UserIntent
-from sloop.utils.logger import logger
-from sloop.prompts.simulation import USER_PROXY_SYSTEM_PROMPT
 from sloop.configs.env import env_config
+from sloop.models import UserIntent
+from sloop.prompts.simulation import USER_PROXY_SYSTEM_PROMPT
+
 
 class UserProxyAgent(AgentBase):
-    def __init__(
-        self, 
-        name: str, 
-        intent: UserIntent, 
-        max_turns: int = 10,
-        **kwargs
-    ):
+    def __init__(self, name: str, intent: UserIntent, max_turns: int = 10, **kwargs):
         super().__init__()
-        
+
         self.name = name
         self.memory = InMemoryMemory()
         self.intent = intent
@@ -42,27 +37,26 @@ class UserProxyAgent(AgentBase):
             model_name=model_name,
             api_key=api_key,
             client_kwargs={"base_url": base_url},
-            generate_kwargs={
-                "temperature": 1.0,
-                "max_tokens": 1024
-            },
-            stream=False 
+            generate_kwargs={"temperature": 1.0, "max_tokens": 1024},
+            stream=False,
         )
 
         sys_content = USER_PROXY_SYSTEM_PROMPT.format(
             query=intent.query,
             initial_state=json.dumps(intent.initial_state, ensure_ascii=False),
-            final_state=json.dumps(intent.final_state, ensure_ascii=False)
+            final_state=json.dumps(intent.final_state, ensure_ascii=False),
         )
         self.sys_prompt_dict = {"role": "system", "content": sys_content}
 
     @override
-    async def reply(self, x: Union[Msg, Sequence[Msg]] = None) -> Msg:
+    async def reply(self, x: Union[Msg, List[Msg]] | None = None) -> Msg:
         self.current_turn += 1
 
         if x:
-            if isinstance(x, list): await self.memory.add(x)
-            else: await self.memory.add(x)
+            if isinstance(x, list):
+                await self.memory.add(x)
+            else:
+                await self.memory.add(x)
 
         if self.current_turn > self.max_turns:
             return Msg(name=self.name, role="user", content="TERMINATE_FAILED")
@@ -73,27 +67,29 @@ class UserProxyAgent(AgentBase):
             return msg
 
         history_msgs = await self.memory.get_memory()
-        
+
         openai_messages = [self.sys_prompt_dict]
         for m in history_msgs:
-            openai_messages.append({
-                "role": m.role, 
-                "content": str(m.content or "")
-            })
-        
-        response = await self.model(messages=openai_messages)
-        
+            content_str = m.get_text_content()
+
+            if content_str:
+                openai_messages.append({"role": m.role, "content": content_str})
+
+        raw_response = await self.model(messages=openai_messages)
+        response = cast(ChatResponse, raw_response)
+
         text_content = ""
-        # [修复] 字典访问
-        for block in response.content:
-            block_type = block.get("type") if isinstance(block, dict) else block.type
-            if block_type == "text":
-                text_val = block.get("text", "") if isinstance(block, dict) else block.text
-                text_content += text_val
-        
+        if hasattr(response, "content"):
+            for block in response.content:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    text_content += str(block.get("text", ""))
+        else:
+            text_content = str(response)
+
+        # 简单的终止判定逻辑
         if "TERMINATE" in text_content and len(text_content) < 50:
             text_content = "TERMINATE"
-        
+
         msg = Msg(name=self.name, role="user", content=text_content)
         await self.memory.add(msg)
         return msg
