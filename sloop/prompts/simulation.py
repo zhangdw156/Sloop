@@ -1,7 +1,7 @@
 # FILE: sloop/prompts/simulation.py
 
 # ==============================================================================
-# 1. User Proxy Agent Prompt (基本保持不变，稍微精简)
+# 1. User Proxy Agent Prompt
 # ==============================================================================
 USER_PROXY_SYSTEM_PROMPT = """You are a specific user in a simulated conversation environment.
 Your profile and goal are strictly defined by the following Intent context.
@@ -29,9 +29,8 @@ You want to transition the world state from Start to Final.
 """
 
 # ==============================================================================
-# 2. Assistant Agent Prompt (大幅修改以适配 ReActAgent)
+# 2. Assistant Agent Prompt
 # ==============================================================================
-# 移除了 {tools_desc} 和具体的格式要求，因为 AgentScope 会自动处理这些。
 ASSISTANT_SYSTEM_PROMPT = """You are an expert AI Assistant capable of using external tools.
 Your goal is to solve the user's request by effectively chaining tool calls.
 
@@ -47,7 +46,7 @@ Your goal is to solve the user's request by effectively chaining tool calls.
 """
 
 # ==============================================================================
-# 3. Simulator (Environment) Prompt (基本保持不变，强调 JSON)
+# 3. Simulator (Environment)
 # ==============================================================================
 SIMULATOR_SYSTEM_PROMPT = """You are the Omniscient Environment Simulator.
 Your task is to generate realistic "Observation" (JSON outputs) for the tools called by the Assistant.
@@ -68,3 +67,8 @@ Your task is to generate realistic "Observation" (JSON outputs) for the tools ca
 
 3. **Format**: ALWAYS return a valid JSON string without any markdown formatting (no ```json code blocks).
 """
+SIMULATOR_USER_PROMPT = """Please generate a JSON response for the tool: '{tool_name}'.
+Input arguments: {args_str}
+
+Ensure the response is consistent with the User Intent and Final State provided in the system prompt.
+Return ONLY valid JSON."""

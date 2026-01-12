@@ -7,6 +7,7 @@ except ImportError:
     from typing_extensions import override
 
 from agentscope.agent import AgentBase
+from agentscope.formatter import OpenAIChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
 from agentscope.model import ChatResponse, OpenAIChatModel
@@ -25,7 +26,7 @@ class UserProxyAgent(AgentBase):
         self.intent = intent
         self.max_turns = max_turns
         self.current_turn = 0
-
+        self.formatter = OpenAIChatFormatter()
         model_name = env_config.get("OPENAI_MODEL_NAME")
         base_url = env_config.get("OPENAI_MODEL_BASE_URL")
         api_key = env_config.get("OPENAI_MODEL_API_KEY") or "EMPTY"
@@ -46,7 +47,8 @@ class UserProxyAgent(AgentBase):
             initial_state=json.dumps(intent.initial_state, ensure_ascii=False),
             final_state=json.dumps(intent.final_state, ensure_ascii=False),
         )
-        self.sys_prompt_dict = {"role": "system", "content": sys_content}
+
+        self.sys_msg = Msg(name="system", role="system", content=sys_content)
 
     @override
     async def reply(self, x: Union[Msg, List[Msg]] | None = None) -> Msg:
@@ -66,18 +68,16 @@ class UserProxyAgent(AgentBase):
             await self.memory.add(msg)
             return msg
 
-        history_msgs = await self.memory.get_memory()
+        input_msgs = [self.sys_msg] + await self.memory.get_memory()
 
-        openai_messages = [self.sys_prompt_dict]
-        for m in history_msgs:
-            content_str = m.get_text_content()
+        # 2. 调用 formatter 生成符合 OpenAI API 标准的 List[Dict]
+        openai_messages = await self.formatter.format(input_msgs)
 
-            if content_str:
-                openai_messages.append({"role": m.role, "content": content_str})
-
+        # 3. 调用模型
         raw_response = await self.model(messages=openai_messages)
         response = cast(ChatResponse, raw_response)
 
+        # 结果解析逻辑
         text_content = ""
         if hasattr(response, "content"):
             for block in response.content:

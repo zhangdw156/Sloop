@@ -1,5 +1,5 @@
 import json
-from typing import Sequence, Union, cast
+from typing import List, Union, cast
 
 try:
     from typing import override
@@ -7,13 +7,14 @@ except ImportError:
     from typing_extensions import override
 
 from agentscope.agent import AgentBase
+from agentscope.formatter import OpenAIChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
 from agentscope.model import ChatResponse, OpenAIChatModel
 
 from sloop.configs.env import env_config
 from sloop.models import TaskSkeleton, UserIntent
-from sloop.prompts.simulation import SIMULATOR_SYSTEM_PROMPT
+from sloop.prompts.simulation import SIMULATOR_SYSTEM_PROMPT, SIMULATOR_USER_PROMPT
 from sloop.utils.logger import logger
 
 
@@ -25,7 +26,7 @@ class SimulatorAgent(AgentBase):
         self.memory = InMemoryMemory()
         self.intent = intent
         self.skeleton = skeleton
-
+        self.formatter = OpenAIChatFormatter()
         model_name = env_config.get("OPENAI_MODEL_NAME")
         base_url = env_config.get("OPENAI_MODEL_BASE_URL")
         api_key = env_config.get("OPENAI_MODEL_API_KEY") or "EMPTY"
@@ -42,31 +43,30 @@ class SimulatorAgent(AgentBase):
                 "max_tokens": 2048,
                 "response_format": {"type": "json_object"},
             },
-            # 必须为 False，确保返回 ChatResponse 对象而不是生成器
             stream=False,
         )
 
         core_nodes = [n.name for n in skeleton.get_core_nodes()]
-        self.base_sys_prompt = SIMULATOR_SYSTEM_PROMPT.format(
+        sys_prompt_content = SIMULATOR_SYSTEM_PROMPT.format(
             initial_state=json.dumps(intent.initial_state, ensure_ascii=False),
             final_state=json.dumps(intent.final_state, ensure_ascii=False),
             core_nodes=json.dumps(core_nodes, ensure_ascii=False),
         )
 
+        self.sys_msg = Msg(name="system", role="system", content=sys_prompt_content)
+
     @override
-    async def reply(self, x: Union[Msg, Sequence[Msg]] | None = None) -> Msg:
+    async def reply(self, x: Union[Msg, List[Msg]] | None = None) -> Msg:
         if x is None:
             return Msg(name=self.name, role="assistant", content="Error: No input.")
 
-        # [修复 1] 处理 Sequence[Msg] 类型报错
-        # 显式判断并提取单个 Msg 对象，消除类型歧义
+        # 处理 Msg 输入类型安全
         msg_in: Msg
         if isinstance(x, list):
             msg_in = x[-1]
         elif isinstance(x, Msg):
             msg_in = x
         else:
-            # 处理 tuple 或其他 Sequence 情况
             try:
                 msg_in = x[-1]  # type: ignore
             except Exception:
@@ -76,7 +76,7 @@ class SimulatorAgent(AgentBase):
                     content="Error: Invalid input type.",
                 )
 
-        # 现在 msg_in 确定是 Msg 类型，可以安全调用 get_content_blocks
+        # 解析 Tool Calls
         tool_use_blocks = msg_in.get_content_blocks("tool_use")
 
         if not tool_use_blocks:
@@ -88,6 +88,7 @@ class SimulatorAgent(AgentBase):
 
         results = []
 
+        # 遍历生成 Mock 数据
         for block in tool_use_blocks:
             tool_name = block.get("name")
             tool_args = block.get("input", {})
@@ -107,21 +108,22 @@ class SimulatorAgent(AgentBase):
     ) -> str:
         logger.info(f"LLM Simulator generating for: {tool_name} args={args_str}")
 
-        prompt_content = (
-            f"Please generate a JSON response for the tool: '{tool_name}'.\n"
-            f"Input arguments: {args_str}\n"
-            f"Ensure the response is consistent with the User Intent and Final State provided in the system prompt.\n"
-            f"Return ONLY valid JSON."
+        prompt_content = SIMULATOR_USER_PROMPT.format(
+            tool_name=tool_name, args_str=args_str
         )
 
-        messages = [
-            {"role": "system", "content": self.base_sys_prompt},
-            {"role": "user", "content": prompt_content},
+        # 1. 构造 Msg 列表
+        input_msgs = [
+            self.sys_msg,
+            Msg(name="user", role="user", content=prompt_content),
         ]
 
-        try:
-            raw_response = await self.model(messages=messages)
+        # 2. 格式化为 OpenAI 格式
+        openai_messages = await self.formatter.format(input_msgs)
 
+        try:
+            # 3. 调用模型
+            raw_response = await self.model(messages=openai_messages)
             response = cast(ChatResponse, raw_response)
 
             content_str = ""
@@ -130,10 +132,9 @@ class SimulatorAgent(AgentBase):
                     if isinstance(block, dict) and block.get("type") == "text":
                         content_str += str(block.get("text", ""))
             else:
-                # 兜底：万一它是字符串
                 content_str = str(response)
 
-            # --- 下面是通用的 JSON 提取逻辑 ---
+            # --- JSON 提取 ---
             clean_content = (
                 content_str.replace("```json", "").replace("```", "").strip()
             )
