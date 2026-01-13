@@ -53,7 +53,7 @@ class GraphBuilder:
             if not base_url or not api_key:
                 raise ValueError("Missing LLM configuration")
 
-            self.llm_service = OpenAIChatModel(
+            self.model = OpenAIChatModel(
                 model_name=model_name or "Qwen3-235B-A22B-Instruct-2507",
                 api_key=api_key,
                 stream=False,
@@ -61,7 +61,7 @@ class GraphBuilder:
             )
         except Exception as e:
             logger.warning(f"LLM service failed to init: {e}")
-            self.llm_service = None
+            self.model = None
 
         # 缓存向量
         self.tool_desc_embeddings = {}
@@ -179,7 +179,7 @@ class GraphBuilder:
 
     async def _verify_edge_single(self, edge: Dict) -> bool:
         """[新增] 验证单条边的逻辑 (线程安全)"""
-        if not self.llm_service:
+        if not self.model:
             return False
 
         p_tool = self.tools[edge["producer"]]
@@ -198,7 +198,7 @@ class GraphBuilder:
         from sloop.prompts.graph import VERIFY_SINGLE_EDGE_SYSTEM_PROMPT
 
         try:
-            response = await self.llm_service(
+            response = await self.model(
                 messages=[
                     {"role": "system", "content": VERIFY_SINGLE_EDGE_SYSTEM_PROMPT},
                     {"role": "user", "content": item_text},
@@ -398,7 +398,7 @@ class GraphBuilder:
                 # 高置信度：直接通过
                 edges_to_add.append(edge_info)
                 stats["direct"] += 1
-            elif enable_llm_verify and self.llm_service:
+            elif enable_llm_verify and self.model:
                 # 中置信度：加入 LLM 验证队列
                 candidates_to_verify.append(edge_info)
             # 如果没开 LLM 且分数不够高，或者分数低于 recall 但高于 np.where (理论上不可能)，则通过(如果没开LLM)或丢弃
@@ -611,7 +611,7 @@ class GraphBuilder:
         self, tool: ToolDefinition, category_pool: set
     ) -> str:
         """[新增] 对单个工具进行分类 (线程安全)"""
-        if not self.llm_service:
+        if not self.model:
             return None
 
         # 每次取当前的 pool 快照
@@ -626,7 +626,7 @@ class GraphBuilder:
         )
 
         try:
-            response = await self.llm_service(
+            response = await self.model(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": tool_info},
@@ -656,7 +656,7 @@ class GraphBuilder:
 
     def _auto_categorize_concurrent(self, max_workers=20):
         """[修改] 多线程动态分类"""
-        if not self.llm_service or not self.llm_service.client:
+        if not self.model or not self.model.client:
             return
 
         tools_to_process = [t for t in self.tools.values() if t.category == "general"]
