@@ -2,12 +2,14 @@ import hashlib
 import json
 from typing import Any, Dict, List
 
+from agentscope.model import OpenAIChatModel
+
+from sloop.configs import env_config
 from sloop.models import TaskSkeleton, ToolDefinition, UserIntent
 from sloop.prompts.generator import (
     INTENT_GENERATOR_SYSTEM_PROMPT,
     INTENT_GENERATOR_USER_TEMPLATE,
 )
-from sloop.services import LLMService
 from sloop.utils.logger import logger
 
 
@@ -19,21 +21,34 @@ class IntentGenerator:
     Skeleton (结构) -> IntentGenerator (填肉) -> UserIntent (Query + States)
     """
 
-    def __init__(
-        self, tool_registry: Dict[str, ToolDefinition], llm_service: LLMService = None
-    ):
+    def __init__(self, tool_registry: Dict[str, ToolDefinition]):
         """
         Args:
             tool_registry: 所有可用工具的字典 (用于查阅工具详情)
-            llm_service: LLM 服务实例
         """
         self.tool_registry = tool_registry
-        self.llm = llm_service or LLMService()
 
-        if not self.llm.client:
-            logger.warning("LLM Service is not initialized. Generator will fail.")
+        # 直接初始化 agentscope 的 OpenAIChatModel
+        base_url = env_config.get("OPENAI_MODEL_BASE_URL")
+        api_key = env_config.get("OPENAI_MODEL_API_KEY")
+        model_name = env_config.get(
+            "OPENAI_MODEL_NAME", "Qwen3-235B-A22B-Instruct-2507"
+        )
 
-    def generate(self, skeleton: TaskSkeleton, max_retries: int = 3) -> UserIntent:
+        if not base_url or not api_key:
+            logger.warning("Missing LLM configuration in .env. Generator will fail.")
+            self.model = None
+        else:
+            self.model = OpenAIChatModel(
+                model_name=model_name or "Qwen3-235B-A22B-Instruct-2507",
+                api_key=api_key,
+                stream=False,
+                client_kwargs={"base_url": base_url},
+            )
+
+    async def generate(
+        self, skeleton: TaskSkeleton, max_retries: int = 3
+    ) -> UserIntent | None:
         """
         根据骨架生成一个完整的 User Intent
         """
@@ -56,7 +71,11 @@ class IntentGenerator:
         intent_data = None
         for attempt in range(max_retries):
             try:
-                response = self.llm.chat_completion(
+                if self.model is None:
+                    logger.error("LLM model not initialized")
+                    break
+
+                response = await self.model(
                     messages=[
                         {"role": "system", "content": INTENT_GENERATOR_SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt},
@@ -65,13 +84,20 @@ class IntentGenerator:
                     temperature=0.7,  # 稍微高一点的温度，保证生成的具体实体（如IP、地名）多样化
                 )
 
-                if response:
-                    # 清洗 markdown 标记 (以防万一)
-                    clean_resp = (
-                        response.replace("```json", "").replace("```", "").strip()
-                    )
-                    intent_data = json.loads(clean_resp)
-                    break
+                if response and response.content:
+                    # 从 ChatResponse 中提取文本
+                    text = ""
+                    for block in response.content:
+                        if hasattr(block, "text"):
+                            text += block.text
+
+                    if text:
+                        # 清洗 markdown 标记 (以防万一)
+                        clean_resp = (
+                            text.replace("```json", "").replace("```", "").strip()
+                        )
+                        intent_data = json.loads(clean_resp)
+                        break
             except Exception as e:
                 logger.warning(f"Generation attempt {attempt + 1} failed: {e}")
 

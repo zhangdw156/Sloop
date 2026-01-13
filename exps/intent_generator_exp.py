@@ -44,7 +44,7 @@ def save_intents(intents: List[UserIntent], filename: str):
     logger.info(f"Saved {len(intents)} user intents to {path}")
 
 
-def main():
+async def main():
     setup_logging()
 
     # 1. 路径配置
@@ -84,7 +84,7 @@ def main():
         logger.debug(f"Target Chain: {core_chain}")
 
         # === 核心调用 ===
-        intent = generator.generate(skel)
+        intent = await generator.generate(skel)
 
         if intent:
             generated_intents.append(intent)
@@ -109,4 +109,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+
+    asyncio.run(main())

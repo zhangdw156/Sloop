@@ -48,14 +48,14 @@ class GraphSampler:
     # 核心游走逻辑 (Internal Walking Logic) - 保持不变
     # =========================================================================
 
-    def _select_start_node(self) -> str:
+    def _select_start_node(self) -> str | None:
         candidates = [n for n in self.graph.nodes() if self.graph.out_degree(n) > 0]
         if not candidates:
             return None
         candidates.sort(key=lambda n: self.node_starts[n] + random.random())
         return candidates[0]
 
-    def _get_next_hop(self, current_node: str) -> Tuple:
+    def _get_next_hop(self, current_node: str) -> Tuple | None:
         successors = list(self.graph.successors(current_node))
         if not successors:
             return None
@@ -86,7 +86,7 @@ class GraphSampler:
         idx = np.random.choice(len(candidates), p=probs)
         return candidates[idx]
 
-    def _walk_sequential_chain(self, min_len: int, max_len: int) -> Tuple:
+    def _walk_sequential_chain(self, min_len: int, max_len: int) -> Tuple | None:
         """执行游走，返回原始数据，不负责格式化"""
         start_node = self._select_start_node()
         if not start_node:
@@ -113,7 +113,7 @@ class GraphSampler:
             curr = next_node
 
         if len(path_nodes) < min_len:
-            self.node_starts[start_node] += 1.0
+            self.node_starts[start_node] += 1
             return None
 
         return path_nodes, edges_taken, start_node

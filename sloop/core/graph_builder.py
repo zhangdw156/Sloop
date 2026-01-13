@@ -6,13 +6,15 @@ from typing import Dict, List
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
+from agentscope.embedding import OpenAITextEmbedding
+from agentscope.model import OpenAIChatModel
 from rich.console import Console
 from rich.table import Table
 from sklearn.metrics.pairwise import cosine_similarity
 from tqdm import tqdm
 
+from sloop.configs import env_config
 from sloop.models import ToolDefinition, ToolParameters
-from sloop.services import EmbeddingService, LLMService
 from sloop.utils.logger import logger
 
 
@@ -24,17 +26,42 @@ class GraphBuilder:
 
         # 1. 初始化 Embedding 服务
         try:
-            self.embedding_service = EmbeddingService()
+            base_url = env_config.get("EMBEDDING_MODEL_BASE_URL")
+            api_key = env_config.get("EMBEDDING_MODEL_API_KEY")
+            model_name = env_config.get("EMBEDDING_MODEL_NAME", "bge-m3")
+
+            if not base_url or not api_key:
+                raise ValueError("Missing embedding configuration")
+
+            self.embedding_model = OpenAITextEmbedding(
+                api_key=api_key,
+                model_name=model_name or "bge-m3",
+                base_url=base_url,
+            )
         except Exception as e:
             logger.warning(f"Embedding service failed to init: {e}")
-            self.embedding_service = None
+            self.embedding_model = None
 
-        # 2. 初始化 LLM 服务 (修改点：使用封装好的 LLMService)
-        self.llm_service = LLMService()
-        if not self.llm_service.client:
-            logger.warning(
-                "LLM service not available. RAG verification will be skipped."
+        # 2. 初始化 LLM 服务
+        try:
+            base_url = env_config.get("OPENAI_MODEL_BASE_URL")
+            api_key = env_config.get("OPENAI_MODEL_API_KEY")
+            model_name = env_config.get(
+                "OPENAI_MODEL_NAME", "Qwen3-235B-A22B-Instruct-2507"
             )
+
+            if not base_url or not api_key:
+                raise ValueError("Missing LLM configuration")
+
+            self.llm_service = OpenAIChatModel(
+                model_name=model_name or "Qwen3-235B-A22B-Instruct-2507",
+                api_key=api_key,
+                stream=False,
+                client_kwargs={"base_url": base_url},
+            )
+        except Exception as e:
+            logger.warning(f"LLM service failed to init: {e}")
+            self.llm_service = None
 
         # 缓存向量
         self.tool_desc_embeddings = {}
@@ -83,9 +110,9 @@ class GraphBuilder:
 
         logger.info(f"Loaded {len(self.tools)} tools from {processed_lines} records.")
 
-    def _precompute_embeddings(self, batch_size=64):
+    async def _precompute_embeddings(self, batch_size=64):
         """批量计算向量，构建语义索引（增加分批处理）"""
-        if not self.embedding_service:
+        if not self.embedding_model:
             return
 
         logger.info(
@@ -97,14 +124,16 @@ class GraphBuilder:
         descriptions = [f"{t.name}: {t.description}" for t in self.tools.values()]
 
         # 分批处理函数
-        def batch_process(items, desc="Embedding"):
+        async def batch_process(items, desc="Embedding"):
             results = []
             with tqdm(total=len(items), desc=desc, unit="item") as pbar:
                 for i in range(0, len(items), batch_size):
                     batch = items[i : i + batch_size]
                     try:
                         # 调用 API
-                        vectors = self.embedding_service.get_embedding(batch)
+                        input_text = batch if isinstance(batch, list) else [batch]
+                        response = await self.embedding_model(input_text)
+                        vectors = response.embeddings
                         results.extend(vectors)
                     except Exception as e:
                         logger.error(f"Batch embedding failed at index {i}: {e}")
@@ -113,7 +142,7 @@ class GraphBuilder:
             return results
 
         # 执行分批计算
-        desc_vecs = batch_process(descriptions, desc="Embedding Descriptions")
+        desc_vecs = await batch_process(descriptions, desc="Embedding Descriptions")
 
         # 存入缓存
         valid_count = 0
@@ -140,7 +169,7 @@ class GraphBuilder:
 
         if all_param_texts:
             logger.info(f"Embedding {len(all_param_texts)} parameters...")
-            param_vecs = batch_process(all_param_texts, desc="Embedding Params")
+            param_vecs = await batch_process(all_param_texts, desc="Embedding Params")
 
             for (t_name, p_name), vec in zip(param_indices, param_vecs, strict=False):
                 if vec is not None:
@@ -148,9 +177,9 @@ class GraphBuilder:
                         self.param_embeddings[t_name] = {}
                     self.param_embeddings[t_name][p_name] = vec
 
-    def _verify_edge_single(self, edge: Dict) -> bool:
+    async def _verify_edge_single(self, edge: Dict) -> bool:
         """[新增] 验证单条边的逻辑 (线程安全)"""
-        if not self.llm_service.client:
+        if not self.llm_service:
             return False
 
         p_tool = self.tools[edge["producer"]]
@@ -169,7 +198,7 @@ class GraphBuilder:
         from sloop.prompts.graph import VERIFY_SINGLE_EDGE_SYSTEM_PROMPT
 
         try:
-            resp = self.llm_service.chat_completion(
+            response = await self.llm_service(
                 messages=[
                     {"role": "system", "content": VERIFY_SINGLE_EDGE_SYSTEM_PROMPT},
                     {"role": "user", "content": item_text},
@@ -178,13 +207,19 @@ class GraphBuilder:
                 response_format={"type": "json_object"},
             )
 
-            if resp:
-                import json
+            if response and response.content:
+                text = ""
+                for block in response.content:
+                    if hasattr(block, "text"):
+                        text += block.text
 
-                clean_resp = resp.replace("```json", "").replace("```", "").strip()
-                result = json.loads(clean_resp)
-                # 假设返回 {"valid": true/false}
-                return result.get("valid", False)
+                if text:
+                    import json
+
+                    clean_resp = text.replace("```json", "").replace("```", "").strip()
+                    result = json.loads(clean_resp)
+                    # 假设返回 {"valid": true/false}
+                    return result.get("valid", False)
         except Exception as e:
             logger.warning(
                 f"Edge verification failed for {p_tool.name}->{c_tool.name}: {e}"
@@ -192,7 +227,7 @@ class GraphBuilder:
 
         return False
 
-    def _verify_edges_concurrent(
+    async def _verify_edges_concurrent(
         self, candidates: List[Dict], max_workers=20
     ) -> List[Dict]:
         """使用多线程并发验证边"""
@@ -204,30 +239,25 @@ class GraphBuilder:
         )
         valid_edges = []
 
-        import concurrent.futures
+        import asyncio
 
-        # 使用 ThreadPoolExecutor 并发调用
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 提交所有任务
-            # future -> edge_info 映射
-            future_to_edge = {
-                executor.submit(self._verify_edge_single, edge): edge
-                for edge in candidates
-            }
+        # 并发调用
+        tasks = [self._verify_edge_single(edge) for edge in candidates]
 
-            # 使用 tqdm 显示进度
-            for future in tqdm(
-                concurrent.futures.as_completed(future_to_edge),
-                total=len(candidates),
-                desc="LLM Verify",
-            ):
-                edge = future_to_edge[future]
-                try:
-                    is_valid = future.result()
-                    if is_valid:
-                        valid_edges.append(edge)
-                except Exception as exc:
-                    logger.error(f"Verification thread generated an exception: {exc}")
+        # 使用 tqdm 显示进度
+        for task in tqdm(
+            asyncio.as_completed(tasks),
+            total=len(candidates),
+            desc="LLM Verify",
+        ):
+            try:
+                is_valid = await task
+                if is_valid:
+                    # 找到对应的edge
+                    idx = tasks.index(task)
+                    valid_edges.append(candidates[idx])
+            except Exception as exc:
+                logger.error(f"Verification task generated an exception: {exc}")
 
         return valid_edges
 
@@ -252,7 +282,9 @@ class GraphBuilder:
             return self.graph
 
         self._auto_categorize_concurrent(max_workers=50)
-        self._precompute_embeddings()
+        import asyncio
+
+        asyncio.run(self._precompute_embeddings())
 
         logger.info(
             f"Building graph (Recall Threshold: {recall_threshold}, Auto-Accept: {auto_accept_threshold})..."
@@ -377,8 +409,10 @@ class GraphBuilder:
 
         # 6. 执行批量 LLM 验证
         if candidates_to_verify:
-            valid_batch = self._verify_edges_concurrent(
-                candidates_to_verify, max_workers=50
+            import asyncio
+
+            valid_batch = asyncio.run(
+                self._verify_edges_concurrent(candidates_to_verify, max_workers=50)
             )
             edges_to_add.extend(valid_batch)
             stats["verified"] += len(valid_batch)
@@ -573,9 +607,11 @@ class GraphBuilder:
 
         console.print(table)
 
-    def _categorize_single_tool(self, tool: ToolDefinition, category_pool: set) -> str:
+    async def _categorize_single_tool(
+        self, tool: ToolDefinition, category_pool: set
+    ) -> str:
         """[新增] 对单个工具进行分类 (线程安全)"""
-        if not self.llm_service.client:
+        if not self.llm_service:
             return None
 
         # 每次取当前的 pool 快照
@@ -590,7 +626,7 @@ class GraphBuilder:
         )
 
         try:
-            resp = self.llm_service.chat_completion(
+            response = await self.llm_service(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": tool_info},
@@ -599,14 +635,20 @@ class GraphBuilder:
                 temperature=0.1,
             )
 
-            if resp:
-                import json
+            if response and response.content:
+                text = ""
+                for block in response.content:
+                    if hasattr(block, "text"):
+                        text += block.text
 
-                clean_resp = resp.replace("```json", "").replace("```", "").strip()
-                data = json.loads(clean_resp)
-                cat = data.get("category")
-                if cat:
-                    return cat.strip().title()
+                if text:
+                    import json
+
+                    clean_resp = text.replace("```json", "").replace("```", "").strip()
+                    data = json.loads(clean_resp)
+                    cat = data.get("category")
+                    if cat:
+                        return cat.strip().title()
         except Exception as e:
             logger.warning(f"Categorization failed for {tool.name}: {e}")
 
@@ -634,34 +676,28 @@ class GraphBuilder:
 
         logger.info(f"Categorizing {len(tools_to_process)} tools concurrently...")
 
-        import concurrent.futures
-
         # 注意：这里有个并发写 pool 的问题
         # 虽然 set 不是线程安全的，但在 Python GIL 下简单的 add 操作通常没问题。
         # 且即使有一两个 update 冲突了，对于分类池的影响微乎其微（顶多 LLM 没看到最新的那个 tag）。
         # 为了稳妥，我们可以把 pool 的更新放在主线程。
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            # 这里的 pool 是传值（快照），随着循环进行，后面的任务可能会拿到旧的 pool
-            # 但这对 "Reuse First" 影响不大，因为初始池已经够大了。
-            future_to_tool = {
-                executor.submit(self._categorize_single_tool, tool, category_pool): tool
-                for tool in tools_to_process
-            }
+        import asyncio
 
-            for future in tqdm(
-                concurrent.futures.as_completed(future_to_tool),
-                total=len(tools_to_process),
-                desc="Auto Categorizing",
-            ):
-                tool = future_to_tool[future]
-                try:
-                    cat = future.result()
-                    if cat:
-                        tool.category = cat
-                        category_pool.add(cat)  # 更新池子
-                except Exception as exc:
-                    logger.error(f"Categorization thread exception: {exc}")
+        async def categorize_all():
+            tasks = [
+                self._categorize_single_tool(tool, category_pool)
+                for tool in tools_to_process
+            ]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for tool, result in zip(tools_to_process, results, strict=False):
+                if isinstance(result, Exception):
+                    logger.error(f"Categorization failed for {tool.name}: {result}")
+                elif result:
+                    tool.category = result
+                    category_pool.add(result)  # 更新池子
+
+        asyncio.run(categorize_all())
 
         logger.info(
             f"Categorization complete. Final Pool ({len(category_pool)}): {list(category_pool)}"
