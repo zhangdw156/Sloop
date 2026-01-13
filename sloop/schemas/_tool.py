@@ -1,4 +1,3 @@
-# sloop/models/tool.py
 from typing import Any, Dict, List
 
 from pydantic import BaseModel, Field

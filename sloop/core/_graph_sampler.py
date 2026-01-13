@@ -151,8 +151,8 @@ class GraphSampler:
             skel_edges.append(
                 SkeletonEdge(
                     step=i + 1,
-                    from_tool=u,  # Pydantic 会自动映射到 alias "from"
-                    to_tool=v,  # Pydantic 会自动映射到 alias "to"
+                    from_tool=u,
+                    to_tool=v,
                     dependency=Dependency(
                         parameter=edge_data.get("parameter"),
                         relation="provides_input_for",

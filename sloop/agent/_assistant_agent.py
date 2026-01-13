@@ -1,18 +1,13 @@
-from typing import Any, Dict, List
-
-try:
-    from typing import override
-except ImportError:
-    from typing_extensions import override
+from typing import Any, Dict, List, override
 
 from agentscope.agent import ReActAgent
 from agentscope.formatter import OpenAIChatFormatter
 from agentscope.message import Msg, TextBlock, ToolResultBlock, ToolUseBlock
 from agentscope.model import OpenAIChatModel
-from agentscope.tool import Toolkit, ToolResponse  # 必须引入 ToolResponse
+from agentscope.tool import Toolkit, ToolResponse
 
-from .configs import env_config
-from .prompts.simulation import ASSISTANT_SYSTEM_PROMPT
+from ..configs import env_config
+from ..prompts.simulation import ASSISTANT_SYSTEM_PROMPT
 
 
 class AssistantAgent(ReActAgent):
@@ -36,7 +31,7 @@ class AssistantAgent(ReActAgent):
         # 1. Initialize Model
         model_name = env_config.get("OPENAI_MODEL_NAME")
         base_url = env_config.get("OPENAI_MODEL_BASE_URL")
-        api_key = env_config.get("OPENAI_MODEL_API_KEY") or "EMPTY"
+        api_key = env_config.get("OPENAI_MODEL_API_KEY")
 
         if not model_name or not base_url:
             raise ValueError("Missing model config in .env file!")
@@ -46,7 +41,7 @@ class AssistantAgent(ReActAgent):
             api_key=api_key,
             client_kwargs={"base_url": base_url},
             generate_kwargs={
-                "temperature": 0.1,
+                "temperature": 0.7,
                 "max_tokens": 4096,
             },
             stream=False,
@@ -84,7 +79,7 @@ class AssistantAgent(ReActAgent):
             """Create a placeholder function that returns a valid ToolResponse."""
 
             def dummy_function(**kwargs):
-                # [修复点] 这里必须返回 ToolResponse 对象
+                # 这里必须返回 ToolResponse 对象
                 return ToolResponse(
                     content=[
                         TextBlock(

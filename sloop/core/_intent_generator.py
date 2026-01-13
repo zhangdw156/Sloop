@@ -5,11 +5,11 @@ from typing import Any, Dict, List
 from agentscope.model import OpenAIChatModel
 
 from ..configs import env_config
-from ..schemas import TaskSkeleton, ToolDefinition, UserIntent
 from ..prompts.generator import (
     INTENT_GENERATOR_SYSTEM_PROMPT,
     INTENT_GENERATOR_USER_TEMPLATE,
 )
+from ..schemas import TaskSkeleton, ToolDefinition, UserIntent
 from ..utils import logger
 
 
@@ -116,8 +116,8 @@ class IntentGenerator:
             return None
 
     def _format_tools_desc(self, nodes: List[Any]) -> str:
-        """格式化工具描述供 Prompt 使用"""
-        tools_json = []
+        """格式化工具"""
+        tools = []
         for node in nodes:
             tool_def = self.tool_registry.get(node.name)
             # 过滤无效工具 + 空描述工具
@@ -127,13 +127,10 @@ class IntentGenerator:
             single_tool = {
                 "name": tool_def.name.strip(),
                 "description": tool_def.description.strip(),
-                "parameters": tool_def.parameters.model_dump()
-                if tool_def.parameters
-                else {},
+                "parameters": tool_def.parameters.model_dump(),
             }
-            tools_json.append(single_tool)
-        # 序列化为标准JSON字符串，紧凑格式省Token，中文不乱码
-        return json.dumps({"tools": tools_json}, ensure_ascii=False)
+            tools.append(single_tool)
+        return "\n".join(tools)
 
     def _format_chain_flow(self, skeleton: TaskSkeleton) -> str:
         """格式化执行流供 Prompt 使用 (Human Readable)"""

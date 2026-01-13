@@ -1,7 +1,7 @@
 # FILE: sloop/prompts/simulation.py
 
 # ==============================================================================
-# 1. User Proxy Agent Prompt
+# 1. User Proxy
 # ==============================================================================
 USER_PROXY_SYSTEM_PROMPT = """You are a specific user in a simulated conversation environment.
 Your profile and goal are strictly defined by the following Intent context.
@@ -29,7 +29,7 @@ You want to transition the world state from Start to Final.
 """
 
 # ==============================================================================
-# 2. Assistant Agent Prompt
+# 2. Assistant
 # ==============================================================================
 ASSISTANT_SYSTEM_PROMPT = """You are an expert AI Assistant capable of using external tools.
 Your goal is to solve the user's request by effectively chaining tool calls.
@@ -46,7 +46,7 @@ Your goal is to solve the user's request by effectively chaining tool calls.
 """
 
 # ==============================================================================
-# 3. Simulator (Environment)
+# 3. Simulator
 # ==============================================================================
 SIMULATOR_SYSTEM_PROMPT = """You are the Omniscient Environment Simulator.
 Your task is to generate realistic "Observation" (JSON outputs) for the tools called by the Assistant.

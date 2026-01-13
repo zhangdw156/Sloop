@@ -1,20 +1,15 @@
 import json
-from typing import List, Union, cast
-
-try:
-    from typing import override
-except ImportError:
-    from typing_extensions import override
+from typing import List, override
 
 from agentscope.agent import AgentBase
 from agentscope.formatter import OpenAIChatFormatter
 from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
-from agentscope.model import ChatResponse, OpenAIChatModel
+from agentscope.model import OpenAIChatModel
 
-from .configs.env import env_config
-from .schemas import UserIntent
-from .prompts.simulation import USER_PROXY_SYSTEM_PROMPT
+from ..configs import env_config
+from ..prompts.simulation import USER_PROXY_SYSTEM_PROMPT
+from ..schemas import UserIntent
 
 
 class UserProxyAgent(AgentBase):
@@ -29,7 +24,7 @@ class UserProxyAgent(AgentBase):
         self.formatter = OpenAIChatFormatter()
         model_name = env_config.get("OPENAI_MODEL_NAME")
         base_url = env_config.get("OPENAI_MODEL_BASE_URL")
-        api_key = env_config.get("OPENAI_MODEL_API_KEY") or "EMPTY"
+        api_key = env_config.get("OPENAI_MODEL_API_KEY")
 
         if not model_name or not base_url:
             raise ValueError("Missing model config in .env file!")
@@ -38,7 +33,7 @@ class UserProxyAgent(AgentBase):
             model_name=model_name,
             api_key=api_key,
             client_kwargs={"base_url": base_url},
-            generate_kwargs={"temperature": 1.0, "max_tokens": 1024},
+            generate_kwargs={"temperature": 1.0, "max_tokens": 512},
             stream=False,
         )
 
@@ -51,14 +46,10 @@ class UserProxyAgent(AgentBase):
         self.sys_msg = Msg(name="system", role="system", content=sys_content)
 
     @override
-    async def reply(self, x: Union[Msg, List[Msg]] | None = None) -> Msg:
+    async def reply(self, x: Msg | List[Msg] | None = None) -> Msg:
         self.current_turn += 1
 
-        if x:
-            if isinstance(x, list):
-                await self.memory.add(x)
-            else:
-                await self.memory.add(x)
+        await self.memory.add(x)
 
         if self.current_turn > self.max_turns:
             return Msg(name=self.name, role="user", content="TERMINATE_FAILED")
@@ -75,19 +66,12 @@ class UserProxyAgent(AgentBase):
 
         # 3. 调用模型
         raw_response = await self.model(messages=openai_messages)
-        response = cast(ChatResponse, raw_response)
 
         # 结果解析逻辑
-        text_content = ""
-        if hasattr(response, "content"):
-            for block in response.content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    text_content += str(block.get("text", ""))
-        else:
-            text_content = str(response)
+        text_content = raw_response.content[0].get("text", 0)
 
         # 简单的终止判定逻辑
-        if "TERMINATE" in text_content and len(text_content) < 50:
+        if "TERMINATE" in text_content:
             text_content = "TERMINATE"
 
         msg = Msg(name=self.name, role="user", content=text_content)

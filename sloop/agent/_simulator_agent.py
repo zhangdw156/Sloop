@@ -1,10 +1,5 @@
 import json
-from typing import List, Union, cast
-
-try:
-    from typing import override
-except ImportError:
-    from typing_extensions import override
+from typing import Dict, List, Union, cast, override
 
 from agentscope.agent import AgentBase
 from agentscope.formatter import OpenAIChatFormatter
@@ -12,10 +7,10 @@ from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
 from agentscope.model import ChatResponse, OpenAIChatModel
 
-from .configs.env import env_config
-from .sloop.schemas import TaskSkeleton, UserIntent
-from .prompts.simulation import SIMULATOR_SYSTEM_PROMPT, SIMULATOR_USER_PROMPT
-from .utils.logger import logger
+from ..configs import env_config
+from ..prompts.simulation import SIMULATOR_SYSTEM_PROMPT, SIMULATOR_USER_PROMPT
+from ..schemas import TaskSkeleton, UserIntent
+from ..utils import logger
 
 
 class SimulatorAgent(AgentBase):
@@ -29,7 +24,7 @@ class SimulatorAgent(AgentBase):
         self.formatter = OpenAIChatFormatter()
         model_name = env_config.get("OPENAI_MODEL_NAME")
         base_url = env_config.get("OPENAI_MODEL_BASE_URL")
-        api_key = env_config.get("OPENAI_MODEL_API_KEY") or "EMPTY"
+        api_key = env_config.get("OPENAI_MODEL_API_KEY")
 
         if not model_name or not base_url:
             raise ValueError("Missing model config in .env file!")
@@ -39,14 +34,14 @@ class SimulatorAgent(AgentBase):
             api_key=api_key,
             client_kwargs={"base_url": base_url},
             generate_kwargs={
-                "temperature": 0.01,
+                "temperature": 0.1,
                 "max_tokens": 2048,
                 "response_format": {"type": "json_object"},
             },
             stream=False,
         )
 
-        core_nodes = [n.name for n in skeleton.get_core_nodes()]
+        core_nodes: List[Dict] = [sk.model_dump() for sk in skeleton.get_core_nodes()]
         sys_prompt_content = SIMULATOR_SYSTEM_PROMPT.format(
             initial_state=json.dumps(intent.initial_state, ensure_ascii=False),
             final_state=json.dumps(intent.final_state, ensure_ascii=False),
@@ -126,13 +121,7 @@ class SimulatorAgent(AgentBase):
             raw_response = await self.model(messages=openai_messages)
             response = cast(ChatResponse, raw_response)
 
-            content_str = ""
-            if hasattr(response, "content"):
-                for block in response.content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        content_str += str(block.get("text", ""))
-            else:
-                content_str = str(response)
+            content_str = response.content[0].get("text", "")
 
             # --- JSON 提取 ---
             clean_content = (

@@ -1,6 +1,6 @@
 from typing import List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Dependency(BaseModel):
@@ -9,14 +9,12 @@ class Dependency(BaseModel):
 
 
 class SkeletonEdge(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
     step: int
     # 使用 alias 允许 Python 属性为 from_tool，序列化 JSON 时为 "from"
     from_tool: str = Field(..., alias="from")
     to_tool: str = Field(..., alias="to")
     dependency: Dependency
-
-    class ConfigDict:
-        populate_by_name = True  # 允许通过字段名(from_tool)实例化
 
 
 class SkeletonNode(BaseModel):
