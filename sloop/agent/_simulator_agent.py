@@ -12,10 +12,10 @@ from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
 from agentscope.model import ChatResponse, OpenAIChatModel
 
-from sloop.configs.env import env_config
-from sloop.models import TaskSkeleton, UserIntent
-from sloop.prompts.simulation import SIMULATOR_SYSTEM_PROMPT, SIMULATOR_USER_PROMPT
-from sloop.utils.logger import logger
+from .configs.env import env_config
+from .sloop.schemas import TaskSkeleton, UserIntent
+from .prompts.simulation import SIMULATOR_SYSTEM_PROMPT, SIMULATOR_USER_PROMPT
+from .utils.logger import logger
 
 
 class SimulatorAgent(AgentBase):

@@ -15,7 +15,7 @@ class SkeletonEdge(BaseModel):
     to_tool: str = Field(..., alias="to")
     dependency: Dependency
 
-    class Config:
+    class ConfigDict:
         populate_by_name = True  # 允许通过字段名(from_tool)实例化
 
 

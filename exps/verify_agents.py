@@ -1,22 +1,22 @@
 import asyncio
+import hashlib
 import json
 import sys
 from pathlib import Path
 from typing import Dict, List
 
+from agentscope.message import Msg
+
+from sloop.agent import AssistantAgent, SimulatorAgent, UserProxyAgent
+from sloop.schemas import TaskSkeleton, UserIntent
+from sloop.utils import logger, setup_logging
+
 # 添加项目根目录到 sys.path
 current_file = Path(__file__).resolve()
 project_root = current_file.parent.parent
 sys.path.append(str(project_root))
-
-from agentscope.message import Msg
-
-from sloop.agents import AssistantAgent, SimulatorAgent, UserProxyAgent
-from sloop.models import TaskSkeleton, UserIntent
-from sloop.utils.logger import logger, setup_logging
-
 # ==============================================================================
-# 1. 数据加载辅助函数 (保持不变)
+# 1. 数据加载辅助函数
 # ==============================================================================
 
 
@@ -35,9 +35,6 @@ def load_tools_from_jsonl(path: str) -> Dict[str, dict]:
             func_def = tool.get("function", tool)
             tools_map[func_def["name"]] = func_def
     return tools_map
-
-
-import hashlib
 
 
 def load_skeletons_map(path: str) -> Dict[str, TaskSkeleton]:
@@ -146,7 +143,7 @@ async def run_simulation_loop():
     intents_data = load_json_file(intent_path)
 
     # --- 运行循环 ---
-    # 限制运行数量方便测试，实际跑可以去掉 [:2]
+    # 限制运行数量方便测试，实际跑可以去掉
     for i, intent_dict in enumerate(intents_data[:5]):
         logger.info(f"\n{'=' * 20} Running Simulation {i + 1} {'=' * 20}")
 
@@ -174,7 +171,7 @@ async def run_simulation_loop():
         assist_agent = AssistantAgent(
             name="Assistant",
             tools_list=task_tools,
-            simulator=sim_agent,  # [关键] 注入 Simulator
+            simulator=sim_agent,  # 注入 Simulator
             max_iters=10,  # ReAct 最大思考步数
             verbose=True,
         )
@@ -183,7 +180,8 @@ async def run_simulation_loop():
         user_agent = UserProxyAgent(name="User", intent=intent, max_turns=10)
 
         # 3. 对话循环 (User <-> Assistant)
-        # Assistant 的 ReAct 内部循环被封装在 reply 中，这里只看 User 和 Assistant 的交互
+        # Assistant 的 ReAct 内部循环被封装在 reply 中
+        # 这里只看 User 和 Assistant 的交互
 
         logger.info(f"Query: {intent.query}")
 

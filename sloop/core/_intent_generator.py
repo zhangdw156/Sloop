@@ -4,13 +4,13 @@ from typing import Any, Dict, List
 
 from agentscope.model import OpenAIChatModel
 
-from sloop.configs import env_config
-from sloop.models import TaskSkeleton, ToolDefinition, UserIntent
-from sloop.prompts.generator import (
+from ..configs import env_config
+from ..schemas import TaskSkeleton, ToolDefinition, UserIntent
+from ..prompts.generator import (
     INTENT_GENERATOR_SYSTEM_PROMPT,
     INTENT_GENERATOR_USER_TEMPLATE,
 )
-from sloop.utils.logger import logger
+from ..utils import logger
 
 
 class IntentGenerator:
@@ -18,7 +18,7 @@ class IntentGenerator:
     意图生成器：负责根据工具调用骨架，反向推导用户的真实意图。
 
     Process:
-    Skeleton (结构) -> IntentGenerator (填肉) -> UserIntent (Query + States)
+    Skeleton -> IntentGenerator -> UserIntent
     """
 
     def __init__(self, tool_registry: Dict[str, ToolDefinition]):
@@ -28,29 +28,24 @@ class IntentGenerator:
         """
         self.tool_registry = tool_registry
 
-        # 直接初始化 agentscope 的 OpenAIChatModel
         base_url = env_config.get("OPENAI_MODEL_BASE_URL")
         api_key = env_config.get("OPENAI_MODEL_API_KEY")
-        model_name = env_config.get(
-            "OPENAI_MODEL_NAME", "Qwen3-235B-A22B-Instruct-2507"
-        )
+        model_name = env_config.get("OPENAI_MODEL_NAME")
 
         if not base_url or not api_key:
             logger.warning("Missing LLM configuration in .env. Generator will fail.")
             self.model = None
         else:
             self.model = OpenAIChatModel(
-                model_name=model_name or "Qwen3-235B-A22B-Instruct-2507",
+                model_name=model_name,
                 api_key=api_key,
                 stream=False,
                 client_kwargs={"base_url": base_url},
             )
 
-    async def generate(
-        self, skeleton: TaskSkeleton, max_retries: int = 3
-    ) -> UserIntent | None:
+    async def generate(self, skeleton: TaskSkeleton) -> UserIntent | None:
         """
-        根据骨架生成一个完整的 User Intent
+        根据 Skeleton 生成一个完整的 User Intent
         """
         # 1. 准备上下文信息
         core_nodes = skeleton.get_core_nodes()
@@ -59,7 +54,6 @@ class IntentGenerator:
             return None
 
         # 2. 构建 Prompt
-        # 只提取核心链的工具定义给 LLM 看，减少 Token 消耗，聚焦任务逻辑
         tools_desc_str = self._format_tools_desc(core_nodes)
         chain_desc_str = self._format_chain_flow(skeleton)
 
@@ -69,37 +63,25 @@ class IntentGenerator:
 
         # 3. 调用 LLM 进行生成
         intent_data = None
-        for attempt in range(max_retries):
-            try:
-                if self.model is None:
-                    logger.error("LLM model not initialized")
-                    break
+        if self.model is None:
+            logger.error("LLM model not initialized")
+            return None
 
-                response = await self.model(
-                    messages=[
-                        {"role": "system", "content": INTENT_GENERATOR_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    response_format={"type": "json_object"},
-                    temperature=0.7,  # 稍微高一点的温度，保证生成的具体实体（如IP、地名）多样化
-                )
+        response = await self.model(
+            messages=[
+                {"role": "system", "content": INTENT_GENERATOR_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.7,
+        )
 
-                if response and response.content:
-                    # 从 ChatResponse 中提取文本
-                    text = ""
-                    for block in response.content:
-                        if hasattr(block, "text"):
-                            text += block.text
-
-                    if text:
-                        # 清洗 markdown 标记 (以防万一)
-                        clean_resp = (
-                            text.replace("```json", "").replace("```", "").strip()
-                        )
-                        intent_data = json.loads(clean_resp)
-                        break
-            except Exception as e:
-                logger.warning(f"Generation attempt {attempt + 1} failed: {e}")
+        text = ""
+        for block in response.content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text += block.get("text", "").strip()
+        if text:
+            intent_data = json.loads(text)
 
         if not intent_data:
             logger.error("Failed to generate intent after retries.")
@@ -135,18 +117,23 @@ class IntentGenerator:
 
     def _format_tools_desc(self, nodes: List[Any]) -> str:
         """格式化工具描述供 Prompt 使用"""
-        lines = []
+        tools_json = []
         for node in nodes:
             tool_def = self.tool_registry.get(node.name)
-            if tool_def:
-                # 简化格式，重点展示 description 和 parameters
-                lines.append(f"--- Tool: {tool_def.name} ---")
-                lines.append(f"Description: {tool_def.description}")
-                lines.append(
-                    f"Parameters: {json.dumps(tool_def.parameters.dict(), indent=2)}"
-                )
-                lines.append("")
-        return "\n".join(lines)
+            # 过滤无效工具 + 空描述工具
+            if not (tool_def and tool_def.name and tool_def.description):
+                continue
+            # 构建单工具JSON结构，做容错处理
+            single_tool = {
+                "name": tool_def.name.strip(),
+                "description": tool_def.description.strip(),
+                "parameters": tool_def.parameters.model_dump()
+                if tool_def.parameters
+                else {},
+            }
+            tools_json.append(single_tool)
+        # 序列化为标准JSON字符串，紧凑格式省Token，中文不乱码
+        return json.dumps({"tools": tools_json}, ensure_ascii=False)
 
     def _format_chain_flow(self, skeleton: TaskSkeleton) -> str:
         """格式化执行流供 Prompt 使用 (Human Readable)"""

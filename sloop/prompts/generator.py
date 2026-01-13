@@ -1,4 +1,3 @@
-# 修改了变量名以匹配 IntentGenerator
 INTENT_GENERATOR_SYSTEM_PROMPT = """You are an expert Data Generator for training Tool-Use AI Agents.
 Your goal is to reverse-engineer a "User Intent" based on a provided Tool Execution Skeleton.
 

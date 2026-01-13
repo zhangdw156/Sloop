@@ -1,3 +1,4 @@
+import asyncio
 import json
 import pickle
 from pathlib import Path
@@ -6,17 +7,41 @@ from typing import Dict, List
 import matplotlib.pyplot as plt
 import networkx as nx
 import numpy as np
-from agentscope.embedding import OpenAITextEmbedding
 from agentscope.model import OpenAIChatModel
 from rich.console import Console
 from rich.table import Table
 from sklearn.metrics.pairwise import cosine_similarity
 from tqdm import tqdm
 
-from sloop.configs import env_config
-from sloop.models import ToolDefinition, ToolParameters
-from sloop.utils.logger import logger
+from ..configs import env_config
+from ..schemas import ToolDefinition, ToolParameters
+from ..prompts.graph import (
+    AUTO_CATEGORIZE_SINGLE_SYSTEM_PROMPT,
+    VERIFY_SINGLE_EDGE_SYSTEM_PROMPT,
+)
+from ..utils import logger
+from ..embedding import SafeOpenAIEmbedding
+import re
 
+def extract_json(text):
+    """尝试从文本中提取第一个 JSON 对象"""
+    text = text.strip()
+    # 1. 尝试直接解析 (应对纯净 JSON，如你日志中显示的情况)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+        
+    # 2. 尝试正则提取 (应对包含 Markdown 或废话的情况)
+    # 修改点：使用 non-greedy (.*?) 匹配，找到第一个闭合的 JSON 对象
+    # 注意：这个简单的正则处理不了嵌套的花括号，但对于扁平的 {"valid": ...} 足够了
+    match = re.search(r"\{.*?\}", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except:
+            pass
+    return None
 
 class GraphBuilder:
     def __init__(self):
@@ -26,17 +51,17 @@ class GraphBuilder:
 
         # 1. 初始化 Embedding 服务
         try:
-            base_url = env_config.get("EMBEDDING_MODEL_BASE_URL")
-            api_key = env_config.get("EMBEDDING_MODEL_API_KEY")
-            model_name = env_config.get("EMBEDDING_MODEL_NAME", "bge-m3")
+            embedding_model_base_url = env_config.get("EMBEDDING_MODEL_BASE_URL")
+            embedding_model_api_key = env_config.get("EMBEDDING_MODEL_API_KEY")
+            embedding_model_name = env_config.get("EMBEDDING_MODEL_NAME")
 
-            if not base_url or not api_key:
+            if not embedding_model_base_url or not embedding_model_api_key:
                 raise ValueError("Missing embedding configuration")
 
-            self.embedding_model = OpenAITextEmbedding(
-                api_key=api_key,
-                model_name=model_name or "bge-m3",
-                base_url=base_url,
+            self.embedding_model = SafeOpenAIEmbedding(
+                api_key=embedding_model_api_key,
+                model_name=embedding_model_name,
+                base_url=embedding_model_base_url,
             )
         except Exception as e:
             logger.warning(f"Embedding service failed to init: {e}")
@@ -44,20 +69,20 @@ class GraphBuilder:
 
         # 2. 初始化 LLM 服务
         try:
-            base_url = env_config.get("OPENAI_MODEL_BASE_URL")
-            api_key = env_config.get("OPENAI_MODEL_API_KEY")
-            model_name = env_config.get(
+            openai_model_base_url = env_config.get("OPENAI_MODEL_BASE_URL")
+            openai_model_api_key = env_config.get("OPENAI_MODEL_API_KEY")
+            openai_model_name = env_config.get(
                 "OPENAI_MODEL_NAME", "Qwen3-235B-A22B-Instruct-2507"
             )
 
-            if not base_url or not api_key:
+            if not openai_model_base_url or not openai_model_api_key:
                 raise ValueError("Missing LLM configuration")
 
             self.model = OpenAIChatModel(
-                model_name=model_name or "Qwen3-235B-A22B-Instruct-2507",
-                api_key=api_key,
+                model_name=openai_model_name,
+                api_key=openai_model_api_key,
                 stream=False,
-                client_kwargs={"base_url": base_url},
+                client_kwargs={"base_url": openai_model_base_url},
             )
         except Exception as e:
             logger.warning(f"LLM service failed to init: {e}")
@@ -123,6 +148,12 @@ class GraphBuilder:
         tool_names = list(self.tools.keys())
         descriptions = [f"{t.name}: {t.description}" for t in self.tools.values()]
 
+        # === DEBUG LOG 1 START ===
+        logger.info(f"--- [DEBUG] Producer Embedding Input Sample (First 2) ---")
+        for i in range(min(2, len(descriptions))):
+            logger.info(f"Prod[{i}]: {descriptions[i]}")
+        # === DEBUG LOG 1 END ===
+
         # 分批处理函数
         async def batch_process(items, desc="Embedding"):
             results = []
@@ -176,9 +207,16 @@ class GraphBuilder:
                     if t_name not in self.param_embeddings:
                         self.param_embeddings[t_name] = {}
                     self.param_embeddings[t_name][p_name] = vec
+        
+        # === DEBUG LOG 2 START ===
+        if all_param_texts:
+            logger.info(f"--- [DEBUG] Consumer Param Embedding Input Sample (First 2) ---")
+            for i in range(min(2, len(all_param_texts))):
+                logger.info(f"Cons[{i}]: {all_param_texts[i]}")
+        # === DEBUG LOG 2 END ===
 
     async def _verify_edge_single(self, edge: Dict) -> bool:
-        """[新增] 验证单条边的逻辑 (线程安全)"""
+        """验证单条边的逻辑 (线程安全)"""
         if not self.model:
             return False
 
@@ -190,12 +228,12 @@ class GraphBuilder:
 
         # 针对单条边的 Prompt
         item_text = (
-            f"- Producer Tool: {p_tool.name} (Desc: {p_tool.description})\n"
+            f"- Producer Tool: {p_tool.name}\n"
+            f"  - Description: {p_tool.description}\n" 
             f"- Consumer Tool: {c_tool.name}\n"
-            f"- Consumer Parameter to Fill: '{edge['param']}' (Desc: {c_param_desc})"
+            f"- Consumer Parameter to Fill: '{edge['param']}'\n"
+            f"  - Parameter Description: {c_param_desc}"
         )
-
-        from sloop.prompts.graph import VERIFY_SINGLE_EDGE_SYSTEM_PROMPT
 
         try:
             response = await self.model(
@@ -203,7 +241,7 @@ class GraphBuilder:
                     {"role": "system", "content": VERIFY_SINGLE_EDGE_SYSTEM_PROMPT},
                     {"role": "user", "content": item_text},
                 ],
-                temperature=0.0,  # 验证任务用 0 温度最稳
+                temperature=0.5,
                 response_format={"type": "json_object"},
             )
 
@@ -211,15 +249,15 @@ class GraphBuilder:
                 text = ""
                 for block in response.content:
                     if hasattr(block, "text"):
-                        text += block.text
+                        text += block.get("text", "").strip()
 
                 if text:
-                    import json
-
-                    clean_resp = text.replace("```json", "").replace("```", "").strip()
-                    result = json.loads(clean_resp)
-                    # 假设返回 {"valid": true/false}
-                    return result.get("valid", False)
+                    data = extract_json(text)
+                    if data:
+                        is_valid = data.get("valid", False)
+                        if is_valid:
+                            logger.info(f"✅ Edge Verified: {p_tool.name} -> {c_tool.name}")
+                        return is_valid
         except Exception as e:
             logger.warning(
                 f"Edge verification failed for {p_tool.name}->{c_tool.name}: {e}"
@@ -230,47 +268,62 @@ class GraphBuilder:
     async def _verify_edges_concurrent(
         self, candidates: List[Dict], max_workers=20
     ) -> List[Dict]:
-        """使用多线程并发验证边"""
+        """使用多线程并发验证边（带信号量限制）"""
         if not candidates:
             return []
 
         logger.info(
             f"Verifying {len(candidates)} edges concurrently (Max Workers: {max_workers})..."
         )
+        
+        # 1. 创建信号量
+        sem = asyncio.Semaphore(max_workers)
         valid_edges = []
 
-        import asyncio
+        # 2. 定义包装函数：限制并发 + 携带上下文(edge)
+        async def sem_task(edge):
+            async with sem:
+                try:
+                    is_valid = await self._verify_edge_single(edge)
+                    return edge, is_valid
+                except Exception as e:
+                    # 发生异常默认视为验证失败，或者是记录日志
+                    logger.error(f"Error verifying edge: {e}")
+                    return edge, False
 
-        # 并发调用
-        tasks = [self._verify_edge_single(edge) for edge in candidates]
+        # 3. 创建任务列表
+        tasks = [sem_task(edge) for edge in candidates]
 
-        # 使用 tqdm 显示进度
-        for task in tqdm(
+        # 4. 使用 as_completed + tqdm 处理结果
+        # 注意：as_completed 返回的是包装后的 Future
+        for future in tqdm(
             asyncio.as_completed(tasks),
             total=len(candidates),
             desc="LLM Verify",
+            unit="edge"
         ):
             try:
-                is_valid = await task
+                # 获取包装函数的返回值 (edge, is_valid)
+                edge, is_valid = await future
+                
                 if is_valid:
-                    # 找到对应的edge
-                    idx = tasks.index(task)
-                    valid_edges.append(candidates[idx])
+                    valid_edges.append(edge)
+                    
             except Exception as exc:
-                logger.error(f"Verification task generated an exception: {exc}")
+                logger.error(f"Verification task wrapper failed: {exc}")
 
         return valid_edges
 
     def build(
         self,
-        recall_threshold: float = 0.68,  # 建议调高到 0.68 或 0.70
-        auto_accept_threshold: float = 0.88,  # 建议调高高置信度门槛
-        top_k: int = 5,  # 新增：每个参数只取前 5 个最像的候选
+        recall_threshold: float = 0.68,
+        auto_accept_threshold: float = 0.88,
+        top_k: int = 5,
         enable_llm_verify: bool = True,
-        prune_isolates: bool = True,  # 新增参数
+        prune_isolates: bool = True,
     ):
         """
-        构建增强型知识图谱 (RAG 增强版)
+        构建增强型知识图谱
 
         策略：
         1. 相似度 > auto_accept_threshold: 直接通过 (高置信度)
@@ -280,9 +333,9 @@ class GraphBuilder:
         if not self.tools:
             logger.warning("No tools loaded.")
             return self.graph
-
+        
+        # 暂时没有用到catagory
         self._auto_categorize_concurrent(max_workers=50)
-        import asyncio
 
         asyncio.run(self._precompute_embeddings())
 
@@ -296,7 +349,7 @@ class GraphBuilder:
                 name,
                 desc=tool.description,
                 category=tool.category,
-                parameters=tool.parameters.dict(),
+                parameters=tool.parameters.model_dump(),
             )
 
         # 3. 准备矩阵数据
@@ -322,6 +375,20 @@ class GraphBuilder:
 
         logger.info("Computing similarity matrix...")
         similarity_matrix = cosine_similarity(P, C)
+        
+        # === DEBUG LOG 3 START ===
+        max_score = np.max(similarity_matrix)
+        mean_score = np.mean(similarity_matrix)
+        p95_score = np.percentile(similarity_matrix, 95)
+        logger.info(f"--- [DEBUG] Similarity Stats ---")
+        logger.info(f"Max Score: {max_score:.4f}")
+        logger.info(f"Mean Score: {mean_score:.4f}")
+        logger.info(f"95th Percentile: {p95_score:.4f}")
+        logger.info(f"Current Recall Threshold: {recall_threshold}")
+        
+        if max_score < recall_threshold:
+            logger.warning(f"!!! CRITICAL: Max score ({max_score:.4f}) is LOWER than threshold ({recall_threshold}). No edges will be selected!")
+        # === DEBUG LOG 3 END ===
 
         # 4. 筛选候选集 (使用较低的 recall_threshold)
         logger.info(
@@ -339,6 +406,19 @@ class GraphBuilder:
         for c_idx in tqdm(range(num_consumers), desc="Filtering Top-K", unit="param"):
             # 获取这一列的所有分数
             scores = similarity_matrix[:, c_idx]
+
+            # === DEBUG LOG 4 START (Only for the first few params to avoid spam) ===
+            if c_idx < 3: 
+                # 找到这一列分数最高的索引
+                best_idx = np.argmax(scores)
+                best_score = scores[best_idx]
+                consumer_tool, param = consumer_map[c_idx]
+                producer_tool = producer_names[best_idx]
+                
+                logger.info(f"--- [DEBUG] Inspect Param: {consumer_tool}.{param} ---")
+                logger.info(f"    Best Producer: {producer_tool}")
+                logger.info(f"    Score: {best_score:.4f} (Threshold: {recall_threshold})")
+            # === DEBUG LOG 4 END ===
 
             # 1. 只有大于阈值的才考虑 (初步过滤)
             # 使用 argwhere 找到大于阈值的索引
@@ -409,8 +489,6 @@ class GraphBuilder:
 
         # 6. 执行批量 LLM 验证
         if candidates_to_verify:
-            import asyncio
-
             valid_batch = asyncio.run(
                 self._verify_edges_concurrent(candidates_to_verify, max_workers=50)
             )
@@ -610,16 +688,19 @@ class GraphBuilder:
     async def _categorize_single_tool(
         self, tool: ToolDefinition, category_pool: set
     ) -> str:
-        """[新增] 对单个工具进行分类 (线程安全)"""
+        """对单个工具进行分类"""
         if not self.model:
             return None
 
         # 每次取当前的 pool 快照
         existing_cats_str = ", ".join(sorted(category_pool))
 
-        tool_info = f"- Name: {tool.name}\n  Desc: {tool.description[:200]}"
-
-        from sloop.prompts.graph import AUTO_CATEGORIZE_SINGLE_SYSTEM_PROMPT
+        tool_info = (
+            f"- Name: {tool.name}\n"
+            f"- Desc: {tool.description}\n"
+            f"- Parm: {json.dumps(tool.parameters.model_dump(),ensure_ascii=False)}"
+        )
+        
 
         system_prompt = AUTO_CATEGORIZE_SINGLE_SYSTEM_PROMPT.format(
             existing_cats_str=existing_cats_str
@@ -632,30 +713,29 @@ class GraphBuilder:
                     {"role": "user", "content": tool_info},
                 ],
                 response_format={"type": "json_object"},
-                temperature=0.1,
+                temperature=0.5,
             )
 
             if response and response.content:
                 text = ""
                 for block in response.content:
                     if hasattr(block, "text"):
-                        text += block.text
+                        text += block.get("text", "").strip()
 
                 if text:
-                    import json
-
-                    clean_resp = text.replace("```json", "").replace("```", "").strip()
-                    data = json.loads(clean_resp)
-                    cat = data.get("category")
-                    if cat:
-                        return cat.strip().title()
+                    data = extract_json(text)
+                    
+                    if data:
+                        cat = data.get("category")
+                        if cat:
+                            return cat.strip().title()
         except Exception as e:
             logger.warning(f"Categorization failed for {tool.name}: {e}")
 
         return None
 
     def _auto_categorize_concurrent(self, max_workers=20):
-        """[修改] 多线程动态分类"""
+        """多线程动态分类（带进度条和并发限制）"""
         if not self.model or not self.model.client:
             return
 
@@ -665,38 +745,50 @@ class GraphBuilder:
 
         # 初始池
         category_pool = {
-            "Sports",
-            "Finance",
-            "Weather",
-            "Utilities",
-            "Entertainment",
-            "Shopping",
-            "Education",
+            "Sports", "Finance", "Weather",
+            "Entertainment", "Shopping", "Education",
         }
 
-        logger.info(f"Categorizing {len(tools_to_process)} tools concurrently...")
+        logger.info(f"Categorizing {len(tools_to_process)} tools concurrently (Max Workers: {max_workers})...")
 
-        # 注意：这里有个并发写 pool 的问题
-        # 虽然 set 不是线程安全的，但在 Python GIL 下简单的 add 操作通常没问题。
-        # 且即使有一两个 update 冲突了，对于分类池的影响微乎其微（顶多 LLM 没看到最新的那个 tag）。
-        # 为了稳妥，我们可以把 pool 的更新放在主线程。
+        # 1. 创建信号量限制并发数
+        sem = asyncio.Semaphore(max_workers)
 
-        import asyncio
+        # 2. 包装任务：限制并发 + 关联 Tool 对象
+        async def sem_task(tool):
+            async with sem:
+                try:
+                    # 调用原有的单工具分类逻辑
+                    res = await self._categorize_single_tool(tool, category_pool)
+                    # 在释放信号量之前（即 async with 结束前），立即更新全局池子。
+                    # 这样，当这个任务结束、信号量释放、下一个任务进来时，
+                    # 它们一定能看到这里刚刚添加的新类别。
+                    if res:
+                        category_pool.add(res)  # 立即扩充池子
+                        tool.category = res     # 立即更新对象
+                    return tool, res
+                except Exception as e:
+                    return tool, e
 
         async def categorize_all():
-            tasks = [
-                self._categorize_single_tool(tool, category_pool)
-                for tool in tools_to_process
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            # 创建所有任务
+            tasks = [sem_task(tool) for tool in tools_to_process]
 
-            for tool, result in zip(tools_to_process, results, strict=False):
+            # 3. 使用 asyncio.as_completed 配合 tqdm
+            # as_completed 会在任意协程结束时 yield，不按照列表顺序，而是按照完成顺序
+            for future in tqdm(
+                asyncio.as_completed(tasks), 
+                total=len(tasks), 
+                desc="Auto Categorizing", 
+                unit="tool"
+            ):
+                tool, result = await future
+                
+                # 处理结果
                 if isinstance(result, Exception):
                     logger.error(f"Categorization failed for {tool.name}: {result}")
-                elif result:
-                    tool.category = result
-                    category_pool.add(result)  # 更新池子
 
+        # 运行事件循环
         asyncio.run(categorize_all())
 
         logger.info(

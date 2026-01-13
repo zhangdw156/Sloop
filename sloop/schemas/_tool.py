@@ -20,5 +20,5 @@ class ToolDefinition(BaseModel):
     parameters: ToolParameters
     category: str = "general"
 
-    class Config:
+    class ConfigDict:
         extra = "allow"  # 允许额外的字段（如 embedding 缓存等）

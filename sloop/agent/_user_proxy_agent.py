@@ -12,9 +12,9 @@ from agentscope.memory import InMemoryMemory
 from agentscope.message import Msg
 from agentscope.model import ChatResponse, OpenAIChatModel
 
-from sloop.configs.env import env_config
-from sloop.models import UserIntent
-from sloop.prompts.simulation import USER_PROXY_SYSTEM_PROMPT
+from .configs.env import env_config
+from .schemas import UserIntent
+from .prompts.simulation import USER_PROXY_SYSTEM_PROMPT
 
 
 class UserProxyAgent(AgentBase):

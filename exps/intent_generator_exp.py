@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import List
 
 from sloop.core import GraphBuilder, IntentGenerator
-from sloop.models import TaskSkeleton, UserIntent
+from sloop.schemas import TaskSkeleton, UserIntent
 from sloop.utils import logger, setup_logging
 
 

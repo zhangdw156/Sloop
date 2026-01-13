@@ -7,14 +7,14 @@ import networkx as nx
 import numpy as np
 from tqdm import tqdm
 
-from sloop.models import (
+from ..schemas import (
     Dependency,
     SkeletonEdge,
     SkeletonMeta,
     SkeletonNode,
     TaskSkeleton,
 )
-from sloop.utils.logger import logger
+from ..utils import logger
 
 
 class GraphSampler:

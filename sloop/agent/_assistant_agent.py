@@ -5,17 +5,14 @@ try:
 except ImportError:
     from typing_extensions import override
 
-# --- 引入必要的 AgentScope 组件 ---
 from agentscope.agent import ReActAgent
 from agentscope.formatter import OpenAIChatFormatter
 from agentscope.message import Msg, TextBlock, ToolResultBlock, ToolUseBlock
 from agentscope.model import OpenAIChatModel
 from agentscope.tool import Toolkit, ToolResponse  # 必须引入 ToolResponse
 
-from sloop.configs.env import env_config
-
-# --- 引入 Sloop 配置 ---
-from sloop.prompts.simulation import ASSISTANT_SYSTEM_PROMPT
+from .configs import env_config
+from .prompts.simulation import ASSISTANT_SYSTEM_PROMPT
 
 
 class AssistantAgent(ReActAgent):

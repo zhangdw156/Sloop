@@ -4,7 +4,7 @@ from collections import Counter
 from typing import List
 
 from sloop.core import GraphBuilder, GraphSampler
-from sloop.models import TaskSkeleton
+from sloop.schemas import TaskSkeleton
 from sloop.utils import logger, setup_logging
 
 

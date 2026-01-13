@@ -1,12 +1,12 @@
-from sloop.models.intent import UserIntent
-from sloop.models.skeleton import (
+from ._intent import UserIntent
+from ._skeleton import (
     Dependency,
     SkeletonEdge,
     SkeletonMeta,
     SkeletonNode,
     TaskSkeleton,
 )
-from sloop.models.tool import ToolDefinition, ToolParameters
+from ._tool import ToolDefinition, ToolParameters
 
 __all__ = [
     "ToolDefinition",
