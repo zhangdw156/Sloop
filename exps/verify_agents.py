@@ -87,14 +87,14 @@ def format_agent_memory(tools_list: List[dict], memory_msgs: List[Msg]) -> dict:
                 messages.append({"role": "system", "content": msg.get_text_content()})
 
         # 2. 处理 User 输入
-        elif msg.role == "user":
+        elif msg.name == "user":
             content = msg.get_text_content()
             # 过滤掉 UserProxy 产生的终止指令，不放入训练数据
             if content not in ["TERMINATE", "TERMINATE_FAILED"]:
                 messages.append({"role": "user", "content": content})
 
         # 3. 处理 Assistant 输出 (思考 + 工具调用)
-        elif msg.role == "assistant":
+        elif msg.name == "assistant":
             openai_msg = {"role": "assistant", "content": None}
 
             # A. 提取文本内容 (Chain of Thought)
@@ -169,7 +169,7 @@ async def run_simulation_loop():
 
         # Assistant (ReAct) 持有 Simulator
         assist_agent = AssistantAgent(
-            name="Assistant",
+            name="assistant",
             tools_list=task_tools,
             simulator=sim_agent,  # 注入 Simulator
             max_iters=10,  # ReAct 最大思考步数
@@ -177,7 +177,7 @@ async def run_simulation_loop():
         )
 
         # User Proxy
-        user_agent = UserProxyAgent(name="User", intent=intent, max_turns=10)
+        user_agent = UserProxyAgent(name="user", intent=intent, max_turns=10)
 
         # 3. 对话循环 (User <-> Assistant)
         # Assistant 的 ReAct 内部循环被封装在 reply 中

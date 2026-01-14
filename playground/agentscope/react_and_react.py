@@ -6,7 +6,7 @@ import agentscope
 import asyncio
 import json
 import re
-from sloop.configs.env import env_config
+from sloop.configs import env_config
 
 # --- 引入 Rich 库 ---
 from rich.console import Console
@@ -24,12 +24,12 @@ custom_theme = Theme({
     "sandbox": "magenta",
     "info": "dim white"
 })
-console = Console(theme=custom_theme)
+console = Console(theme=custom_theme, record=True)
 
 # --- 配置模型 ---
-MODEL_NAME = env_config.get("OPENAI_MODEL_NAME") or "Qwen3-235B-A22B-Instruct-2507"
-API_KEY = env_config.get("OPENAI_MODEL_API_KEY") or "EMPTY"
-BASE_URL = env_config.get("OPENAI_MODEL_API_BASE")
+MODEL_NAME = env_config.get("OPENAI_MODEL_NAME")
+API_KEY = env_config.get("OPENAI_MODEL_API_KEY")
+BASE_URL = env_config.get("OPENAI_MODEL_BASE_URL")
 
 # --- 辅助函数：解析消息内容 ---
 def get_content_str(msg):
@@ -77,7 +77,7 @@ def parse_tool_calls(content):
 # User Prompt 增强：防止角色互换
 user = ReActAgent(
     name="User",
-    sys_prompt="""你是在中国矿业大学（徐州）上学的大四学生“张伟”。
+    sys_prompt="""你是在中国矿业大学上学的大四学生“张三”。
 
     【绝对指令】
     1. 你是**客户/游客**，你的对话对象是AI助手。
@@ -211,3 +211,4 @@ async def main():
 if __name__ == "__main__":
     agentscope.init(logging_level="CRITICAL")
     asyncio.run(main())
+    console.save_html("data/simulation_report.html")

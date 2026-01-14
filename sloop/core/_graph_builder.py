@@ -85,7 +85,8 @@ class GraphBuilder:
                     "timeout": 720,
                 },
                 generate_kwargs={
-                    "max_tokens": 4096,
+                    "max_tokens": 10240,
+                    "max_completion_tokens": 10240
                 },
             )
         except Exception as e:
@@ -806,7 +807,7 @@ class GraphBuilder:
                 response_format={"type": "json_object"},
                 temperature=0.1,  # 清洗任务温度要低
             )
-
+            logger.info(f"response: {response}")
             if response:
                 data: Dict = extract_json(response.content[0].get("text", ""))
                 if data:

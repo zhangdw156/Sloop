@@ -129,7 +129,7 @@ class IntentGenerator:
                 "description": tool_def.description.strip(),
                 "parameters": tool_def.parameters.model_dump(),
             }
-            tools.append(single_tool)
+            tools.append(json.dumps(single_tool,ensure_ascii=False))
         return "\n".join(tools)
 
     def _format_chain_flow(self, skeleton: TaskSkeleton) -> str:

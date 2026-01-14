@@ -39,8 +39,6 @@ class UserProxyAgent(AgentBase):
 
         sys_content = USER_PROXY_SYSTEM_PROMPT.format(
             query=intent.query,
-            initial_state=json.dumps(intent.initial_state, ensure_ascii=False),
-            final_state=json.dumps(intent.final_state, ensure_ascii=False),
         )
 
         self.sys_msg = Msg(name="system", role="system", content=sys_content)
@@ -48,7 +46,6 @@ class UserProxyAgent(AgentBase):
     @override
     async def reply(self, x: Msg | List[Msg] | None = None) -> Msg:
         self.current_turn += 1
-
         await self.memory.add(x)
 
         if self.current_turn > self.max_turns:
@@ -74,6 +71,6 @@ class UserProxyAgent(AgentBase):
         if "TERMINATE" in text_content:
             text_content = "TERMINATE"
 
-        msg = Msg(name=self.name, role="user", content=text_content)
+        msg = Msg(name=self.name, role="assistant", content=text_content)
         await self.memory.add(msg)
         return msg
