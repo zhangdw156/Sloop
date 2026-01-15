@@ -77,7 +77,7 @@ def parse_tool_calls(content):
 # User Prompt 增强：防止角色互换
 user = ReActAgent(
     name="User",
-    sys_prompt="""你是在中国矿业大学上学的大四学生“张三”。
+    sys_prompt="""你是在北京航空航天大学上学的大四学生“张三”。
 
     【绝对指令】
     1. 你是**客户/游客**，你的对话对象是AI助手。
@@ -145,7 +145,7 @@ async def main():
         
         console.print(Panel(
             Markdown(user_content), 
-            title=f"[user]Turn {turn_num}: User (张伟)[/user]", 
+            title=f"[user]Turn {turn_num}: User (张三)[/user]", 
             border_style="green",
             expand=False
         ))
