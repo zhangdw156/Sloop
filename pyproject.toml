@@ -15,7 +15,6 @@ dependencies = [
     "tqdm>=4.67.1",
     "typer>=0.15.1",
     "uvicorn>=0.32.0",
-    "crewai>=0.70.0",
     "networkx>=3.0",
     "matplotlib>=3.5.0",
     "transitions>=0.9.0",
@@ -24,6 +23,11 @@ dependencies = [
     "loguru>=0.7.3",
     "faiss-cpu>=1.11.0",
     "numpy>=1.26.4",
+    "agentscope>=1.0.11",
+    "scipy>=1.16.3",
+    "scikit-learn>=1.8.0",
+    "rich>=14.2.0",
+    "icecream>=2.1.8",
 ]
 
 [tool.hatch.version]
@@ -85,10 +89,6 @@ pythonpath = ["."]
 testpaths = ["tests"]
 
 [dependency-groups]
-eval = [
-    "bfcl-eval==2025.10.27.1",
-    "evalscope>=1.4.0",
-]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio",
@@ -96,4 +96,5 @@ dev = [
     "annotated-doc",
     "pre-commit>=4.5.1",
     "ruff>=0.14.10",
+    "python-dotenv>=1.2.1",
 ]

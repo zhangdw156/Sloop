@@ -1,8 +1,5 @@
 """
-Sloop：基于下推自动机（PDA）与状态模拟的 Agent 数据合成引擎，用于生成含思维链（CoT）的复杂工具调用训练集。
+Sloop：正在使用agentscope重构高质量多轮对话工具调用数据集生成框架。
 """
 
 __version__ = "0.2.1"
-
-# 导出主要组件
-from sloop import config, engine, models, utils

@@ -18,7 +18,7 @@ export ARTIFACT_DIR="/dfs/data/work/Sloop/gorilla_bfcl_results/$OUTPUT_DIR_NAME"
 # 3. 模型配置
 export MODEL_NAME="Qwen/Qwen3-8B-FC"
 # export LOCAL_MODEL_PATH="/dfs/data/models/Qwen3-8B"
-export LOCAL_MODEL_PATH="/dfs/data/models/qwen3-8b-looptool"
+export LOCAL_MODEL_PATH="/dfs/data/models/qwen3-8b-looptool-sft"
 
 # 4. LoRA 配置
 # export ENABLE_LORA="true"

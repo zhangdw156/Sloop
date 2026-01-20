@@ -82,7 +82,6 @@ mkdir -p "$ARTIFACT_DIR/score"
 bfcl evaluate \
   --model "$MODEL_NAME" \
   --test-category "$TEST_CATEGORY" \
-  --partial-eval \
   --result-dir "$ARTIFACT_DIR/result" \
   --score-dir "$ARTIFACT_DIR/score"
 
