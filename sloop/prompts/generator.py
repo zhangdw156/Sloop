@@ -16,6 +16,9 @@ You will be given a **Core Execution Chain** (Tool A -> Tool B). You must:
    - **Final State**: Identify the output of the LAST tool. Invent a concrete, plausible result.
    - **Concreteness**: You must invent CONCRETE values (e.g., "192.168.1.5", "Tesla Inc.", "John Doe"). Do not use placeholders.
 3. **Write the Query**: Write a natural, human-like query. It must explicitly mention the values in `initial_state` and imply the goal in `final_state`.
+4. **Anti-Leakage (CRITICAL)**:
+   - Do NOT place the final answer values directly in the query unless the user would naturally already know them.
+   - The query should request information/action, not reveal the computed result.
 
 ### Critical Constraints for States (HashMap)
 The `initial_state` and `final_state` must be **FLAT HashMaps**.
@@ -57,6 +60,13 @@ The user query MUST trigger the following sequence of tools in order:
 - **Consistency**: The `initial_state` must ONLY contain entities explicitly present in the `query`.
 - **Logic**: Do NOT include intermediate parameters (passed from Tool A to Tool B) in the `initial_state`.
 - **Creativity**: Use diverse real-world examples for the concrete values.
+- **Diversity**:
+  - Avoid repetitive templates such as generic weather/stock phrasing.
+  - Vary user tones (concise request, polite request, urgent request) while keeping realism.
+- **Executability**:
+  - The query must be solvable by the provided tool chain and should not require out-of-scope tools.
+- **No Hidden Knowledge**:
+  - Do not assume user can access hidden tool outputs before execution.
 
 Now, generate the User Intent JSON.
 """

@@ -5,7 +5,13 @@ VERIFY_SINGLE_EDGE_SYSTEM_PROMPT = """You are an expert in API integration.
 Task: Verify if the Output of the 'Producer Tool' can logically serve as the Input for the 'Consumer Parameter'.
 Ignore weak or coincidental connections. Focus on strong business logic flow.
 
-Return JSON: {"valid": true} or {"valid": false}"""
+Decision policy:
+1. Mark valid=true only when the producer output is a strong and direct match for the consumer parameter semantics.
+2. Mark valid=false for weak lexical similarity without real data-flow utility.
+3. Be conservative: when uncertain, choose false.
+
+Return JSON only with this schema:
+{"valid": true|false, "confidence": 0.0-1.0, "reason": "short explanation"}"""
 
 # System prompt for dynamic categorization
 AUTO_CATEGORIZE_SINGLE_SYSTEM_PROMPT = """You are a Strict Taxonomy Architect.
@@ -40,6 +46,8 @@ Your task is to consolidate them into a clean, standardized list (about 20-30 ma
 2. **Standardize**: 'Financial', 'Banking' -> 'Finance'.
 3. **Fix Typos/Plurals**: 'Device', 'Devices' -> 'Devices'.
 4. **Group Niche Tags**: 'OCR', 'Translation' -> 'Text Processing'.
+5. **No Category Drift**: Keep output labels stable and broad; avoid creating stylistic variants.
+6. **Determinism**: Prefer existing common labels over inventing new ones.
 
 **Output**:
 Return a JSON object where KEYS are the ORIGINAL tags from the input, and VALUES are the CLEANED master category.

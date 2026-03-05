@@ -5,9 +5,9 @@ from agentscope.formatter import OpenAIChatFormatter
 import asyncio
 from sloop.configs.env import env_config
 
-MODEL_NAME = env_config.get("OPENAI_MODEL_NAME") or "Qwen3-235B-A22B-Instruct-2507"
-API_KEY = env_config.get("OPENAI_MODEL_API_KEY") or "EMPTY"
-BASE_URL = env_config.get("OPENAI_MODEL_API_BASE")
+MODEL_NAME = env_config.get("MODEL_NAME") or "Qwen3-235B-A22B-Instruct-2507"
+API_KEY = env_config.get("MODEL_API_KEY") or "EMPTY"
+BASE_URL = env_config.get("MODEL_BASE_URL")
 
 react_agent=ReActAgent(
     name="Assistant",

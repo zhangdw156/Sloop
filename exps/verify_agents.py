@@ -8,6 +8,7 @@ from typing import Dict, List
 from agentscope.message import Msg
 
 from sloop.agent import AssistantAgent, SimulatorAgent, UserProxyAgent
+from sloop.core import validate_openai_tool_topology
 from sloop.schemas import TaskSkeleton, UserIntent
 from sloop.utils import logger, setup_logging
 
@@ -213,6 +214,12 @@ async def run_simulation_loop():
         final_memory = await assist_agent.memory.get_memory()
 
         formatted_data = format_agent_memory(task_tools, final_memory)
+        valid, errors = validate_openai_tool_topology(formatted_data)
+        if not valid:
+            logger.warning(
+                f"Skip invalid trajectory for intent={intent.id}. Errors: {errors}"
+            )
+            continue
 
         output_file = output_dir / f"traj_{intent.id}.json"
         with open(output_file, "w", encoding="utf-8") as f:

@@ -22,9 +22,9 @@ class UserProxyAgent(AgentBase):
         self.max_turns = max_turns
         self.current_turn = 0
         self.formatter = OpenAIChatFormatter()
-        model_name = env_config.get("OPENAI_MODEL_NAME")
-        base_url = env_config.get("OPENAI_MODEL_BASE_URL")
-        api_key = env_config.get("OPENAI_MODEL_API_KEY")
+        model_name = env_config.get("MODEL_NAME")
+        base_url = env_config.get("MODEL_BASE_URL")
+        api_key = env_config.get("MODEL_API_KEY")
 
         if not model_name or not base_url:
             raise ValueError("Missing model config in .env file!")
@@ -46,7 +46,8 @@ class UserProxyAgent(AgentBase):
     @override
     async def reply(self, x: Msg | List[Msg] | None = None) -> Msg:
         self.current_turn += 1
-        await self.memory.add(x)
+        if x is not None:
+            await self.memory.add(x)
 
         if self.current_turn > self.max_turns:
             return Msg(name=self.name, role="user", content="TERMINATE_FAILED")
@@ -65,12 +66,14 @@ class UserProxyAgent(AgentBase):
         raw_response = await self.model(messages=openai_messages)
 
         # 结果解析逻辑
-        text_content = raw_response.content[0].get("text", 0)
+        text_content = raw_response.content[0].get("text", "")
+        if not isinstance(text_content, str):
+            text_content = str(text_content)
 
         # 简单的终止判定逻辑
         if "TERMINATE" in text_content:
             text_content = "TERMINATE"
 
-        msg = Msg(name=self.name, role="assistant", content=text_content)
+        msg = Msg(name=self.name, role="user", content=text_content)
         await self.memory.add(msg)
         return msg

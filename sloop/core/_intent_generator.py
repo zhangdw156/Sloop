@@ -28,9 +28,9 @@ class IntentGenerator:
         """
         self.tool_registry = tool_registry
 
-        base_url = env_config.get("OPENAI_MODEL_BASE_URL")
-        api_key = env_config.get("OPENAI_MODEL_API_KEY")
-        model_name = env_config.get("OPENAI_MODEL_NAME")
+        base_url = env_config.get("MODEL_BASE_URL")
+        api_key = env_config.get("MODEL_API_KEY")
+        model_name = env_config.get("MODEL_NAME")
 
         if not base_url or not api_key:
             logger.warning("Missing LLM configuration in .env. Generator will fail.")

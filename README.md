@@ -87,13 +87,15 @@ graph TD
    然后编辑 `.env` 文件，配置模型和嵌入模型：
 
    ```env
-   OPENAI_MODEL_BASE_URL=your_base_url
-   OPENAI_MODEL_API_KEY=your_api_key
-   OPENAI_MODEL_NAME=Qwen2.5-72B-Instruct  # 推荐使用强推理模型
+   MODEL_BASE_URL=your_base_url
+   MODEL_API_KEY=your_api_key
+   MODEL_NAME=Qwen2.5-72B-Instruct  # 推荐使用强推理模型
    EMBEDDING_MODEL_NAME=your_embedding_model_name
    EMBEDDING_MODEL_API_KEY=your_embedding_api_key
    EMBEDDING_MODEL_BASE_URL=your_embedding_base_url
    ```
+
+   更多配置说明见：`docs/configuration.md`
 
 3. **运行流水线**
 
@@ -103,6 +105,16 @@ graph TD
  uv run exps/intent_generator_exp.py
  uv run exps/verify_agents.py
 ```
+
+## 质量约束说明
+
+当前版本默认启用了以下基础质量约束：
+
+- `UserProxy` 仅使用用户可见信息，不伪造隐藏数据；
+- `Simulator` 采用统一 JSON 返回契约（`status/data/error`）；
+- 轨迹写盘前执行拓扑校验，非法样本会被跳过。
+
+详细说明见：`docs/data-quality.md`
 
 ## 许可证
 

@@ -7,5 +7,11 @@
 from ._graph_builder import GraphBuilder
 from ._graph_sampler import GraphSampler
 from ._intent_generator import IntentGenerator
+from ._trajectory_validator import validate_openai_tool_topology
 
-__all__ = ["GraphBuilder", "GraphSampler", "IntentGenerator"]
+__all__ = [
+    "GraphBuilder",
+    "GraphSampler",
+    "IntentGenerator",
+    "validate_openai_tool_topology",
+]

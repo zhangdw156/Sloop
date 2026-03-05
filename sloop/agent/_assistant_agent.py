@@ -29,9 +29,9 @@ class AssistantAgent(ReActAgent):
         **kwargs,
     ):
         # 1. Initialize Model
-        model_name = env_config.get("OPENAI_MODEL_NAME")
-        base_url = env_config.get("OPENAI_MODEL_BASE_URL")
-        api_key = env_config.get("OPENAI_MODEL_API_KEY")
+        model_name = env_config.get("MODEL_NAME")
+        base_url = env_config.get("MODEL_BASE_URL")
+        api_key = env_config.get("MODEL_API_KEY")
 
         if not model_name or not base_url:
             raise ValueError("Missing model config in .env file!")

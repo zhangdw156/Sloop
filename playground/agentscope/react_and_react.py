@@ -27,9 +27,9 @@ custom_theme = Theme({
 console = Console(theme=custom_theme, record=True)
 
 # --- 配置模型 ---
-MODEL_NAME = env_config.get("OPENAI_MODEL_NAME")
-API_KEY = env_config.get("OPENAI_MODEL_API_KEY")
-BASE_URL = env_config.get("OPENAI_MODEL_BASE_URL")
+MODEL_NAME = env_config.get("MODEL_NAME")
+API_KEY = env_config.get("MODEL_API_KEY")
+BASE_URL = env_config.get("MODEL_BASE_URL")
 
 # --- 辅助函数：解析消息内容 ---
 def get_content_str(msg):

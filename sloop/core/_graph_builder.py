@@ -67,21 +67,21 @@ class GraphBuilder:
 
         # 2. 初始化 LLM 服务
         try:
-            openai_model_base_url = env_config.get("OPENAI_MODEL_BASE_URL")
-            openai_model_api_key = env_config.get("OPENAI_MODEL_API_KEY")
-            openai_model_name = env_config.get(
-                "OPENAI_MODEL_NAME", "Qwen3-235B-A22B-Instruct-2507"
+            model_base_url = env_config.get("MODEL_BASE_URL")
+            model_api_key = env_config.get("MODEL_API_KEY")
+            model_name = env_config.get(
+                "MODEL_NAME", "Qwen3-235B-A22B-Instruct-2507"
             )
 
-            if not openai_model_base_url or not openai_model_api_key:
+            if not model_base_url or not model_api_key:
                 raise ValueError("Missing LLM configuration")
 
             self.model = OpenAIChatModel(
-                model_name=openai_model_name,
-                api_key=openai_model_api_key,
+                model_name=model_name,
+                api_key=model_api_key,
                 stream=False,
                 client_kwargs={
-                    "base_url": openai_model_base_url,
+                    "base_url": model_base_url,
                     "timeout": 720,
                 },
                 generate_kwargs={
